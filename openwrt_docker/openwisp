@@ -1,0 +1,7 @@
+	option enabled 'monitoring'
+	option url 'http://10.17.0.2:8090'
+	option interval '30'
+	option mac_interface 'eth0'
+	option verify_ssl '0'
+	option shared_secret 'cc9d9c510f3d6c25b100298a7a7160d9'
+

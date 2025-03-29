@@ -1,14 +1,34 @@
 package main
 
 import (
+	"encoding/hex"
 	"fmt"
 	"log"
+		"math/big"
 	//"net/http"
 
+	"github.com/google/uuid"
 	"github.com/pocketbase/pocketbase"
 	//"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
 )
+
+func hexToPocketBaseID(hexStr string) (string, error) {
+	// Convert hex string to bytes
+	bytes, err := hex.DecodeString(hexStr)
+	if err != nil {
+		return "", err
+	}
+
+	// Ensure the byte array is exactly 16 bytes (PocketBase requirement)
+	if len(bytes) != 16 {
+		return "", fmt.Errorf("invalid length: keys must be 16 bytes")
+	}
+	bigInt := new(big.Int).SetBytes(bytes)
+
+	// Convert to Base36
+	return bigInt.Text(36), nil
+}
 
 func main() {
 	app := pocketbase.New()
@@ -47,18 +67,29 @@ func main() {
 			if err != nil {
 				return e.BadRequestError("Registration failed!", err)
 			}
+
+			pbID, err := hexToPocketBaseID(data.Key)
+			if err != nil {
+				return e.BadRequestError("Registration failed!", err)
+			}
+			fmt.Print(pbID)
+			device_uuid := uuid.New()
+
 			record := core.NewRecord(collection)
+			record.Set("id", pbID[0:15])
 			record.Set("backend", data.Backend)
 			record.Set("key", data.Key)
 			record.Set("name", data.Name)
 			record.Set("hardware_id", data.HardwareId)
 			record.Set("mac_address", data.MacAddress)
+			record.Set("uuid", device_uuid)
 			record.Set("tags", data.Tags)
 			record.Set("model", data.Model)
 			record.Set("os", data.Os)
 			record.Set("system", data.System)
 			record.Set("last_ip_address", e.RealIP())
 			record.Set("health_status", "unknown")
+			record.Set("config_status", "applied")
 			record.Set("enabled", "true")
 			err = app.Save(record)
 			if err != nil {
@@ -70,7 +101,7 @@ uuid: %s
 key: %s
 hostname: %s
 is-new: %d
-`, "success", "9f9d293c-be7c-4352-841c-240410f7e3c9", data.Key, data.Name, isNew)
+`, "success", device_uuid, data.Key, data.Name, isNew)
 
 			return e.Blob(201, "text/plain", []byte(response))
 		})

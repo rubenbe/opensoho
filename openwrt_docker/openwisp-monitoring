@@ -1,0 +1,7 @@
+config monitoring 'monitoring'
+	option monitored_interfaces '*'
+	option interval '30'
+	option verbose_mode '0'
+	option required_memory '0.05'
+	option max_retries '5'
+	#option bootup_delay '10'

@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: opensoho-pod
+spec:
+  containers:
+    #- name: server
+    #  image: opensoho/server  # Use locally built PocketBase image
+    #  ports:
+    #    - containerPort: 8090
+    #      hostPort: 8090  # Expose it on the host machine
+
+    - name: client1
+      image: opensoho/openwrt
+
+    - name: client2
+      image: opensoho/openwrt
+
+    - name: client3
+      image: opensoho/openwrt

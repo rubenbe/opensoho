@@ -115,14 +115,27 @@ is-new: %d
 			return e.Blob(201, "text/plain", []byte(response))
 		})
 		se.Router.GET("/controller/report-status/{device_uuid}/", func(e *core.RequestEvent) error {
-			e.Response.Header().Set("X-Openwisp-Controller", "true")
 			response := ""
+			e.Response.Header().Set("X-Openwisp-Controller", "true")
 			return e.Blob(200, "text/plain", []byte(response))
 		})
 
 		se.Router.GET("/controller/checksum/{device_uuid}/", func(e *core.RequestEvent) error {
 			e.Response.Header().Set("X-Openwisp-Controller", "true")
-			response := ""
+			key := e.Request.URL.Query().Get("key")
+			if len(key) != 32 {
+				return e.ForbiddenError("Not allowed", "Key not valid")
+			}
+			pbID, err := hexToPocketBaseID(key)
+			if err != nil {
+				return e.ForbiddenError("Not allowed", "Key not hex")
+			}
+			record, err := app.FindRecordById("devices", pbID)
+			if record.GetString("key") != key {
+				return e.ForbiddenError("Not allowed", "Key not allowed")
+			}
+			fmt.Println("OK")
+			response := "ba6a1c8c889f9ebba6069420d82ba4bf"
 			return e.Blob(200, "text/plain", []byte(response))
 		})
 

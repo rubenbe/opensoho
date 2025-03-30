@@ -11,7 +11,27 @@ import (
 	"github.com/pocketbase/pocketbase"
 	//"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
+	"github.com/pocketbase/pocketbase/tools/security"
 )
+
+func generateLedConfig(led *core.Record)(string){
+	return fmt.Sprintf(`
+config led
+        option name '%s'
+        option sysfs '%s'
+        option trigger '%s'
+`, led.GetString("name"), led.GetString("led_name"), led.GetString("trigger"))
+}
+
+func generateLedsConfig(leds []*core.Record)(string){
+	output:=""
+	for _, led := range leds{
+		fmt.Println(led)
+		output+=generateLedConfig(led);
+	}
+
+	return output
+}
 
 func hexToPocketBaseID(hexStr string) (string, error) {
 	// Convert hex string to bytes
@@ -131,10 +151,15 @@ is-new: %d
 				return e.ForbiddenError("Not allowed", "Key not hex")
 			}
 			record, err := app.FindRecordById("devices", pbID)
-			if record.GetString("key") != key {
+			if ! security.Equal(record.GetString("key"), key) {
 				return e.ForbiddenError("Not allowed", "Key not allowed")
 			}
 			fmt.Println("OK")
+			leds:= record.Get("leds")
+			//leds := record.ExpandedAll("leds")
+			fmt.Println(leds)
+			ledconfigs := generateLedsConfig(leds)
+			fmt.Println(ledconfigs)
 			response := "ba6a1c8c889f9ebba6069420d82ba4bf"
 			return e.Blob(200, "text/plain", []byte(response))
 		})

@@ -105,6 +105,20 @@ is-new: %d
 
 			return e.Blob(201, "text/plain", []byte(response))
 		})
+		se.Router.GET("/controller/report-status/{device_uuid}/", func(e *core.RequestEvent) error {
+		response := ""
+		return e.Blob(200, "text/plain", []byte(response))
+		})
+
+		se.Router.GET("/controller/checksum/{device_uuid}/", func(e *core.RequestEvent) error {
+		response := ""
+		return e.Blob(200, "text/plain", []byte(response))
+		})
+
+		se.Router.GET("/controller/download-config/{device_uuid}/", func(e *core.RequestEvent) error {
+		response := ""
+		return e.Blob(200, "text/plain", []byte(response))
+		})
 		return se.Next()
 	})
 

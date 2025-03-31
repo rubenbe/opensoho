@@ -18,7 +18,7 @@ import (
 	"github.com/pocketbase/pocketbase/tools/security"
 )
 
-func generateLedConfig(led *core.Record)(string){
+func generateLedConfig(led *core.Record) string {
 	return fmt.Sprintf(`
 config led
         option name '%s'
@@ -71,11 +71,11 @@ func createConfigTar(files map[string]string) ([]byte, string, error) {
 	return tarGzData, md5Hex, nil
 }
 
-func generateLedsConfig(leds []*core.Record)(string){
-	output:=""
-	for _, led := range leds{
+func generateLedsConfig(leds []*core.Record) string {
+	output := ""
+	for _, led := range leds {
 		fmt.Println(led)
-		output+=generateLedConfig(led);
+		output += generateLedConfig(led)
 	}
 
 	return output
@@ -96,6 +96,26 @@ func hexToPocketBaseID(hexStr string) (string, error) {
 
 	// Convert to Base36
 	return bigInt.Text(36)[0:15], nil
+}
+
+func generateDeviceConfig(app *pocketbase.PocketBase, record *core.Record) ([]byte, string, error) {
+	configfiles := map[string]string{}
+	leds := record.Get("leds").([]string)
+	fmt.Println(leds)
+	ledrecords, err := app.FindRecordsByIds("leds", leds)
+	if err != nil {
+		return nil, "", err
+	}
+	ledconfigs := generateLedsConfig(ledrecords)
+	if len(ledconfigs) > 0 {
+		configfiles["/etc/config/system"] = ledconfigs
+	}
+	fmt.Println(ledconfigs)
+
+	blob, checksum, err := createConfigTar(configfiles)
+	if err != nil {
+	}
+	return blob, checksum, err
 }
 
 func main() {
@@ -199,29 +219,16 @@ is-new: %d
 				return e.ForbiddenError("Not allowed", "Key not hex")
 			}
 			record, err := app.FindRecordById("devices", pbID)
-			if ! security.Equal(record.GetString("key"), key) {
+			if !security.Equal(record.GetString("key"), key) {
 				return e.ForbiddenError("Not allowed", "Key not allowed")
 			}
+
 			fmt.Println("OK")
-			configfiles :=map [string]string{}
-			leds := record.Get("leds").([]string)
-			fmt.Println(leds)
-			ledrecords, err := app.FindRecordsByIds("leds", leds)
+			_, response, err := generateDeviceConfig(app, record)
 			if err != nil {
-				    return e.InternalServerError("Internal error", err)
-			}
-			ledconfigs := generateLedsConfig(ledrecords)
-			if len(ledconfigs)>0{
-				configfiles["/etc/config/system"] = ledconfigs
-			}
-			fmt.Println(ledconfigs)
-
-			_, checksum, err := createConfigTar(configfiles)
-			if err != nil {
-				    return e.InternalServerError("Internal error", err)
+				return e.InternalServerError("Internal error", err)
 			}
 
-			response := checksum
 			return e.Blob(200, "text/plain", []byte(response))
 		})
 

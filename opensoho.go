@@ -138,8 +138,6 @@ func main() {
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
 		se.Router.POST("/controller/register/", func(e *core.RequestEvent) error {
 			e.Response.Header().Set("X-Openwisp-Controller", "true")
-			//name := e.Request.PathValue("name")
-			//return e.String(http.StatusOK, "Hello "+name)
 			data := struct {
 				// unexported to prevent binding
 				somethingPrivate string
@@ -216,9 +214,30 @@ is-new: %d
 
 			return e.Blob(201, "text/plain", []byte(response))
 		})
-		se.Router.GET("/controller/report-status/{device_uuid}/", func(e *core.RequestEvent) error {
-			response := ""
+		se.Router.POST("/controller/report-status/{device_uuid}/", func(e *core.RequestEvent) error {
 			e.Response.Header().Set("X-Openwisp-Controller", "true")
+			data := struct {
+				// unexported to prevent binding
+				somethingPrivate string
+
+				Status string `form:"status"`
+				Key    string `form:"key"`
+			}{}
+			if err := e.BindBody(&data); err != nil {
+				return e.BadRequestError("Missing fields", err)
+			}
+			record, err := getDeviceRecord(app, data.Key)
+			if err != nil {
+				return e.ForbiddenError("Not allowed", err)
+			}
+			record.Set("config_status", data.Status)
+			err = app.Save(record)
+			if err != nil {
+				return e.InternalServerError("Status update failed", err)
+			}
+			response := fmt.Sprintf("report-result: success\ncurrent-status: %s\n", data.Status)
+			fmt.Println(response)
+
 			return e.Blob(200, "text/plain", []byte(response))
 		})
 

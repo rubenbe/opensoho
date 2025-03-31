@@ -274,6 +274,19 @@ is-new: %d
 
 			return e.Blob(200, "application/octet-stream", []byte(response))
 		})
+
+		se.Router.POST("/api/v1/monitoring/device/", func(e *core.RequestEvent) error {
+			e.Response.Header().Set("X-Openwisp-Controller", "true")
+			key := e.Request.URL.Query().Get("key")
+			_, err := getDeviceRecord(app, key)
+			if err != nil {
+				return e.ForbiddenError("Not allowed", err)
+			}
+			time := e.Request.URL.Query().Get("time")
+			//current := e.Request.URL.Query().Get("current")
+			fmt.Println("monitoring %s", time)
+			return e.Blob(200, "text/plain", []byte(""))
+		})
 		return se.Next()
 	})
 

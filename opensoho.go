@@ -1,6 +1,10 @@
 package main
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
+	"crypto/md5"
 	"encoding/hex"
 	"fmt"
 	"log"
@@ -21,6 +25,50 @@ config led
         option sysfs '%s'
         option trigger '%s'
 `, led.GetString("name"), led.GetString("led_name"), led.GetString("trigger"))
+}
+
+func createConfigTar(files map[string]string) ([]byte, string, error) {
+	var buf bytes.Buffer
+
+	gzWriter := gzip.NewWriter(&buf)
+	defer gzWriter.Close()
+
+	tarWriter := tar.NewWriter(gzWriter)
+	defer tarWriter.Close()
+
+	for filePath, content := range files {
+		fileBytes := []byte(content)
+
+		header := &tar.Header{
+			Name: filePath,
+			Size: int64(len(fileBytes)),
+			Mode: 0644,
+		}
+
+		// Write header and file content to tar archive
+		if err := tarWriter.WriteHeader(header); err != nil {
+			return nil, "", err
+		}
+		if _, err := tarWriter.Write(fileBytes); err != nil {
+			return nil, "", err
+		}
+	}
+
+	if err := tarWriter.Close(); err != nil {
+		return nil, "", err
+	}
+	if err := gzWriter.Close(); err != nil {
+		return nil, "", err
+	}
+
+	// Compress
+	tarGzData := buf.Bytes()
+
+	// Compute MD5 checksum
+	md5Checksum := md5.Sum(tarGzData)
+	md5Hex := hex.EncodeToString(md5Checksum[:])
+
+	return tarGzData, md5Hex, nil
 }
 
 func generateLedsConfig(leds []*core.Record)(string){
@@ -155,12 +203,25 @@ is-new: %d
 				return e.ForbiddenError("Not allowed", "Key not allowed")
 			}
 			fmt.Println("OK")
-			leds:= record.Get("leds")
-			//leds := record.ExpandedAll("leds")
+			configfiles :=map [string]string{}
+			leds := record.Get("leds").([]string)
 			fmt.Println(leds)
-			ledconfigs := generateLedsConfig(leds)
+			ledrecords, err := app.FindRecordsByIds("leds", leds)
+			if err != nil {
+				    return e.InternalServerError("Internal error", err)
+			}
+			ledconfigs := generateLedsConfig(ledrecords)
+			if len(ledconfigs)>0{
+				configfiles["/etc/config/system"] = ledconfigs
+			}
 			fmt.Println(ledconfigs)
-			response := "ba6a1c8c889f9ebba6069420d82ba4bf"
+
+			_, checksum, err := createConfigTar(configfiles)
+			if err != nil {
+				    return e.InternalServerError("Internal error", err)
+			}
+
+			response := checksum
 			return e.Blob(200, "text/plain", []byte(response))
 		})
 

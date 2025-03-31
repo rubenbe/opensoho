@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"log"
 	"math/big"
-	//"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/pocketbase/pocketbase"
@@ -19,12 +19,13 @@ import (
 )
 
 func generateLedConfig(led *core.Record) string {
+	name := led.GetString("name")
 	return fmt.Sprintf(`
-config led
+config led 'led_%s'
         option name '%s'
         option sysfs '%s'
         option trigger '%s'
-`, led.GetString("name"), led.GetString("led_name"), led.GetString("trigger"))
+`, strings.ToLower(name), name, led.GetString("led_name"), led.GetString("trigger"))
 }
 
 func createConfigTar(files map[string]string) ([]byte, string, error) {

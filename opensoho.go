@@ -241,8 +241,19 @@ is-new: %d
 
 		se.Router.GET("/controller/download-config/{device_uuid}/", func(e *core.RequestEvent) error {
 			e.Response.Header().Set("X-Openwisp-Controller", "true")
-			response := ""
-			return e.Blob(200, "text/plain", []byte(response))
+			key := e.Request.URL.Query().Get("key")
+			record, err := getDeviceRecord(app, key)
+			if err != nil {
+				return e.ForbiddenError("Not allowed", err)
+			}
+
+			fmt.Println("OK")
+			response, _, err := generateDeviceConfig(app, record)
+			if err != nil {
+				return e.InternalServerError("Internal error", err)
+			}
+
+			return e.Blob(200, "application/octet-stream", []byte(response))
 		})
 		return se.Next()
 	})

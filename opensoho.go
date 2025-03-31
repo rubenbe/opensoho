@@ -97,6 +97,20 @@ func hexToPocketBaseID(hexStr string) (string, error) {
 	// Convert to Base36
 	return bigInt.Text(36)[0:15], nil
 }
+func getDeviceRecord(app *pocketbase.PocketBase, key string) (*core.Record, error) {
+	if len(key) != 32 {
+		return nil, fmt.Errorf("Key not valid")
+	}
+	pbID, err := hexToPocketBaseID(key)
+	if err != nil {
+		return nil, fmt.Errorf("Key not hex")
+	}
+	record, err := app.FindRecordById("devices", pbID)
+	if !security.Equal(record.GetString("key"), key) {
+		return nil, fmt.Errorf("Key not allowed")
+	}
+	return record, nil
+}
 
 func generateDeviceConfig(app *pocketbase.PocketBase, record *core.Record) ([]byte, string, error) {
 	configfiles := map[string]string{}
@@ -211,16 +225,9 @@ is-new: %d
 		se.Router.GET("/controller/checksum/{device_uuid}/", func(e *core.RequestEvent) error {
 			e.Response.Header().Set("X-Openwisp-Controller", "true")
 			key := e.Request.URL.Query().Get("key")
-			if len(key) != 32 {
-				return e.ForbiddenError("Not allowed", "Key not valid")
-			}
-			pbID, err := hexToPocketBaseID(key)
+			record, err := getDeviceRecord(app, key)
 			if err != nil {
-				return e.ForbiddenError("Not allowed", "Key not hex")
-			}
-			record, err := app.FindRecordById("devices", pbID)
-			if !security.Equal(record.GetString("key"), key) {
-				return e.ForbiddenError("Not allowed", "Key not allowed")
+				return e.ForbiddenError("Not allowed", err)
 			}
 
 			fmt.Println("OK")

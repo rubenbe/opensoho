@@ -28,6 +28,24 @@ config led 'led_%s'
 `, strings.ToLower(name), name, led.GetString("led_name"), led.GetString("trigger"))
 }
 
+func generateWifiConfig(wifi *core.Record, radio uint) string {
+	ssid := wifi.GetString("ssid")
+	key := wifi.GetString("key")
+	return fmt.Sprintf(`
+config wifi-iface 'default_radio%[3]d'
+        option device 'radio%[3]d'
+        option network 'lan'
+        option disabled '0'
+        option mode 'ap'
+        option ssid '%[1]s'
+        option encryption 'psk-mixed+ccmp'
+        option key '%[4]s'
+        option ieee80211r '1'
+        option ft_over_ds '0'
+        option ft_psk_generate_local '1'
+`, ssid, wifi.GetString("id"), radio, key)
+}
+
 func createConfigTar(files map[string]string) ([]byte, string, error) {
 	var buf bytes.Buffer
 
@@ -72,11 +90,23 @@ func createConfigTar(files map[string]string) ([]byte, string, error) {
 	return tarGzData, md5Hex, nil
 }
 
-func generateLedsConfig(leds []*core.Record) string {
+func generateLedConfigs(leds []*core.Record) string {
 	output := ""
 	for _, led := range leds {
 		fmt.Println(led)
 		output += generateLedConfig(led)
+	}
+
+	return output
+}
+
+func generateWifiConfigs(wifis []*core.Record, numradios uint) string {
+	output := ""
+	for _, wifi := range wifis {
+		for i := range numradios {
+			fmt.Println(wifi)
+			output += generateWifiConfig(wifi, i)
+		}
 	}
 
 	return output
@@ -121,11 +151,25 @@ func generateDeviceConfig(app *pocketbase.PocketBase, record *core.Record) ([]by
 	if err != nil {
 		return nil, "", err
 	}
-	ledconfigs := generateLedsConfig(ledrecords)
+	ledconfigs := generateLedConfigs(ledrecords)
 	if len(ledconfigs) > 0 {
-		configfiles["/etc/config/system"] = ledconfigs
+		configfiles["etc/config/system"] = ledconfigs
 	}
-	fmt.Println(ledconfigs)
+	fmt.Println("wifis")
+	fmt.Println(record.Get("wifis"))
+	numradios := uint(record.GetInt("numradios"))
+	fmt.Println("numradios %d", numradios)
+	if wifis := record.Get("wifis"); wifis != nil {
+		wifirecords, err := app.FindRecordsByIds("wifi", wifis.([]string))
+		if err != nil {
+			return nil, "", err
+		}
+		wificonfigs := generateWifiConfigs(wifirecords, numradios)
+		fmt.Println(wificonfigs)
+		if len(wificonfigs) > 0 {
+			configfiles["etc/config/wireless"] = wificonfigs
+		}
+	}
 
 	blob, checksum, err := createConfigTar(configfiles)
 	if err != nil {

@@ -12,6 +12,20 @@ It is inspired by OpenWisp, but aims for networks which are too small to be main
 As OpenWisp mentioned:
 > However, OpenWISP may not be the best fit for very small networks (fewer than 20 devices), organizations lacking IT expertise, or enterprises seeking open-source alternatives solely for cost-saving purposes.
 
+## Start OpenSOHO
+
+* Install the dependencies
+
+```
+go mod tidy
+```
+
+* Start OpenSOHO
+
+```
+go run . serve --http ipaddress:8090
+```
+
 ## Configure the OpenWRT devices
 
 Install the OpenWisp packages
@@ -29,8 +43,9 @@ Configure openwisp in Luci:
 * OpenWISP monitoring cannot be configure through Luci.
 
 ## Configure OpenSOHO
-Wait for the device to self register using the shared secret.
-Setup a Wifi access point (SSID+KEY)
-Attach it to a device to have it configured.
-Currently only one network per device is supported, but it will be automatically configured on all radio devices (configured using `numradios`)
-Optionally leds can also be turned on or off (only static config for now).
+
+* Wait for the devices to self register using the shared secret.
+* Setup a Wifi access point (SSID+KEY)
+* Attach it to a device to have it configured.
+* Currently only one network per device is supported, but it will be automatically configured on all radio devices (configured using `numradios`)
+* Optionally leds can also be turned on or off (only static config for now).

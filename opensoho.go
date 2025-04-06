@@ -185,6 +185,13 @@ func generateDeviceConfig(app *pocketbase.PocketBase, record *core.Record) ([]by
 }
 
 func main() {
+	shared_secret := os.Getenv("OPENSOHO_SHARED_SECRET")
+	if shared_secret == "" {
+		fmt.Println("OPENSOHO_SHARED_SECRET environment variable not set!")
+		return
+	}
+	os.Unsetenv("OPENSOHO_SHARED_SECRET")
+
 	app := pocketbase.New()
 
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
@@ -208,7 +215,7 @@ func main() {
 			if err := e.BindBody(&data); err != nil {
 				return e.BadRequestError("Missing fields", err)
 			}
-			if data.Secret != "blah" {
+			if data.Secret != shared_secret {
 				return e.BadRequestError("Registration failed!", "unrecognized secret")
 			}
 			pbID, err := hexToPocketBaseID(data.Key)

@@ -336,7 +336,7 @@ is-new: %d
 			}
 			time := e.Request.URL.Query().Get("time")
 			//current := e.Request.URL.Query().Get("current")
-			fmt.Println("monitoring %s", time)
+			fmt.Println("monitoring", time)
 			return e.Blob(200, "text/plain", []byte(""))
 		})
 		return se.Next()

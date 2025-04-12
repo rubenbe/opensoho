@@ -22,9 +22,12 @@ go mod tidy
 
 * Start OpenSOHO
 
+The shared secret will be used by openwisp-config to register. Choose a long random string for optimal security.
+
 ```
-go run . serve --http ipaddress:8090
+OPENSOHO_SHARED_SECRET=randompassphrase go run . serve --http ipaddress:8090
 ```
+OpenSoho can now be accessed via http://ipaddress:8090/_/
 
 ## Configure the OpenWRT devices
 

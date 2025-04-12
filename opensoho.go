@@ -25,6 +25,15 @@ import (
 	"github.com/pocketbase/pocketbase/tools/security"
 )
 
+type MonitoringData struct {
+	Type       string           `json:"type"`
+	//General    GeneralInfo      `json:"general"`
+	//Interfaces []Interface      `json:"interfaces"`
+	//Resources  Resources        `json:"resources"`
+	DNSServers []string         `json:"dns_servers"`
+	//Neighbors  []Neighbor       `json:"neighbors"`
+}
+
 func generateLedConfig(led *core.Record) string {
 	name := led.GetString("name")
 	return fmt.Sprintf(`
@@ -342,8 +351,15 @@ is-new: %d
 				return e.ForbiddenError("Not allowed", err)
 			}
 			time := e.Request.URL.Query().Get("time")
+			var payload MonitoringData
+			if err := e.BindBody(&payload); err != nil {
+				return e.BadRequestError("Failed to parse json", err)
+			}
+			if(payload.Type != "DeviceMonitoring"){
+				return e.BadRequestError("Invalid type in JSON", err)
+			}
 			//current := e.Request.URL.Query().Get("current")
-			fmt.Println("monitoring", time)
+			fmt.Println(payload.Type, "@", time)
 			return e.Blob(200, "text/plain", []byte(""))
 		})
 		return se.Next()

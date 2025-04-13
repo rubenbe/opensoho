@@ -373,11 +373,27 @@ is-new: %d
 			if payload.Type != "DeviceMonitoring" {
 				return e.BadRequestError("Invalid type in JSON", err)
 			}
+			collection, err := app.FindCollectionByNameOrId("clients")
+			if err != nil {
+				return e.InternalServerError("Could not find collection", err)
+			}
+
 			for _, iface := range payload.Interfaces {
 				if iface.Type == "wireless" && iface.Wireless != nil {
 					for _, client := range iface.Wireless.Clients {
 						if client.Assoc {
 							fmt.Printf("Associated client on %s: %s\n", iface.Name, client.MAC)
+							cliententry, err := app.FindFirstRecordByData(collection, "mac_address", client.MAC)
+							if(err != nil){
+								cliententry = core.NewRecord(collection)
+							}
+							cliententry.Set("mac_address", client.MAC)
+							// TODO expand model
+							cliententry.Set("connected_to_hostname", iface.Name)
+							err = app.Save(cliententry)
+							if err != nil {
+								return e.InternalServerError("Could not store entry", err)
+							}
 						}
 					}
 				}

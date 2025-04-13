@@ -361,7 +361,7 @@ is-new: %d
 		se.Router.POST("/api/v1/monitoring/device/", func(e *core.RequestEvent) error {
 			e.Response.Header().Set("X-Openwisp-Controller", "true")
 			key := e.Request.URL.Query().Get("key")
-			_, err := getDeviceRecord(app, key)
+			device, err := getDeviceRecord(app, key)
 			if err != nil {
 				return e.ForbiddenError("Not allowed", err)
 			}
@@ -382,7 +382,7 @@ is-new: %d
 				if iface.Type == "wireless" && iface.Wireless != nil {
 					for _, client := range iface.Wireless.Clients {
 						if client.Assoc {
-							fmt.Printf("Associated client on %s: %s\n", iface.Name, client.MAC)
+							fmt.Printf("Associated client on %s: %s %s\n", iface.Name, client.MAC, device.GetString("id"))
 							cliententry, err := app.FindFirstRecordByData(collection, "mac_address", client.MAC)
 							if(err != nil){
 								cliententry = core.NewRecord(collection)
@@ -390,6 +390,7 @@ is-new: %d
 							cliententry.Set("mac_address", client.MAC)
 							// TODO expand model
 							cliententry.Set("connected_to_hostname", iface.Name)
+							cliententry.Set("device", device.GetString("id"))
 							err = app.Save(cliententry)
 							if err != nil {
 								return e.InternalServerError("Could not store entry", err)

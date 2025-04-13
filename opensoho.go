@@ -25,12 +25,27 @@ import (
 	"github.com/pocketbase/pocketbase/tools/security"
 )
 
+type Client struct {
+	MAC   string `json:"mac"`
+	Assoc bool   `json:"assoc"`
+}
+
+type Wireless struct {
+	Clients []Client `json:"clients"`
+}
+
+type Interface struct {
+	Type     string    `json:"type"`
+	Name     string    `json:"name"`
+	Wireless *Wireless `json:"wireless,omitempty"`
+}
+
 type MonitoringData struct {
-	Type       string           `json:"type"`
+	Type string `json:"type"`
 	//General    GeneralInfo      `json:"general"`
-	//Interfaces []Interface      `json:"interfaces"`
+	Interfaces []Interface `json:"interfaces"`
 	//Resources  Resources        `json:"resources"`
-	DNSServers []string         `json:"dns_servers"`
+	DNSServers []string `json:"dns_servers"`
 	//Neighbors  []Neighbor       `json:"neighbors"`
 }
 
@@ -355,8 +370,17 @@ is-new: %d
 			if err := e.BindBody(&payload); err != nil {
 				return e.BadRequestError("Failed to parse json", err)
 			}
-			if(payload.Type != "DeviceMonitoring"){
+			if payload.Type != "DeviceMonitoring" {
 				return e.BadRequestError("Invalid type in JSON", err)
+			}
+			for _, iface := range payload.Interfaces {
+				if iface.Type == "wireless" && iface.Wireless != nil {
+					for _, client := range iface.Wireless.Clients {
+						if client.Assoc {
+							fmt.Printf("Associated client on %s: %s\n", iface.Name, client.MAC)
+						}
+					}
+				}
 			}
 			//current := e.Request.URL.Query().Get("current")
 			fmt.Println(payload.Type, "@", time)

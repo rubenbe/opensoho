@@ -69,12 +69,12 @@ config wifi-iface 'default_radio%[3]d'
         option disabled '0'
         option mode 'ap'
         option ssid '%[1]s'
-        option encryption 'psk-mixed+ccmp'
+        option encryption '%[5]s'
         option key '%[4]s'
         option ieee80211r '1'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
-`, ssid, wifi.GetString("id"), radio, key)
+`, ssid, wifi.GetString("id"), radio, key, wifi.GetString("encryption"))
 }
 
 func createConfigTar(files map[string]string) ([]byte, string, error) {

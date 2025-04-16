@@ -2,7 +2,7 @@
 
 # OpenSOHO
 
-OpenSOHO is built to manage a small number OpenWRT based network devices.
+OpenSOHO is built to manage a small number OpenWRT based network devices. Hence the name SOHO from Small Office Home Office (SOHO) Networks.
 Only OpenWRT 24.10.x is tested.
 
 * From 2 to 20 devices

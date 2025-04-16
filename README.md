@@ -3,10 +3,12 @@
 # OpenSOHO
 
 OpenSOHO is built to manage a small number OpenWRT based network devices.
+Only OpenWRT 24.10.x is tested.
 
 * From 2 to 20 devices
 * No multitenancy
 * Compatible with openwisp-config and openwisp-monitoring.
+* Simple to deploy
 
 It is inspired by OpenWisp, but aims for networks which are too small to be maintained with OpenWISP.
 As OpenWisp mentioned:

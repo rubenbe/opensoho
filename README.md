@@ -45,7 +45,10 @@ Configure openwisp in Luci:
 
 * Set the `Server URL` and the `Shared secret` only.
 * Optionally lower the `Update Interval` to 30 seconds for faster updates.
-* OpenWISP monitoring cannot be configure through Luci.
+* OpenWISP monitoring cannot be configure through Luci. Shorten its update interval to make the monitoring behave snappier.
+```
+uci set openwisp-monitoring.monitoring.interval='15'
+```
 
 ## Configure OpenSOHO
 

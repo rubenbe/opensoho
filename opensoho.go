@@ -59,11 +59,11 @@ config led 'led_%s'
 `, strings.ToLower(name), name, led.GetString("led_name"), led.GetString("trigger"))
 }
 
-func generateWifiConfig(wifi *core.Record, radio uint) string {
+func generateWifiConfig(wifi *core.Record, wifiid int, radio uint) string {
 	ssid := wifi.GetString("ssid")
 	key := wifi.GetString("key")
 	return fmt.Sprintf(`
-config wifi-iface 'default_radio%[3]d'
+config wifi-iface 'wifi_%[6]d_radio%[3]d'
         option device 'radio%[3]d'
         option network 'lan'
         option disabled '0'
@@ -74,7 +74,7 @@ config wifi-iface 'default_radio%[3]d'
         option ieee80211r '1'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
-`, ssid, wifi.GetString("id"), radio, key, wifi.GetString("encryption"))
+`, ssid, wifi.GetString("id"), radio, key, wifi.GetString("encryption"), wifiid)
 }
 
 func createConfigTar(files map[string]string) ([]byte, string, error) {
@@ -133,10 +133,10 @@ func generateLedConfigs(leds []*core.Record) string {
 
 func generateWifiConfigs(wifis []*core.Record, numradios uint) string {
 	output := ""
-	for _, wifi := range wifis {
-		for i := range numradios {
+	for i, wifi := range wifis {
+		for j := range numradios {
 			fmt.Println(wifi)
-			output += generateWifiConfig(wifi, i)
+			output += generateWifiConfig(wifi, i, j)
 		}
 	}
 

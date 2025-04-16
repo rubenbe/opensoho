@@ -57,3 +57,4 @@ uci set openwisp-monitoring.monitoring.interval='15'
 * Attach it to a device to have it configured.
 * Currently only one network per device is supported, but it will be automatically configured on all radio devices (configured using `numradios`)
 * Optionally leds can also be turned on or off (only static config for now).
+* Configuring radios is not yet supported.

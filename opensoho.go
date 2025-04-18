@@ -168,6 +168,9 @@ func getDeviceRecord(app *pocketbase.PocketBase, key string) (*core.Record, erro
 		return nil, fmt.Errorf("Key not hex")
 	}
 	record, err := app.FindRecordById("devices", pbID)
+	if err != nil {
+		return nil, fmt.Errorf("Device not known")
+	}
 	if !security.Equal(record.GetString("key"), key) {
 		return nil, fmt.Errorf("Key not allowed")
 	}

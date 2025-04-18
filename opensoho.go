@@ -384,7 +384,7 @@ is-new: %d
 						if client.Assoc {
 							fmt.Printf("Associated client on %s: %s %s\n", iface.Name, client.MAC, device.GetString("id"))
 							cliententry, err := app.FindFirstRecordByData(collection, "mac_address", client.MAC)
-							if(err != nil){
+							if err != nil {
 								cliententry = core.NewRecord(collection)
 							}
 							cliententry.Set("mac_address", client.MAC)

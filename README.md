@@ -55,7 +55,7 @@ uci set openwisp-monitoring.monitoring.interval='15'
 * Wait for the devices to self register using the shared secret.
 * Setup a Wifi access point (SSID+KEY)
 * Attach it to a device to have it configured.
-* Currently only one network per device is supported, but it will be automatically configured on all radio devices (configured using `numradios`)
+* Currently each network will be automatically configured on all radios (configured using `numradios`)
 * Optionally leds can also be turned on or off (only static config for now).
 * Configuring radios is not yet supported.
 

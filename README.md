@@ -58,3 +58,13 @@ uci set openwisp-monitoring.monitoring.interval='15'
 * Currently only one network per device is supported, but it will be automatically configured on all radio devices (configured using `numradios`)
 * Optionally leds can also be turned on or off (only static config for now).
 * Configuring radios is not yet supported.
+
+## Extras
+### Reregister a device
+When changing the OpenWISP `Server URL` in Luci doesn't seem to properly register with the new controller.
+To fix this:
+```
+uci delete openwisp.http.uuid
+uci delete openwisp.http.key
+/etc/init.d/openwisp-config restart
+```

@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/google/uuid"
@@ -198,6 +199,9 @@ func generateDeviceConfig(app *pocketbase.PocketBase, record *core.Record) ([]by
 		if err != nil {
 			return nil, "", err
 		}
+		sort.Slice(wifirecords, func(i, j int) bool {
+			return wifirecords[i].GetDateTime("created").Before(wifirecords[j].GetDateTime("created"))
+		})
 		wificonfigs := generateWifiConfigs(wifirecords, numradios)
 		fmt.Println(wificonfigs)
 		if len(wificonfigs) > 0 {

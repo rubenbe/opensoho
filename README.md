@@ -68,3 +68,10 @@ uci delete openwisp.http.uuid
 uci delete openwisp.http.key
 /etc/init.d/openwisp-config restart
 ```
+
+# Developers
+
+Running the unit tests:
+```
+go test -cover -v
+```

@@ -160,7 +160,7 @@ func hexToPocketBaseID(hexStr string) (string, error) {
 	// Convert to Base36
 	return bigInt.Text(36)[0:15], nil
 }
-func getDeviceRecord(app *pocketbase.PocketBase, key string) (*core.Record, error) {
+func getDeviceRecord(app core.App, key string) (*core.Record, error) {
 	if len(key) != 32 {
 		return nil, fmt.Errorf("Key not valid")
 	}
@@ -178,7 +178,7 @@ func getDeviceRecord(app *pocketbase.PocketBase, key string) (*core.Record, erro
 	return record, nil
 }
 
-func generateDeviceConfig(app *pocketbase.PocketBase, record *core.Record) ([]byte, string, error) {
+func generateDeviceConfig(app core.App, record *core.Record) ([]byte, string, error) {
 	configfiles := map[string]string{}
 	leds := record.Get("leds").([]string)
 	fmt.Println(leds)
@@ -193,7 +193,7 @@ func generateDeviceConfig(app *pocketbase.PocketBase, record *core.Record) ([]by
 	fmt.Println("wifis")
 	fmt.Println(record.Get("wifis"))
 	numradios := uint(record.GetInt("numradios"))
-	fmt.Println("numradios %d", numradios)
+	fmt.Printf("numradios %d\n", numradios)
 	if wifis := record.Get("wifis"); wifis != nil {
 		wifirecords, err := app.FindRecordsByIds("wifi", wifis.([]string))
 		if err != nil {
@@ -215,16 +215,7 @@ func generateDeviceConfig(app *pocketbase.PocketBase, record *core.Record) ([]by
 	return blob, checksum, err
 }
 
-func main() {
-	shared_secret := os.Getenv("OPENSOHO_SHARED_SECRET")
-	if shared_secret == "" {
-		fmt.Println("OPENSOHO_SHARED_SECRET environment variable not set!")
-		return
-	}
-	os.Unsetenv("OPENSOHO_SHARED_SECRET")
-
-	app := pocketbase.New()
-
+func bindAppHooks(app core.App, shared_secret string) {
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
 		se.Router.POST("/controller/register/", func(e *core.RequestEvent) error {
 			e.Response.Header().Set("X-Openwisp-Controller", "true")
@@ -244,10 +235,11 @@ func main() {
 				System     string `form:"system"`
 			}{}
 			if err := e.BindBody(&data); err != nil {
+				fmt.Println(err)
 				return e.BadRequestError("Missing fields", err)
 			}
 			if data.Secret != shared_secret {
-				return e.BadRequestError("Registration failed!", "unrecognized secret")
+				return e.ForbiddenError("Registration failed!", "unrecognized secret")
 			}
 			pbID, err := hexToPocketBaseID(data.Key)
 			fmt.Println(pbID)
@@ -412,6 +404,19 @@ is-new: %d
 		})
 		return se.Next()
 	})
+}
+
+func main() {
+	shared_secret := os.Getenv("OPENSOHO_SHARED_SECRET")
+	if shared_secret == "" {
+		fmt.Println("OPENSOHO_SHARED_SECRET environment variable not set!")
+		return
+	}
+	os.Unsetenv("OPENSOHO_SHARED_SECRET")
+
+	app := pocketbase.New()
+
+	bindAppHooks(app, shared_secret)
 
 	// Upstream commands
 	// ---------------------------------------------------------------

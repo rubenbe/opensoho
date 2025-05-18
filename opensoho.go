@@ -75,6 +75,7 @@ type Client struct {
 
 type Wireless struct {
 	Clients []Client `json:"clients"`
+	SSID string    `json:"ssid"`
 }
 
 type Interface struct {
@@ -421,6 +422,7 @@ is-new: %d
 
 			for _, iface := range payload.Interfaces {
 				if iface.Type == "wireless" && iface.Wireless != nil {
+					
 					for _, client := range iface.Wireless.Clients {
 						if client.Assoc {
 							fmt.Printf("Associated client on %s: %s %s\n", iface.Name, client.MAC, device.GetString("id"))
@@ -432,6 +434,7 @@ is-new: %d
 							// TODO expand model
 							cliententry.Set("connected_to_hostname", iface.Name)
 							cliententry.Set("signal", client.Signal)
+							cliententry.Set("ssid", iface.Wireless.SSID)
 							cliententry.Set("device", device.GetString("id"))
 							err = app.Save(cliententry)
 							if err != nil {

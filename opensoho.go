@@ -68,8 +68,9 @@ func validateRadio(record *core.Record) error {
 }
 
 type Client struct {
-	MAC   string `json:"mac"`
-	Assoc bool   `json:"assoc"`
+	MAC    string `json:"mac"`
+	Assoc  bool   `json:"assoc"`
+	Signal int    `json:"signal"`
 }
 
 type Wireless struct {
@@ -430,6 +431,7 @@ is-new: %d
 							cliententry.Set("mac_address", client.MAC)
 							// TODO expand model
 							cliententry.Set("connected_to_hostname", iface.Name)
+							cliententry.Set("signal", client.Signal)
 							cliententry.Set("device", device.GetString("id"))
 							err = app.Save(cliententry)
 							if err != nil {

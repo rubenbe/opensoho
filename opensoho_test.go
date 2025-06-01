@@ -6,8 +6,12 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/tests"
+	"github.com/pocketbase/pocketbase/tools/types"
+	"github.com/stretchr/testify/assert"
 )
 
 const testDataDir = "./test_pb_data"
@@ -110,4 +114,21 @@ func TestRegisterEndpoint(t *testing.T) {
 	for _, scenario := range scenarios {
 		scenario.Test(t)
 	}
+}
+
+func TestUpdateLastSeen(t *testing.T) {
+	app, _ := tests.NewTestApp()
+	collection := core.NewAuthCollection("devices")
+	collection.Fields.Add(&core.DateField{Name: "last_seen"})
+	collection.Fields.Add(&core.SelectField{Name: "health_status", MaxSelect: 1, Values: []string{"unknown", "healthy", "critical"}})
+
+	m := core.NewRecord(collection)
+	m.Id = "test_id"
+	m.Set("health_status", "unknown")
+	assert.Equal(t, m.GetDateTime("last_seen"), types.DateTime{})
+	updateLastSeen(app, m)
+	assert.NotEqual(t, m.GetDateTime("last_seen"), types.DateTime{})
+	assert.WithinDuration(t, m.GetDateTime("last_seen").Time(), types.NowDateTime().Time(), 1*time.Second, "Last Seen should be updated")
+	assert.Equal(t, m.GetString("health_status"), "healthy")
+	// TODO Check that save is called?
 }

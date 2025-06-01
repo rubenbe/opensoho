@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/pocketbase/pocketbase"
@@ -27,6 +28,12 @@ import (
 	"github.com/pocketbase/pocketbase/tools/security"
 )
 
+func updateLastSeen(app core.App, record *core.Record) error {
+	fmt.Println("UpdateLastSeen")
+	record.Set("last_seen", time.Now())
+	record.Set("health_status", "healthy")
+	return app.Save(record)
+}
 func validateRadio(record *core.Record) error {
 	if record.Collection().Name != "radios" {
 		return nil
@@ -75,7 +82,7 @@ type Client struct {
 
 type Wireless struct {
 	Clients []Client `json:"clients"`
-	SSID string    `json:"ssid"`
+	SSID    string   `json:"ssid"`
 }
 
 type Interface struct {
@@ -218,6 +225,12 @@ func getDeviceRecord(app core.App, key string) (*core.Record, error) {
 	if !security.Equal(record.GetString("key"), key) {
 		return nil, fmt.Errorf("Key not allowed")
 	}
+	// Successful authentication means the device is alive and online
+	if updateLastSeen(app, record) != nil {
+		fmt.Println("could not update last seen")
+		// Let's not make this an error for now
+	}
+
 	return record, nil
 }
 
@@ -422,7 +435,7 @@ is-new: %d
 
 			for _, iface := range payload.Interfaces {
 				if iface.Type == "wireless" && iface.Wireless != nil {
-					
+
 					for _, client := range iface.Wireless.Clients {
 						if client.Assoc {
 							fmt.Printf("Associated client on %s: %s %s\n", iface.Name, client.MAC, device.GetString("id"))

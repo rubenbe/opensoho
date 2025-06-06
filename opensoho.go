@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
@@ -26,10 +27,21 @@ import (
 	"github.com/pocketbase/pocketbase/plugins/migratecmd"
 	"github.com/pocketbase/pocketbase/tools/hook"
 	"github.com/pocketbase/pocketbase/tools/security"
+	"github.com/pocketbase/pocketbase/tools/types"
 )
 
+func updateDeviceHealth(app core.App, currenttime types.DateTime) {
+	oldesttime := currenttime.Add(-60 * time.Second)
+	_, err := app.DB().
+		NewQuery("update devices set health_status = \"unhealthy\" where last_seen <= {:offset}").
+		Bind(dbx.Params{"offset": oldesttime.String()}).Execute()
+	if err != nil {
+		fmt.Println("Failed to update device health")
+		fmt.Println(err)
+	}
+
+}
 func updateLastSeen(app core.App, record *core.Record) error {
-	fmt.Println("UpdateLastSeen")
 	record.Set("last_seen", time.Now())
 	record.Set("health_status", "healthy")
 	return app.Save(record)
@@ -226,6 +238,7 @@ func getDeviceRecord(app core.App, key string) (*core.Record, error) {
 		return nil, fmt.Errorf("Key not allowed")
 	}
 	// Successful authentication means the device is alive and online
+	fmt.Println("UpdateLastSeen")
 	if updateLastSeen(app, record) != nil {
 		fmt.Println("could not update last seen")
 		// Let's not make this an error for now
@@ -577,6 +590,11 @@ func main() {
 
 	app.OnRecordValidate("radios").BindFunc(func(e *core.RecordEvent) error {
 		return validateRadio(e.Record)
+	})
+
+	app.Cron().MustAdd("updateDeviceHealth", "* * * * *", func() {
+		fmt.Println("Update Device health")
+		updateDeviceHealth(app, types.NowDateTime())
 	})
 
 	if err := app.Start(); err != nil {

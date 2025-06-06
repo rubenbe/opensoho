@@ -1,4 +1,3 @@
-// main_test.go
 package main
 
 import (
@@ -118,17 +117,38 @@ func TestRegisterEndpoint(t *testing.T) {
 
 func TestUpdateLastSeen(t *testing.T) {
 	app, _ := tests.NewTestApp()
-	collection := core.NewAuthCollection("devices")
+	collection := core.NewBaseCollection("devices")
 	collection.Fields.Add(&core.DateField{Name: "last_seen"})
 	collection.Fields.Add(&core.SelectField{Name: "health_status", MaxSelect: 1, Values: []string{"unknown", "healthy", "critical"}})
+	err := app.Save(collection)
+	assert.Equal(t, err, nil)
 
 	m := core.NewRecord(collection)
-	m.Id = "test_id"
+	m.Id = "testaidalongera"
 	m.Set("health_status", "unknown")
 	assert.Equal(t, m.GetDateTime("last_seen"), types.DateTime{})
+	err = app.Save(m)
+	assert.Equal(t, err, nil)
+
 	updateLastSeen(app, m)
 	assert.NotEqual(t, m.GetDateTime("last_seen"), types.DateTime{})
 	assert.WithinDuration(t, m.GetDateTime("last_seen").Time(), types.NowDateTime().Time(), 1*time.Second, "Last Seen should be updated")
-	assert.Equal(t, m.GetString("health_status"), "healthy")
-	// TODO Check that save is called?
+	record, err := app.FindRecordById("devices", "testaidalongera")
+	assert.Equal(t, "healthy", m.GetString("health_status"))
+
+	// The record is newer than 60 seconds, so should remain healthy
+	now := types.NowDateTime()
+	now = now.Add(59 * time.Second)
+	updateDeviceHealth(app, now)
+	record, err = app.FindRecordById("devices", "testaidalongera")
+	assert.Equal(t, err, nil)
+	assert.Equal(t, "healthy", record.GetString("health_status"))
+
+	// The record should have been updated to unhealthy
+	now = now.Add(2 * time.Second)
+	updateDeviceHealth(app, now)
+	record, err = app.FindRecordById("devices", "testaidalongera")
+	assert.Equal(t, err, nil)
+	assert.Equal(t, "unhealthy", record.GetString("health_status"))
+
 }

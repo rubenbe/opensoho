@@ -93,8 +93,9 @@ type Client struct {
 }
 
 type Wireless struct {
-	Clients []Client `json:"clients"`
-	SSID    string   `json:"ssid"`
+	Clients   []Client `json:"clients"`
+	SSID      string   `json:"ssid"`
+	Frequency int      `json:"frequency"`
 }
 
 type Interface struct {
@@ -461,6 +462,7 @@ is-new: %d
 							cliententry.Set("connected_to_hostname", iface.Name)
 							cliententry.Set("signal", client.Signal)
 							cliententry.Set("ssid", iface.Wireless.SSID)
+							cliententry.Set("frequency", iface.Wireless.Frequency)
 							cliententry.Set("device", device.GetString("id"))
 							err = app.Save(cliententry)
 							if err != nil {

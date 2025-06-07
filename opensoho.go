@@ -13,7 +13,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,6 +31,15 @@ import (
 	"github.com/pocketbase/pocketbase/tools/security"
 	"github.com/pocketbase/pocketbase/tools/types"
 )
+
+func extractRadioNumber(s string) (int, error) {
+	re := regexp.MustCompile(`phy(\d+)-`)
+	match := re.FindStringSubmatch(s)
+	if len(match) < 2 {
+		return 0, fmt.Errorf("phy number not found in string: %s", s)
+	}
+	return strconv.Atoi(match[1])
+}
 
 func updateDeviceHealth(app core.App, currenttime types.DateTime) {
 	oldesttime := currenttime.Add(-60 * time.Second)

@@ -152,3 +152,22 @@ func TestUpdateLastSeen(t *testing.T) {
 	assert.Equal(t, "unhealthy", record.GetString("health_status"))
 
 }
+
+func TestExtractRadioNumber(t *testing.T) {
+	tests := []struct {
+		input       string
+		expected    int
+		expectError bool
+	}{
+		{"phy1-ap0", 1, false},
+		{"phy0-ap0", 0, false},
+		{"phy2-ap3", 2, false},
+		{"invalid-string", 0, true}, // error case
+	}
+
+	for _, tt := range tests {
+		result, err := extractRadioNumber(tt.input)
+		assert.Equal(t, err != nil, tt.expectError)
+		assert.Equal(t, result, tt.expected)
+	}
+}

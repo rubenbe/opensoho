@@ -45,10 +45,12 @@ Configure openwisp in Luci:
 
 * Set the `Server URL` and the `Shared secret` only.
 * Optionally lower the `Update Interval` to 30 seconds for faster updates.
-* OpenWISP monitoring cannot be configure through Luci. Shorten its update interval to make the monitoring behave snappier.
+* OpenWISP monitoring cannot be configure through Luci. Shorten its update interval to make the monitoring behave correctly.
 ```
 uci set openwisp-monitoring.monitoring.interval='15'
 ```
+
+It is highly recommended to enable monitoring, since OpenSOHO will deduce a lot of the current OpenWRT settings and fill them in for easy configuration.
 
 ## Configure OpenSOHO
 
@@ -57,7 +59,7 @@ uci set openwisp-monitoring.monitoring.interval='15'
 * Attach it to a device to have it configured.
 * Currently each network will be automatically configured on all radios (configured using `numradios`)
 * Optionally leds can also be turned on or off (only static config for now).
-* Configuring radios is not yet supported.
+* Configuring radios is not yet supported. (only monitoring)
 
 ## Extras
 ### Reregister a device

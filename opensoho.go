@@ -475,7 +475,6 @@ is-new: %d
 				return e.ForbiddenError("Not allowed", err)
 			}
 
-			fmt.Println("OK")
 			_, response, err := generateDeviceConfig(app, record)
 			if err != nil {
 				return e.InternalServerError("Internal error", err)
@@ -492,7 +491,12 @@ is-new: %d
 				return e.ForbiddenError("Not allowed", err)
 			}
 
-			fmt.Println("OK")
+			if record.GetBool("enabled") == false {
+				fmt.Println("DISABLED", record.GetString("name"))
+				return e.NotFoundError("Disabled", nil)
+			}
+
+			fmt.Println("OK", record.GetString("name"), record.GetBool("enabled"))
 			response, _, err := generateDeviceConfig(app, record)
 			if err != nil {
 				return e.InternalServerError("Internal error", err)

@@ -171,3 +171,131 @@ func TestExtractRadioNumber(t *testing.T) {
 		assert.Equal(t, result, tt.expected)
 	}
 }
+
+func TestFrequencyToBand(t *testing.T) {
+	tests := []struct {
+		input    int
+		expected string
+	}{
+		{2412, "2.4"},
+		{2472, "2.4"},
+		{5180, "5"},
+		{5825, "5"},
+		{5955, "6"},
+		{6975, "6"},
+		{58320, "60"},
+		{66960, "60"},
+		{1000, "unknown"},
+	}
+
+	for _, tt := range tests {
+		result := frequencyToBand(tt.input)
+		assert.Equal(t, result, tt.expected)
+	}
+}
+
+func TestUpdateRadios(t *testing.T) {
+	radios := make(map[int]Radio)
+	radios[0] = Radio{Frequency: 2412, Channel: 1, HTmode: "HT20", TxPower: 23}
+	radios[1] = Radio{Frequency: 5200, Channel: 40, HTmode: "HT40", TxPower: 19}
+	app, _ := tests.NewTestApp()
+
+	// Create devices collection
+	devicecollection := core.NewBaseCollection("devices")
+	err := app.Save(devicecollection)
+	assert.Equal(t, err, nil)
+
+	// Create radios collection
+	radiocollection := core.NewBaseCollection("radios")
+	x := 0.0
+	radiocollection.Fields.Add(&core.NumberField{
+		Name:     "radio",
+		Required: false,
+		Min:      &x,
+		OnlyInt:  true,
+	})
+	radiocollection.Fields.Add(&core.RelationField{
+		Name:          "device",
+		Required:      false,
+		MaxSelect:     1,
+		CascadeDelete: false,
+		CollectionId:  devicecollection.Id,
+	})
+	radiocollection.Fields.Add(&core.NumberField{
+		Name:     "channel",
+		Required: false,
+		Min:      &x,
+		OnlyInt:  true,
+	})
+	radiocollection.Fields.Add(&core.NumberField{
+		Name:     "frequency",
+		Required: false,
+		Min:      &x,
+		OnlyInt:  true,
+	})
+	radiocollection.Fields.Add(&core.TextField{
+		Name:     "band",
+		Required: false,
+	})
+	err = app.Save(radiocollection)
+	assert.Equal(t, err, nil)
+
+	// Add a dummy radio
+	d := core.NewRecord(devicecollection)
+	app.Save(d)
+
+	updateRadios(d, app, radios)
+	radiocount, err := app.CountRecords("radios")
+	assert.Equal(t, err, nil)
+	assert.Equal(t, int64(2), radiocount, "Both radios should have been added")
+	{
+		r, err := app.FindFirstRecordByData("radios", "radio", "0")
+		assert.Equal(t, err, nil)
+		assert.Equal(t, r.GetInt("radio"), 0)
+		assert.Equal(t, r.GetInt("frequency"), 2412)
+		assert.Equal(t, r.GetInt("channel"), 1)
+		assert.Equal(t, r.GetString("band"), "2.4")
+		assert.Equal(t, r.GetString("device"), d.GetString("id"))
+	}
+	{
+		r, err := app.FindFirstRecordByData("radios", "radio", "1")
+		assert.Equal(t, err, nil)
+		assert.Equal(t, r.GetInt("radio"), 1)
+		assert.Equal(t, r.GetInt("frequency"), 5200)
+		assert.Equal(t, r.GetInt("channel"), 40)
+		assert.Equal(t, r.GetString("band"), "5")
+		assert.Equal(t, r.GetString("device"), d.GetString("id"))
+	}
+	// Now do this again but only a partial update should happen
+	radios[0] = Radio{Frequency: 2417, Channel: 1, HTmode: "HT20", TxPower: 23}
+	radios[1] = Radio{Frequency: 5180, Channel: 40, HTmode: "HT40", TxPower: 19}
+	radios[2] = Radio{Frequency: 5955, Channel: 100, HTmode: "HT40", TxPower: 19}
+	updateRadios(d, app, radios)
+	radiocount, err = app.CountRecords("radios")
+	assert.Equal(t, err, nil)
+	assert.Equal(t, int64(3), radiocount, "Only the new radio should be added")
+	{
+		r, err := app.FindFirstRecordByData("radios", "radio", "0")
+		assert.Equal(t, err, nil)
+		assert.Equal(t, r.GetInt("radio"), 0)
+		assert.Equal(t, r.GetInt("frequency"), 2412)
+		assert.Equal(t, r.GetInt("channel"), 1)
+		assert.Equal(t, r.GetString("band"), "2.4")
+	}
+	{
+		r, err := app.FindFirstRecordByData("radios", "radio", "1")
+		assert.Equal(t, err, nil)
+		assert.Equal(t, r.GetInt("radio"), 1)
+		assert.Equal(t, r.GetInt("frequency"), 5200)
+		assert.Equal(t, r.GetInt("channel"), 40)
+		assert.Equal(t, r.GetString("band"), "5")
+	}
+	{
+		r, err := app.FindFirstRecordByData("radios", "radio", "2")
+		assert.Equal(t, err, nil)
+		assert.Equal(t, r.GetInt("radio"), 2)
+		assert.Equal(t, r.GetInt("frequency"), 5955)
+		assert.Equal(t, r.GetInt("channel"), 100)
+		assert.Equal(t, r.GetString("band"), "6")
+	}
+}

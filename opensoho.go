@@ -57,6 +57,21 @@ func updateLastSeen(app core.App, record *core.Record) error {
 	record.Set("health_status", "healthy")
 	return app.Save(record)
 }
+
+func frequencyToBand(frequency int) string {
+	switch {
+	case frequency >= 2400 && frequency <= 2500:
+		return "2.4"
+	case frequency >= 5170 && frequency <= 5835:
+		return "5"
+	case frequency >= 5925 && frequency <= 7125:
+		return "6"
+	case frequency >= 57000 && frequency <= 71000:
+		return "60"
+	default:
+		return "unknown"
+	}
+}
 func validateRadio(record *core.Record) error {
 	if record.Collection().Name != "radios" {
 		return nil
@@ -103,10 +118,20 @@ type Client struct {
 	Signal int    `json:"signal"`
 }
 
+type Radio struct {
+	Frequency int
+	Channel   int
+	HTmode    string
+	TxPower   int
+}
+
 type Wireless struct {
 	Clients   []Client `json:"clients"`
 	SSID      string   `json:"ssid"`
 	Frequency int      `json:"frequency"`
+	Channel   int      `json:"channel"`
+	HTmode    string   `json:"htmode"`
+	TxPower   int      `json:"tx_power"`
 }
 
 type Interface struct {
@@ -122,6 +147,44 @@ type MonitoringData struct {
 	//Resources  Resources        `json:"resources"`
 	DNSServers []string `json:"dns_servers"`
 	//Neighbors  []Neighbor       `json:"neighbors"`
+}
+
+func updateRadios(device *core.Record, app core.App, newradios map[int]Radio) {
+	oldradios, err := app.FindAllRecords("radios", dbx.HashExp{"device": device.GetString("id")})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	// Loop over the existing (old) radios for this device, and update if not found.
+	for _, oldradio := range oldradios {
+		oldradionum := oldradio.GetInt("radio")
+		if newradio, ok := newradios[oldradionum]; ok {
+			fmt.Println("EXISTS", newradio)
+			delete(newradios, oldradionum)
+		}
+	}
+
+	if len(newradios) == 0 {
+		return
+	}
+	radiocollection, err := app.FindCollectionByNameOrId("radios")
+	if err != nil {
+		fmt.Println("Failed to find radio collection")
+	}
+
+	for numradio, radio := range newradios {
+		fmt.Println(numradio, radio, device.GetString("id"))
+		record := core.NewRecord(radiocollection)
+		record.Set("device", device.GetString("id"))
+		record.Set("radio", numradio)
+		record.Set("channel", radio.Channel)
+		record.Set("band", frequencyToBand(radio.Frequency))
+		record.Set("frequency", radio.Frequency)
+		err := app.Save(record)
+		if err != nil {
+			fmt.Println("Failed to save radio config")
+		}
+	}
 }
 
 func generateLedConfig(led *core.Record) string {
@@ -458,8 +521,16 @@ is-new: %d
 				return e.InternalServerError("Could not find collection", err)
 			}
 
+			radios := make(map[int]Radio)
+
 			for _, iface := range payload.Interfaces {
 				if iface.Type == "wireless" && iface.Wireless != nil {
+					radionum, err := extractRadioNumber(iface.Name)
+					if err != nil {
+						fmt.Printf("Found an unknown phy pattern '%s', please report a github issue\n", iface.Name)
+					} else {
+						radios[radionum] = Radio{Frequency: iface.Wireless.Frequency, Channel: iface.Wireless.Channel, HTmode: iface.Wireless.HTmode, TxPower: iface.Wireless.TxPower}
+					}
 
 					for _, client := range iface.Wireless.Clients {
 						if client.Assoc {
@@ -483,6 +554,7 @@ is-new: %d
 					}
 				}
 			}
+			updateRadios(device, app, radios)
 			//current := e.Request.URL.Query().Get("current")
 			fmt.Println(payload.Type, "@", time)
 			return e.Blob(200, "text/plain", []byte(""))

@@ -55,11 +55,12 @@ It is highly recommended to enable monitoring, since OpenSOHO will deduce a lot 
 ## Configure OpenSOHO
 
 * Wait for the devices to self register using the shared secret.
+* Set the `numradios` to the correct value. For example for a 2.4 + 5GHz device, this value would be 2.
 * Setup a Wifi access point (SSID+KEY)
 * Attach it to a device to have it configured.
 * Currently each network will be automatically configured on all radios (configured using `numradios`)
 * Optionally leds can also be turned on or off (only static config for now).
-* Configuring radios is not yet supported. (only monitoring)
+* Configuring radio frequencies is supported now. OpenSOHO will read the current radio config once and make it available under the radios config.
 
 ## Extras
 ### Reregister a device

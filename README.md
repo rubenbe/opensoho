@@ -1,4 +1,4 @@
-*Warning this is a very early release*
+*Warning this is an early release*
 
 # OpenSOHO
 
@@ -62,7 +62,35 @@ It is highly recommended to enable monitoring, since OpenSOHO will deduce a lot 
 * Optionally leds can also be turned on or off (only static config for now).
 * Configuring radio frequencies is supported now. OpenSOHO will read the current radio config once and make it available under the radios config.
 
-## Extras
+## Configure
+OpenSoho can now be accessed via http://ipaddress:8090/_/
+
+There are several configuration collections:
+### Clients
+These are the clients connected to wifi. This table should be considered read-only, except for the alias.
+It can be used to give devices a human-readable name. This only works properly when the client does not randomize its mac-address.
+### Devices
+These are the connected devices.
+* Use enable/disable to temporarily disable configuration updates. This is useful to avoid updating all devices at once.
+* Health status is read-only field. Healty means the device has sent/requested data during the last minute. If it didn't, the health status becomes critical and there might be something wrong with the device or its connection.
+* Leds allows to choose led configs
+* Numradios allows to set the number of radios on this device. This is not initially sent by OpenWisp, so this needs to be set by the user.
+* Wifis allows to select a SSIDs to apply on this device.
+### Leds
+* Basic LED configuration (more of a POC at this moment)
+### Radios
+* Allows to set the frequency each radio.
+* The band should not be modified, as this allows OpenSOHO to verify the frequency config. This is needed due to limitations within PocketBase.
+### Wifi
+* Allows to set up the different SSIDs. The selection of encryption modes is currently limited. WEP or Open is not supported by design.
+
+## Monitoring
+### Device monitoring
+Verify whether the device health is "healthy"
+### Connected clients
+This view shows all wifi clients that were connected in the last 30 seconds.
+
+## Troubleshooting
 ### Reregister a device
 When changing the OpenWISP `Server URL` in Luci doesn't seem to properly register with the new controller.
 To fix this:

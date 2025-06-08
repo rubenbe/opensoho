@@ -48,6 +48,8 @@ Configure openwisp in Luci:
 * OpenWISP monitoring cannot be configure through Luci. Shorten its update interval to make the monitoring behave correctly.
 ```
 uci set openwisp-monitoring.monitoring.interval='15'
+uci commit
+/etc/init.d/openwisp-monitoring restart
 ```
 
 It is highly recommended to enable monitoring, since OpenSOHO will deduce a lot of the current OpenWRT settings and fill them in for easy configuration.

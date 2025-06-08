@@ -72,6 +72,37 @@ func frequencyToBand(frequency int) string {
 		return "unknown"
 	}
 }
+
+func frequencyToChannel(freqMHz int) (int, bool) {
+	switch {
+	// 2.4 GHz band: Channels 1–14
+	case freqMHz >= 2412 && freqMHz <= 2484:
+		if freqMHz == 2484 {
+			return 14, true
+		}
+		return (freqMHz - 2407) / 5, true
+
+	// 5 GHz band: Channels 36–165
+	case freqMHz >= 5180 && freqMHz <= 5825:
+		return (freqMHz - 5000) / 5, true
+
+	// 6 GHz band: Channels 1–233 (starting at 5955 MHz, 5 MHz spacing)
+	case freqMHz >= 5955 && freqMHz <= 7115:
+		return (freqMHz - 5950) / 5, true
+
+	// 60 GHz band (WiGig): Channels 1–6 (center freqs: 58320 + 2160 × (n − 1))
+	case freqMHz >= 58320 && freqMHz <= 70200:
+		ch := ((freqMHz - 58320) / 2160) + 1
+		if ch >= 1 && ch <= 6 {
+			return ch, true
+		}
+		return 0, false
+
+	default:
+		return 0, false
+	}
+}
+
 func validateRadio(record *core.Record) error {
 	if record.Collection().Name != "radios" {
 		return nil
@@ -195,6 +226,33 @@ config led 'led_%s'
         option sysfs '%s'
         option trigger '%s'
 `, strings.ToLower(name), name, led.GetString("led_name"), led.GetString("trigger"))
+}
+
+func generateRadioConfig(radio *core.Record) string {
+	frequency := radio.GetInt("frequency")
+	channel, ok := frequencyToChannel(frequency)
+	if ok == false {
+		fmt.Println("invalid frequency", frequency)
+		return ""
+	}
+	return fmt.Sprintf(`
+config wifi-device 'radio%d'
+	option channel '%d'
+`, radio.GetInt("radio"), channel)
+}
+func generateRadioConfigs(device *core.Record, app core.App) string {
+	output := ""
+	records := []*core.Record{}
+	err := app.RecordQuery("radios").AndWhere(dbx.HashExp{"device": device.GetString("id")}).OrderBy("radio ASC").All(&records)
+	if err != nil {
+		fmt.Println("Error finding Radios", err)
+		return ""
+	}
+	for _, record := range records {
+		output += generateRadioConfig(record)
+
+	}
+	return output
 }
 
 func generateWifiConfig(wifi *core.Record, wifiid int, radio uint) string {
@@ -350,6 +408,17 @@ func generateDeviceConfig(app core.App, record *core.Record) ([]byte, string, er
 		fmt.Println(wificonfigs)
 		if len(wificonfigs) > 0 {
 			configfiles["etc/config/wireless"] = wificonfigs
+		}
+	}
+	{
+		radioconfigs := generateRadioConfigs(record, app)
+		fmt.Println(radioconfigs)
+		if len(radioconfigs) > 0 {
+			if existingconfig, ok := configfiles["etc/config/wireless"]; ok {
+				configfiles["etc/config/wireless"] = existingconfig + radioconfigs
+			} else {
+				configfiles["etc/config/wireless"] = radioconfigs
+			}
 		}
 	}
 

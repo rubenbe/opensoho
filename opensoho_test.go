@@ -299,3 +299,114 @@ func TestUpdateRadios(t *testing.T) {
 		assert.Equal(t, r.GetString("band"), "6")
 	}
 }
+
+func TestFrequencyToChannel(t *testing.T) {
+	tests := []struct {
+		freq            int
+		expectedChannel int
+		expectedOk      bool
+	}{
+		{2412, 1, true}, // 2.4 GHz
+		{2437, 6, true},
+		{2484, 14, true},
+		{5180, 36, true}, // 5 GHz
+		{5200, 40, true},
+		{5500, 100, true},
+		{5825, 165, true},
+		{5955, 1, true}, // 6 GHz
+		{6110, 32, true},
+		{7115, 233, true},
+		{58320, 1, true}, // 60 GHz
+		{60480, 2, true},
+		{62640, 3, true},
+		{64800, 4, true},
+		{66960, 5, true},
+		{69120, 6, true},
+		{72000, 0, false}, // Invalid
+	}
+
+	for _, tt := range tests {
+		result, ok := frequencyToChannel(tt.freq)
+		assert.Equal(t, ok, tt.expectedOk, tt.freq)
+		assert.Equal(t, result, tt.expectedChannel, tt.freq)
+	}
+}
+func TestGenerateRadioConfig(t *testing.T) {
+	app, _ := tests.NewTestApp()
+	radiocollection := core.NewBaseCollection("radios")
+	err := app.Save(radiocollection)
+	assert.Equal(t, err, nil)
+	record := core.NewRecord(radiocollection)
+	record.Set("device", "something")
+	record.Set("radio", "3")
+	record.Set("channel", "5")
+	record.Set("frequency", "5200")
+	assert.Equal(t, generateRadioConfig(record), `
+config wifi-device 'radio3'
+	option channel '40'
+`)
+}
+func TestGenerateRadioConfigs(t *testing.T) {
+	radios := make(map[int]Radio)
+	radios[0] = Radio{Frequency: 2412, Channel: 1, HTmode: "HT20", TxPower: 23}
+	radios[1] = Radio{Frequency: 5200, Channel: 40, HTmode: "HT40", TxPower: 19}
+	app, _ := tests.NewTestApp()
+
+	// Create devices collection
+	devicecollection := core.NewBaseCollection("devices")
+	err := app.Save(devicecollection)
+	assert.Equal(t, err, nil)
+
+	// Create radios collection
+	radiocollection := core.NewBaseCollection("radios")
+	x := 0.0
+	radiocollection.Fields.Add(&core.NumberField{
+		Name:     "radio",
+		Required: false,
+		Min:      &x,
+		OnlyInt:  true,
+	})
+	radiocollection.Fields.Add(&core.RelationField{
+		Name:          "device",
+		Required:      false,
+		MaxSelect:     1,
+		CascadeDelete: false,
+		CollectionId:  devicecollection.Id,
+	})
+	radiocollection.Fields.Add(&core.NumberField{
+		Name:     "channel",
+		Required: false,
+		Min:      &x,
+		OnlyInt:  true,
+	})
+	radiocollection.Fields.Add(&core.NumberField{
+		Name:     "frequency",
+		Required: false,
+		Min:      &x,
+		OnlyInt:  true,
+	})
+	radiocollection.Fields.Add(&core.TextField{
+		Name:     "band",
+		Required: false,
+	})
+	err = app.Save(radiocollection)
+	assert.Equal(t, err, nil)
+
+	// Add a dummy device
+	d := core.NewRecord(devicecollection)
+	app.Save(d)
+
+	updateRadios(d, app, radios)
+	radiocount, err := app.CountRecords("radios")
+	assert.Equal(t, err, nil)
+	assert.Equal(t, int64(2), radiocount, "Both radios should have been added")
+
+	assert.Equal(t, `
+config wifi-device 'radio0'
+	option channel '1'
+
+config wifi-device 'radio1'
+	option channel '40'
+`, generateRadioConfigs(d, app))
+
+}

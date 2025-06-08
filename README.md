@@ -106,3 +106,9 @@ Running the unit tests:
 ```
 go test -cover -v
 ```
+
+## Scope
+Some OpenWISP features are (currently) consided out of scope for OpenSOHO
+* Firmware updates: OpenWRT doesn't need frequent updating, it should be possible to use the Attended sysupgrade feature on a number of devices manually.
+* Multi-tenancy
+* Templates: OpenWISP has a powerful and versatile template mechanism, this is replaced by a more opinionated subset of features to provide an easier configuration experience.

@@ -102,6 +102,10 @@ uci delete openwisp.http.key
 /etc/init.d/openwisp-config restart
 ```
 
+### First SSID does not get enabled
+There seems to be an issue in OpenWRT where the first configured SSID on the a Wifi device is not auto-enabled.
+This can be worked around with a click on the enable button in Luci.
+
 # Developers
 
 Running the unit tests:

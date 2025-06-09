@@ -27,7 +27,7 @@
 {:else if field.type === "json"}
     {@const stringifiedJson = CommonHelper.trimQuotedValue(JSON.stringify(rawValue)) || '""'}
     {#if short}
-        <span class="txt txt-ellipsis">
+        <span class="txt txt-ellipsis" data={CommonHelper.truncate(stringifiedJson)}>
             {CommonHelper.truncate(stringifiedJson)}
         </span>
     {:else}
@@ -43,7 +43,7 @@
 {:else if field.type === "bool"}
     <span class="label" class:label-success={!!rawValue}>{rawValue ? "True" : "False"}</span>
 {:else if field.type === "number"}
-    <span class="txt">{rawValue}</span>
+    <span class="txt" data={rawValue}>{rawValue}</span>
 {:else if field.type === "url"}
     <a
         class="txt-ellipsis"
@@ -87,7 +87,7 @@
 {:else if field.type === "select"}
     <div class="inline-flex">
         {#each CommonHelper.toArray(rawValue) as item, i (i + item)}
-            <span class="label">{item}</span>
+            <span class="label" data={item}>{item}</span>
         {/each}
     </div>
 {:else if field.type === "relation"}
@@ -97,13 +97,13 @@
     <div class="inline-flex">
         {#if expanded.length}
             {#each expanded.slice(0, relLimit) as item, i (i + item)}
-                <span class="label">
+                <span class="label" data={item}>
                     <RecordInfo record={item} />
                 </span>
             {/each}
         {:else}
             {#each relations.slice(0, relLimit) as id}
-                <span class="label">{id}</span>
+                <span class="label" data={id} >{id}</span>
             {/each}
         {/if}
         {#if relations.length > relLimit}

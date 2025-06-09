@@ -21,15 +21,15 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/pocketbase/dbx"
-	"github.com/pocketbase/pocketbase"
-	"github.com/pocketbase/pocketbase/apis"
-	"github.com/pocketbase/pocketbase/core"
-	"github.com/pocketbase/pocketbase/plugins/ghupdate"
-	"github.com/pocketbase/pocketbase/plugins/jsvm"
-	"github.com/pocketbase/pocketbase/plugins/migratecmd"
-	"github.com/pocketbase/pocketbase/tools/hook"
-	"github.com/pocketbase/pocketbase/tools/security"
-	"github.com/pocketbase/pocketbase/tools/types"
+	"github.com/rubenbe/pocketbase"
+	"github.com/rubenbe/pocketbase/apis"
+	"github.com/rubenbe/pocketbase/core"
+	"github.com/rubenbe/pocketbase/plugins/ghupdate"
+	"github.com/rubenbe/pocketbase/plugins/jsvm"
+	"github.com/rubenbe/pocketbase/plugins/migratecmd"
+	"github.com/rubenbe/pocketbase/tools/hook"
+	"github.com/rubenbe/pocketbase/tools/security"
+	"github.com/rubenbe/pocketbase/tools/types"
 )
 
 func extractRadioNumber(s string) (int, error) {
@@ -744,6 +744,24 @@ func main() {
 			return e.Next()
 		},
 		Priority: 999, // execute as latest as possible to allow users to provide their own route
+	})
+	app.OnServe().Bind(&hook.Handler[*core.ServeEvent]{
+		Func: func(e *core.ServeEvent) error {
+			//e.Router.GET("/_/images/logo.svg", func(e *core.RequestEvent) error {
+			//	return e.String(200, "")
+			//})
+			e.Router.GET("/_/user.css", func(e *core.RequestEvent) error {
+				e.Response.Header().Set("Content-Type", "text/css; charset=utf-8")
+				return e.String(200, ``)
+			})
+			e.Router.GET("/_/user.js", func(e *core.RequestEvent) error {
+				e.Response.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+				return e.String(200, ``)
+			})
+
+			return e.Next()
+		},
+		Priority: 0,
 	})
 
 	app.OnRecordValidate("radios").BindFunc(func(e *core.RecordEvent) error {

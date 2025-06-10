@@ -766,6 +766,22 @@ td.col-field-health_status span.data--health_status--unhealthy {
 				return e.String(200, ``)
 			})
 
+			e.Router.GET("/api/hass/v1/devicestatus/{device_id}", func(e *core.RequestEvent) error {
+				device_id := e.Request.PathValue("device_id")
+				record, err := app.FindRecordById("devices", device_id)
+				if err != nil {
+					return e.NotFoundError("Device not found", err)
+				}
+				health_status := record.GetString("health_status")
+				sensor_status := "off"
+				if health_status == "healthy" {
+					sensor_status = "on"
+				}
+				fmt.Println("HASS health status", device_id, health_status, sensor_status)
+
+				return e.String(200, sensor_status)
+			}).Bind(apis.RequireAuth())
+
 			return e.Next()
 		},
 		Priority: 0,

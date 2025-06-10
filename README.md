@@ -91,6 +91,9 @@ These are the connected devices.
 Verify whether the device health is "healthy"
 ### Connected clients
 This view shows all wifi clients that were connected in the last 30 seconds.
+### Home Assistant integration
+OpenSOHO monitoring can be integrated with Home Assistant. [(More info)](doc/hass.md)
+This REST API is designed for use with Home Assistant, but can also be integrated with other tools.
 
 ## Troubleshooting
 ### Reregister a device

@@ -752,7 +752,14 @@ func main() {
 			//})
 			e.Router.GET("/_/user.css", func(e *core.RequestEvent) error {
 				e.Response.Header().Set("Content-Type", "text/css; charset=utf-8")
-				return e.String(200, ``)
+				return e.String(200, `
+td.col-field-health_status span.data--health_status--healthy {
+	background: var(--successAltColor);
+}
+td.col-field-health_status span.data--health_status--unhealthy {
+	background: var(--dangerAltColor);
+}
+				`)
 			})
 			e.Router.GET("/_/user.js", func(e *core.RequestEvent) error {
 				e.Response.Header().Set("Content-Type", "text/javascript; charset=utf-8")

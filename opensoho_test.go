@@ -1,7 +1,11 @@
 package main
 
 import (
+	"errors"
+	//"fmt"
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
@@ -9,6 +13,7 @@ import (
 
 	"github.com/rubenbe/pocketbase/core"
 	"github.com/rubenbe/pocketbase/tests"
+	"github.com/rubenbe/pocketbase/tools/router"
 	"github.com/rubenbe/pocketbase/tools/types"
 	"github.com/stretchr/testify/assert"
 )
@@ -408,5 +413,78 @@ config wifi-device 'radio0'
 config wifi-device 'radio1'
 	option channel '40'
 `, generateRadioConfigs(d, app))
+
+}
+
+func TestApiGenerateDeviceStatus(t *testing.T) {
+	app, err := tests.NewTestApp()
+	defer app.Cleanup()
+
+	// Create a devices collection, with one device
+	devicecollection := core.NewBaseCollection("devices")
+	devicecollection.Fields.Add(&core.TextField{
+		Name:     "health_status",
+		Required: true,
+	})
+	err = app.Save(devicecollection)
+	assert.Equal(t, err, nil)
+
+	event := core.RequestEvent{}
+	event.Request, err = http.NewRequest("GET", "/help", strings.NewReader(""))
+	event.Request.SetPathValue("device_id", "somethingabcdef")
+	event.App = app
+	rec := httptest.NewRecorder()
+	event.Response = rec
+	{
+		response := apiGenerateDeviceStatus(&event)
+		var apiresponse *router.ApiError
+		errors.As(response, &apiresponse)
+		assert.Equal(t, 404, apiresponse.Status)
+		assert.Equal(t, "Device not found.", apiresponse.Message)
+	}
+
+	// Add a device record
+	m := core.NewRecord(devicecollection)
+	m.Id = "somethingabcdef"
+	m.Set("health_status", "healthy")
+	err = app.Save(m)
+	assert.Equal(t, nil, err)
+
+	// Add a device record
+	m = core.NewRecord(devicecollection)
+	m.Id = "somethingabcddd"
+	m.Set("health_status", "unhealthy")
+	err = app.Save(m)
+	assert.Equal(t, nil, err)
+
+	{
+		response := apiGenerateDeviceStatus(&event)
+		assert.Equal(t, response, nil)
+		httpResponse := rec.Result()
+		defer httpResponse.Body.Close()
+		body, err := io.ReadAll(httpResponse.Body)
+		assert.Equal(t, nil, err)
+		assert.Equal(t, 200, httpResponse.StatusCode)
+		assert.Equal(t, "on", string(body))
+	}
+	{
+
+		event := core.RequestEvent{}
+		event.Request, err = http.NewRequest("GET", "/help", strings.NewReader(""))
+		event.Request.SetPathValue("device_id", "somethingabcddd")
+		event.App = app
+		rec := httptest.NewRecorder()
+		event.Response = rec
+		{
+			response := apiGenerateDeviceStatus(&event)
+			assert.Equal(t, response, nil)
+			httpResponse := rec.Result()
+			defer httpResponse.Body.Close()
+			body, err := io.ReadAll(httpResponse.Body)
+			assert.Equal(t, nil, err)
+			assert.Equal(t, 200, httpResponse.StatusCode)
+			assert.Equal(t, "off", string(body))
+		}
+	}
 
 }

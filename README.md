@@ -14,6 +14,12 @@ It is inspired by OpenWisp, but aims for networks which are too small to be main
 As OpenWisp mentioned:
 > However, OpenWISP may not be the best fit for very small networks (fewer than 20 devices), organizations lacking IT expertise, or enterprises seeking open-source alternatives solely for cost-saving purposes.
 
+<p align="center">
+  <a href="https://raw.githubusercontent.com/opensoho/assets/1adec68a03db1de7d373707600c3a5807b764f90/devices.png" target="_blank">
+    <img src="https://raw.githubusercontent.com/opensoho/assets/1adec68a03db1de7d373707600c3a5807b764f90/devices.png" width="80%" />
+  </a>
+</p>
+
 ## Start OpenSOHO
 
 * Install the dependencies

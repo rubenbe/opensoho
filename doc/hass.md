@@ -24,3 +24,8 @@ The device ID is the id found for the record in the `devices` collection.
 ```
 
 Reload the Home Assistant config after each config file modification.
+
+To test/debug the token, you can run:
+```
+curl -H "Authorization: TOKEN" http://192.168.1.1:8090/api/hass/v1/devicestatus/DEVICE_ID
+```

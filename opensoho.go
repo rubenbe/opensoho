@@ -276,9 +276,13 @@ func getVlan(wifi *core.Record, app core.App) string {
 	return networkname
 }
 
-func generateWifiConfig(wifi *core.Record, wifiid int, radio uint, app core.App) string {
+func generateWifiConfig(wifi *core.Record, wifiid int, radio uint, app core.App, device *core.Record) string {
 	ssid := wifi.GetString("ssid")
 	key := wifi.GetString("key")
+	steeringconfig, err := generateClientSteeringConfig(app, wifi, device)
+	if err != nil{
+		fmt.Println(err)
+	}
 	return fmt.Sprintf(`
 config wifi-iface 'wifi_%[6]d_radio%[3]d'
         option device 'radio%[3]d'
@@ -291,7 +295,7 @@ config wifi-iface 'wifi_%[6]d_radio%[3]d'
         option ieee80211r '%[7]d'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
-`, ssid, wifi.GetString("id"), radio, key, wifi.GetString("encryption"), wifiid, wifi.GetInt("ieee80211r"), getVlan(wifi, app))
+%[9]s`, ssid, wifi.GetString("id"), radio, key, wifi.GetString("encryption"), wifiid, wifi.GetInt("ieee80211r"), getVlan(wifi, app), steeringconfig)
 }
 
 func createConfigTar(files map[string]string) ([]byte, string, error) {
@@ -348,12 +352,12 @@ func generateLedConfigs(leds []*core.Record) string {
 	return output
 }
 
-func generateWifiConfigs(wifis []*core.Record, numradios uint, app core.App) string {
+func generateWifiConfigs(wifis []*core.Record, numradios uint, app core.App, device *core.Record) string {
 	output := ""
 	for i, wifi := range wifis {
 		for j := range numradios {
 			fmt.Println(wifi)
-			output += generateWifiConfig(wifi, i, j, app)
+			output += generateWifiConfig(wifi, i, j, app, device)
 		}
 	}
 
@@ -502,7 +506,7 @@ func generateDeviceConfig(app core.App, record *core.Record) ([]byte, string, er
 		sort.Slice(wifirecords, func(i, j int) bool {
 			return wifirecords[i].GetDateTime("created").Before(wifirecords[j].GetDateTime("created"))
 		})
-		wificonfigs := generateWifiConfigs(wifirecords, numradios, app)
+		wificonfigs := generateWifiConfigs(wifirecords, numradios, app, record)
 		fmt.Println(wificonfigs)
 		if len(wificonfigs) > 0 {
 			configfiles["etc/config/wireless"] = wificonfigs

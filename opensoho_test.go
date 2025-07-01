@@ -531,7 +531,7 @@ func TestGenerateWifiConfig(t *testing.T) {
 	wificollection := setupWifiCollection(t, app, vlancollection)
 	clientcollection := setupClientsCollection(t, app)
 	devicecollection := setupDeviceCollection(t, app, wificollection)
-	/*clientsteeringcollection :=*/ setupClientSteeringCollection(t, app, clientcollection, devicecollection, wificollection)
+	clientsteeringcollection := setupClientSteeringCollection(t, app, clientcollection, devicecollection, wificollection)
 
 	// Add a vlan
 	v := core.NewRecord(vlancollection)
@@ -551,7 +551,7 @@ func TestGenerateWifiConfig(t *testing.T) {
 
 	// Add a client
 	c := core.NewRecord(clientcollection)
-	c.Set("mac_address", "00:11:22:33:44:55")
+	c.Set("mac_address", "11:22:33:44:55:66")
 	err = app.Save(c)
 	assert.Equal(t, nil, err)
 
@@ -572,7 +572,7 @@ func TestGenerateWifiConfig(t *testing.T) {
 	assert.Equal(t, nil, err)
 
 	// Generate a config
-	wificonfig := generateWifiConfig(w, 3, 4, app)
+	wificonfig := generateWifiConfig(w, 3, 4, app, d)
 	assert.Equal(t, wificonfig, `
 config wifi-iface 'wifi_3_radio4'
         option device 'radio4'
@@ -591,7 +591,7 @@ config wifi-iface 'wifi_3_radio4'
 	err = app.Save(w)
 
 	// Generate a config
-	wificonfig = generateWifiConfig(w, 3, 4, app)
+	wificonfig = generateWifiConfig(w, 3, 4, app, d)
 	assert.Equal(t, wificonfig, `
 config wifi-iface 'wifi_3_radio4'
         option device 'radio4'
@@ -611,7 +611,7 @@ config wifi-iface 'wifi_3_radio4'
 	err = app.Save(w)
 
 	// Generate a config
-	wificonfig = generateWifiConfig(w, 3, 4, app)
+	wificonfig = generateWifiConfig(w, 3, 4, app, d)
 	assert.Equal(t, wificonfig, `
 config wifi-iface 'wifi_3_radio4'
         option device 'radio4'
@@ -624,6 +624,32 @@ config wifi-iface 'wifi_3_radio4'
         option ieee80211r '0'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
+`)
+	// Test the clientsteering, client should be steered away from this AP
+	cs := core.NewRecord(clientsteeringcollection)
+	cs.Set("client", c.Id)
+	cs.Set("whitelist", []string{d2.Id})
+	cs.Set("wifi", w.Id)
+	cs.Set("enable", "Always")
+	err = app.Save(cs)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, []string{d2.Id}, cs.GetStringSlice("whitelist"))
+	// Generate a config
+	wificonfig = generateWifiConfig(w, 3, 4, app, d)
+	assert.Equal(t, wificonfig, `
+config wifi-iface 'wifi_3_radio4'
+        option device 'radio4'
+        option network 'wan'
+        option disabled '0'
+        option mode 'ap'
+        option ssid 'the_ssid'
+        option encryption 'the_encryption'
+        option key 'the_key'
+        option ieee80211r '0'
+        option ft_over_ds '0'
+        option ft_psk_generate_local '1'
+        option macfilter 'deny'
+        list maclist '11:22:33:44:55:66'
 `)
 }
 

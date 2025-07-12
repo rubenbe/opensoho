@@ -420,17 +420,17 @@ func setupDeviceCollection(t *testing.T, app core.App, wificollection *core.Coll
 	devicecollection := core.NewBaseCollection("devices")
 	devicecollection.Fields.Add(&core.TextField{
 		Name:     "name",
-		Required: true,
+		Required: false,
 	})
-	wificollection.Fields.Add(&core.RelationField{
+	devicecollection.Fields.Add(&core.RelationField{
 		Name:         "wifis",
-		MaxSelect:    1,
+		MaxSelect:    99,
 		Required:     false,
 		CollectionId: wificollection.Id,
 	})
-	err := app.Save(wificollection)
+	err := app.Save(devicecollection)
 	assert.Equal(t, err, nil)
-	return wificollection
+	return devicecollection
 }
 
 func setupWifiCollection(t *testing.T, app core.App) *core.Collection {
@@ -453,24 +453,71 @@ func setupWifiCollection(t *testing.T, app core.App) *core.Collection {
 
 }
 
+func setupClientsCollection(t *testing.T, app core.App) *core.Collection {
+	clientcollection := core.NewBaseCollection("clients2") // TODO figure out why we have a clash here
+	clientcollection.Fields.Add(&core.TextField{
+		Name:     "mac_address",
+		Required: true,
+	})
+	err := app.Save(clientcollection)
+	assert.Equal(t, err, nil)
+	return clientcollection
+
+}
+
+func setupClientSteeringCollection(t *testing.T, app core.App, clientcollection *core.Collection, devicecollection *core.Collection) *core.Collection {
+	cscollection := core.NewBaseCollection("client_steering")
+	cscollection.Fields.Add(&core.RelationField{
+		Name:         "client",
+		MaxSelect:    1,
+		Required:     true,
+		CollectionId: clientcollection.Id,
+	})
+	cscollection.Fields.Add(&core.RelationField{
+		Name:         "whitelist",
+		MaxSelect:    99,
+		Required:     false,
+		CollectionId: devicecollection.Id,
+	})
+	err := app.Save(cscollection)
+	assert.Equal(t, err, nil)
+	return cscollection
+
+}
+
 func TestGenerateWifiConfig(t *testing.T) {
 	app, err := tests.NewTestApp()
 	defer app.Cleanup()
 
 	wificollection := setupWifiCollection(t, app)
-	_ = setupDeviceCollection(t, app, wificollection)
+	clientcollection := setupClientsCollection(t, app)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	/*clientsteeringcollection :=*/ setupClientSteeringCollection(t, app, clientcollection, devicecollection)
 
 	// Add a wifi record
-	m := core.NewRecord(wificollection)
-	m.Id = "somethingabcdef"
-	m.Set("ssid", "the_ssid")
-	m.Set("key", "the_key")
-	m.Set("encryption", "the_encryption")
-	err = app.Save(m)
+	w := core.NewRecord(wificollection)
+	w.Id = "somethingabcdef"
+	w.Set("ssid", "the_ssid")
+	w.Set("key", "the_key")
+	w.Set("encryption", "the_encryption")
+	err = app.Save(w)
+	assert.Equal(t, nil, err)
+
+	// Add a client
+	c := core.NewRecord(clientcollection)
+	c.Set("mac_address", "00:11:22:33:44:55")
+	err = app.Save(c)
+	assert.Equal(t, nil, err)
+
+	// Add a device
+	d := core.NewRecord(devicecollection)
+	d.Set("name", "the_device")
+	d.Set("wifis", w.Id)
+	err = app.Save(d)
 	assert.Equal(t, nil, err)
 
 	// Generate a config
-	wificonfig := generateWifiConfig(m, 3, 4)
+	wificonfig := generateWifiConfig(w, 3, 4)
 	assert.Equal(t, wificonfig, `
 config wifi-iface 'wifi_3_radio4'
         option device 'radio4'

@@ -416,6 +416,51 @@ config wifi-device 'radio1'
 
 }
 
+func TestGenerateWifiConfig(t *testing.T) {
+	app, err := tests.NewTestApp()
+	defer app.Cleanup()
+	devicecollection := core.NewBaseCollection("dummy")
+	devicecollection.Fields.Add(&core.TextField{
+		Name:     "ssid",
+		Required: true,
+	})
+	devicecollection.Fields.Add(&core.TextField{
+		Name:     "key",
+		Required: true,
+	})
+	devicecollection.Fields.Add(&core.TextField{
+		Name:     "encryption",
+		Required: true,
+	})
+	err = app.Save(devicecollection)
+	assert.Equal(t, err, nil)
+
+	// Add a wifi record
+	m := core.NewRecord(devicecollection)
+	m.Id = "somethingabcdef"
+	m.Set("ssid", "the_ssid")
+	m.Set("key", "the_key")
+	m.Set("encryption", "the_encryption")
+	err = app.Save(m)
+	assert.Equal(t, nil, err)
+
+	// Generate a config
+	wificonfig := generateWifiConfig(m, 3, 4)
+	assert.Equal(t, wificonfig, `
+config wifi-iface 'wifi_3_radio4'
+        option device 'radio4'
+        option network 'lan'
+        option disabled '0'
+        option mode 'ap'
+        option ssid 'the_ssid'
+        option encryption 'the_encryption'
+        option key 'the_key'
+        option ieee80211r '1'
+        option ft_over_ds '0'
+        option ft_psk_generate_local '1'
+`)
+}
+
 func TestApiGenerateDeviceStatus(t *testing.T) {
 	app, err := tests.NewTestApp()
 	defer app.Cleanup()

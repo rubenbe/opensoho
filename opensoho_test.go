@@ -416,27 +416,34 @@ config wifi-device 'radio1'
 
 }
 
-func TestGenerateWifiConfig(t *testing.T) {
-	app, err := tests.NewTestApp()
-	defer app.Cleanup()
-	devicecollection := core.NewBaseCollection("dummy")
-	devicecollection.Fields.Add(&core.TextField{
+func setupWifiCollection(t *testing.T, app core.App) *core.Collection {
+	wificollection := core.NewBaseCollection("wifi")
+	wificollection.Fields.Add(&core.TextField{
 		Name:     "ssid",
 		Required: true,
 	})
-	devicecollection.Fields.Add(&core.TextField{
+	wificollection.Fields.Add(&core.TextField{
 		Name:     "key",
 		Required: true,
 	})
-	devicecollection.Fields.Add(&core.TextField{
+	wificollection.Fields.Add(&core.TextField{
 		Name:     "encryption",
 		Required: true,
 	})
-	err = app.Save(devicecollection)
+	err := app.Save(wificollection)
 	assert.Equal(t, err, nil)
+	return wificollection
+
+}
+
+func TestGenerateWifiConfig(t *testing.T) {
+	app, err := tests.NewTestApp()
+	defer app.Cleanup()
+
+	wificollection := setupWifiCollection(t, app)
 
 	// Add a wifi record
-	m := core.NewRecord(devicecollection)
+	m := core.NewRecord(wificollection)
 	m.Id = "somethingabcdef"
 	m.Set("ssid", "the_ssid")
 	m.Set("key", "the_key")

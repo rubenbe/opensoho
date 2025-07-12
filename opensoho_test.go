@@ -416,6 +416,23 @@ config wifi-device 'radio1'
 
 }
 
+func setupDeviceCollection(t *testing.T, app core.App, wificollection *core.Collection) *core.Collection {
+	devicecollection := core.NewBaseCollection("devices")
+	devicecollection.Fields.Add(&core.TextField{
+		Name:     "name",
+		Required: true,
+	})
+	wificollection.Fields.Add(&core.RelationField{
+		Name:         "wifis",
+		MaxSelect:    1,
+		Required:     false,
+		CollectionId: wificollection.Id,
+	})
+	err := app.Save(wificollection)
+	assert.Equal(t, err, nil)
+	return wificollection
+}
+
 func setupWifiCollection(t *testing.T, app core.App) *core.Collection {
 	wificollection := core.NewBaseCollection("wifi")
 	wificollection.Fields.Add(&core.TextField{
@@ -441,6 +458,7 @@ func TestGenerateWifiConfig(t *testing.T) {
 	defer app.Cleanup()
 
 	wificollection := setupWifiCollection(t, app)
+	_ = setupDeviceCollection(t, app, wificollection)
 
 	// Add a wifi record
 	m := core.NewRecord(wificollection)

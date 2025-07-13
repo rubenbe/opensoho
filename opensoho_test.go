@@ -465,10 +465,16 @@ func setupClientsCollection(t *testing.T, app core.App) *core.Collection {
 
 }
 
-func setupClientSteeringCollection(t *testing.T, app core.App, clientcollection *core.Collection, devicecollection *core.Collection) *core.Collection {
+func setupClientSteeringCollection(t *testing.T, app core.App, clientcollection *core.Collection, devicecollection *core.Collection, wificollection *core.Collection) *core.Collection {
 	cscollection := core.NewBaseCollection("client_steering")
 	cscollection.Fields.Add(&core.RelationField{
 		Name:         "client",
+		MaxSelect:    1,
+		Required:     true,
+		CollectionId: clientcollection.Id,
+	})
+	cscollection.Fields.Add(&core.RelationField{
+		Name:         "wifi",
 		MaxSelect:    1,
 		Required:     true,
 		CollectionId: clientcollection.Id,
@@ -492,7 +498,7 @@ func TestGenerateWifiConfig(t *testing.T) {
 	wificollection := setupWifiCollection(t, app)
 	clientcollection := setupClientsCollection(t, app)
 	devicecollection := setupDeviceCollection(t, app, wificollection)
-	/*clientsteeringcollection :=*/ setupClientSteeringCollection(t, app, clientcollection, devicecollection)
+	/*clientsteeringcollection :=*/ setupClientSteeringCollection(t, app, clientcollection, devicecollection, wificollection)
 
 	// Add a wifi record
 	w := core.NewRecord(wificollection)
@@ -511,9 +517,16 @@ func TestGenerateWifiConfig(t *testing.T) {
 
 	// Add a device
 	d := core.NewRecord(devicecollection)
-	d.Set("name", "the_device")
+	d.Set("name", "the_device1")
 	d.Set("wifis", w.Id)
 	err = app.Save(d)
+	assert.Equal(t, nil, err)
+
+	// Add a device
+	d2 := core.NewRecord(devicecollection)
+	d2.Set("name", "the_device2")
+	d2.Set("wifis", w.Id)
+	err = app.Save(d2)
 	assert.Equal(t, nil, err)
 
 	// Generate a config

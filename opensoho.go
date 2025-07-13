@@ -255,13 +255,34 @@ func generateRadioConfigs(device *core.Record, app core.App) string {
 	return output
 }
 
-func generateWifiConfig(wifi *core.Record, wifiid int, radio uint) string {
+func getVlan(wifi *core.Record, app core.App) string {
+	errs := app.ExpandRecord(wifi, []string{"network"}, nil)
+	log.Println("NETWORK NAME 0")
+	if len(errs) > 0 {
+		log.Println(errs)
+    		return "lan"
+	}
+	networkentry := wifi.ExpandedOne("network")
+	log.Println("NETWORK NAME 1")
+	if networkentry == nil {
+		return "lan"
+	}
+	log.Println("NETWORK NAME 2")
+	networkname := networkentry.GetString("name")
+	if len(networkname) == 0 {
+		return "lan"
+	}
+	log.Println("NETWORK NAME 3")
+	return networkname
+}
+
+func generateWifiConfig(wifi *core.Record, wifiid int, radio uint, app core.App) string {
 	ssid := wifi.GetString("ssid")
 	key := wifi.GetString("key")
 	return fmt.Sprintf(`
 config wifi-iface 'wifi_%[6]d_radio%[3]d'
         option device 'radio%[3]d'
-        option network 'lan'
+        option network '%[8]s'
         option disabled '0'
         option mode 'ap'
         option ssid '%[1]s'
@@ -270,7 +291,7 @@ config wifi-iface 'wifi_%[6]d_radio%[3]d'
         option ieee80211r '%[7]d'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
-`, ssid, wifi.GetString("id"), radio, key, wifi.GetString("encryption"), wifiid, wifi.GetInt("ieee80211r"))
+`, ssid, wifi.GetString("id"), radio, key, wifi.GetString("encryption"), wifiid, wifi.GetInt("ieee80211r"), getVlan(wifi, app))
 }
 
 func createConfigTar(files map[string]string) ([]byte, string, error) {
@@ -327,12 +348,12 @@ func generateLedConfigs(leds []*core.Record) string {
 	return output
 }
 
-func generateWifiConfigs(wifis []*core.Record, numradios uint) string {
+func generateWifiConfigs(wifis []*core.Record, numradios uint, app core.App) string {
 	output := ""
 	for i, wifi := range wifis {
 		for j := range numradios {
 			fmt.Println(wifi)
-			output += generateWifiConfig(wifi, i, j)
+			output += generateWifiConfig(wifi, i, j, app)
 		}
 	}
 
@@ -404,7 +425,7 @@ func generateDeviceConfig(app core.App, record *core.Record) ([]byte, string, er
 		sort.Slice(wifirecords, func(i, j int) bool {
 			return wifirecords[i].GetDateTime("created").Before(wifirecords[j].GetDateTime("created"))
 		})
-		wificonfigs := generateWifiConfigs(wifirecords, numradios)
+		wificonfigs := generateWifiConfigs(wifirecords, numradios, app)
 		fmt.Println(wificonfigs)
 		if len(wificonfigs) > 0 {
 			configfiles["etc/config/wireless"] = wificonfigs

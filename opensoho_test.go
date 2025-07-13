@@ -433,7 +433,7 @@ func setupDeviceCollection(t *testing.T, app core.App, wificollection *core.Coll
 	return devicecollection
 }
 
-func setupWifiCollection(t *testing.T, app core.App) *core.Collection {
+func setupWifiCollection(t *testing.T, app core.App, vlancollection *core.Collection) *core.Collection {
 	wificollection := core.NewBaseCollection("wifi")
 	wificollection.Fields.Add(&core.TextField{
 		Name:     "ssid",
@@ -450,6 +450,12 @@ func setupWifiCollection(t *testing.T, app core.App) *core.Collection {
 	wificollection.Fields.Add(&core.BoolField{
 		Name:     "ieee80211r",
 		Required: true,
+	})
+	wificollection.Fields.Add(&core.RelationField{
+		Name:         "network",
+		MaxSelect:    1,
+		Required:     false,
+		CollectionId: vlancollection.Id,
 	})
 
 	err := app.Save(wificollection)
@@ -468,6 +474,17 @@ func setupClientsCollection(t *testing.T, app core.App) *core.Collection {
 	assert.Equal(t, err, nil)
 	return clientcollection
 
+}
+
+func setupVlanCollection(t *testing.T, app core.App) *core.Collection {
+	vlancollection := core.NewBaseCollection("vlan")
+	vlancollection.Fields.Add(&core.TextField{
+		Name:     "name",
+		Required: true,
+	})
+	err := app.Save(vlancollection)
+	assert.Equal(t, err, nil)
+	return vlancollection
 }
 
 func setupClientSteeringCollection(t *testing.T, app core.App, clientcollection *core.Collection, devicecollection *core.Collection, wificollection *core.Collection) *core.Collection {
@@ -500,10 +517,18 @@ func TestGenerateWifiConfig(t *testing.T) {
 	app, err := tests.NewTestApp()
 	defer app.Cleanup()
 
-	wificollection := setupWifiCollection(t, app)
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
 	clientcollection := setupClientsCollection(t, app)
 	devicecollection := setupDeviceCollection(t, app, wificollection)
 	/*clientsteeringcollection :=*/ setupClientSteeringCollection(t, app, clientcollection, devicecollection, wificollection)
+
+	// Add a vlan
+	v := core.NewRecord(vlancollection)
+	v.Set("name", "wan")
+	err = app.Save(v)
+	assert.Equal(t, nil, err)
+
 
 	// Add a wifi record
 	w := core.NewRecord(wificollection)
@@ -536,7 +561,7 @@ func TestGenerateWifiConfig(t *testing.T) {
 	assert.Equal(t, nil, err)
 
 	// Generate a config
-	wificonfig := generateWifiConfig(w, 3, 4)
+	wificonfig := generateWifiConfig(w, 3, 4, app)
 	assert.Equal(t, wificonfig, `
 config wifi-iface 'wifi_3_radio4'
         option device 'radio4'
@@ -550,15 +575,36 @@ config wifi-iface 'wifi_3_radio4'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
 `)
-	w.Set("ieee80211r", false)
 	// Generate a config with 80211r disabled
+	w.Set("ieee80211r", false)
 	err = app.Save(w)
+
 	// Generate a config
-	wificonfig = generateWifiConfig(w, 3, 4)
+	wificonfig = generateWifiConfig(w, 3, 4, app)
 	assert.Equal(t, wificonfig, `
 config wifi-iface 'wifi_3_radio4'
         option device 'radio4'
         option network 'lan'
+        option disabled '0'
+        option mode 'ap'
+        option ssid 'the_ssid'
+        option encryption 'the_encryption'
+        option key 'the_key'
+        option ieee80211r '0'
+        option ft_over_ds '0'
+        option ft_psk_generate_local '1'
+`)
+
+	// Generate a config with network set to wan
+	w.Set("network", v.Id)
+	err = app.Save(w)
+
+	// Generate a config
+	wificonfig = generateWifiConfig(w, 3, 4, app)
+	assert.Equal(t, wificonfig, `
+config wifi-iface 'wifi_3_radio4'
+        option device 'radio4'
+        option network 'wan'
         option disabled '0'
         option mode 'ap'
         option ssid 'the_ssid'

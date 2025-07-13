@@ -447,6 +447,11 @@ func setupWifiCollection(t *testing.T, app core.App) *core.Collection {
 		Name:     "encryption",
 		Required: true,
 	})
+	wificollection.Fields.Add(&core.BoolField{
+		Name:     "ieee80211r",
+		Required: true,
+	})
+
 	err := app.Save(wificollection)
 	assert.Equal(t, err, nil)
 	return wificollection
@@ -505,6 +510,7 @@ func TestGenerateWifiConfig(t *testing.T) {
 	w.Id = "somethingabcdef"
 	w.Set("ssid", "the_ssid")
 	w.Set("key", "the_key")
+	w.Set("ieee80211r", true)
 	w.Set("encryption", "the_encryption")
 	err = app.Save(w)
 	assert.Equal(t, nil, err)
@@ -541,6 +547,24 @@ config wifi-iface 'wifi_3_radio4'
         option encryption 'the_encryption'
         option key 'the_key'
         option ieee80211r '1'
+        option ft_over_ds '0'
+        option ft_psk_generate_local '1'
+`)
+	w.Set("ieee80211r", false)
+	// Generate a config with 80211r disabled
+	err = app.Save(w)
+	// Generate a config
+	wificonfig = generateWifiConfig(w, 3, 4)
+	assert.Equal(t, wificonfig, `
+config wifi-iface 'wifi_3_radio4'
+        option device 'radio4'
+        option network 'lan'
+        option disabled '0'
+        option mode 'ap'
+        option ssid 'the_ssid'
+        option encryption 'the_encryption'
+        option key 'the_key'
+        option ieee80211r '0'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
 `)

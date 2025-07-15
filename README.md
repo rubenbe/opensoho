@@ -119,7 +119,8 @@ This can be worked around with a click on the enable button in Luci.
 
 Running the unit tests:
 ```
-go test -cover -v
+go test -cover -v -coverprofile=coverage.out
+go tool cover -html=coverage.out
 ```
 
 ## Scope

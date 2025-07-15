@@ -636,14 +636,14 @@ func TestClientSteering(t *testing.T) {
 	assert.Equal(t, nil, err)
 
 	// Add a wifi record
-	//w2 := core.NewRecord(wificollection)
-	//w2.Id = "somethingabctwo"
-	//w2.Set("ssid", "the_ssid")
-	//w2.Set("key", "the_key")
-	//w2.Set("ieee80211r", true)
-	//w2.Set("encryption", "the_encryption")
-	//err = app.Save(w2)
-	//assert.Equal(t, nil, err)
+	w2 := core.NewRecord(wificollection)
+	w2.Id = "somethingabctwo"
+	w2.Set("ssid", "the_ssid")
+	w2.Set("key", "the_key")
+	w2.Set("ieee80211r", true)
+	w2.Set("encryption", "the_encryption")
+	err = app.Save(w2)
+	assert.Equal(t, nil, err)
 
 	// Add a client
 	c := core.NewRecord(clientcollection)
@@ -672,10 +672,11 @@ func TestClientSteering(t *testing.T) {
 	d3 := core.NewRecord(devicecollection)
 	d3.Id = "somethindevice3"
 	d3.Set("name", "the_device3")
-	d3.Set("wifis", []string{w1.Id})
+	d3.Set("wifis", []string{w1.Id, w2.Id})
 	err = app.Save(d3)
 	assert.Equal(t, nil, err)
 
+	// Whitelist client on wifi 1
 	cs := core.NewRecord(clientsteeringcollection)
 	cs.Set("client", c.Id)
 	cs.Set("whitelist", []string{d1.Id})
@@ -683,6 +684,14 @@ func TestClientSteering(t *testing.T) {
 	err = app.Save(cs)
 	assert.Equal(t, nil, err)
 	assert.Equal(t, []string{d1.Id}, cs.GetStringSlice("whitelist"))
+
+	// Whitelist client on wifi 2
+	cs2 := core.NewRecord(clientsteeringcollection)
+	cs2.Set("client", c.Id)
+	cs2.Set("whitelist", []string{d2.Id, d3.Id})
+	cs2.Set("wifi", w2.Id)
+	err = app.Save(cs2)
+	assert.Equal(t, nil, err)
 
 	{
 		// Whitelisted, don't block
@@ -722,6 +731,24 @@ func TestClientSteering(t *testing.T) {
 		csconfig, err = generateClientSteeringConfig(app, w1, d3)
 		assert.Equal(t, err, nil)
 		assert.Equal(t, "        option macfilter 'deny'\n        list maclist '00:11:22:33:44:55'\n", csconfig)
+	}
+
+	// Test the second wifi
+	{
+		// Not whitelisted, block
+		csconfig, err := generateClientSteeringConfig(app, w2, d1)
+		assert.Equal(t, err, nil)
+		assert.Equal(t, "        option macfilter 'deny'\n        list maclist '00:11:22:33:44:55'\n", csconfig)
+
+		// Whitelisted, don't block
+		csconfig, err = generateClientSteeringConfig(app, w2, d2)
+		assert.Equal(t, err, nil)
+		assert.Equal(t, "", csconfig)
+
+		// Not whitelisted, block
+		csconfig, err = generateClientSteeringConfig(app, w2, d3)
+		assert.Equal(t, err, nil)
+		assert.Equal(t, "", csconfig)
 	}
 }
 

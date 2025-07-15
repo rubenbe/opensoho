@@ -499,12 +499,12 @@ func setupClientSteeringCollection(t *testing.T, app core.App, clientcollection 
 		Name:         "wifi",
 		MaxSelect:    1,
 		Required:     true,
-		CollectionId: clientcollection.Id,
+		CollectionId: wificollection.Id,
 	})
 	cscollection.Fields.Add(&core.RelationField{
 		Name:         "whitelist",
 		MaxSelect:    99,
-		Required:     false,
+		Required:     true,
 		CollectionId: devicecollection.Id,
 	})
 	err := app.Save(cscollection)
@@ -528,7 +528,6 @@ func TestGenerateWifiConfig(t *testing.T) {
 	v.Set("name", "wan")
 	err = app.Save(v)
 	assert.Equal(t, nil, err)
-
 
 	// Add a wifi record
 	w := core.NewRecord(wificollection)
@@ -614,6 +613,116 @@ config wifi-iface 'wifi_3_radio4'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
 `)
+}
+
+func TestClientSteering(t *testing.T) {
+	app, err := tests.NewTestApp()
+	defer app.Cleanup()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	clientcollection := setupClientsCollection(t, app)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	clientsteeringcollection := setupClientSteeringCollection(t, app, clientcollection, devicecollection, wificollection)
+
+	// Add a wifi record
+	w1 := core.NewRecord(wificollection)
+	w1.Id = "somethingabcdef"
+	w1.Set("ssid", "the_ssid")
+	w1.Set("key", "the_key")
+	w1.Set("ieee80211r", true)
+	w1.Set("encryption", "the_encryption")
+	err = app.Save(w1)
+	assert.Equal(t, nil, err)
+
+	// Add a wifi record
+	//w2 := core.NewRecord(wificollection)
+	//w2.Id = "somethingabctwo"
+	//w2.Set("ssid", "the_ssid")
+	//w2.Set("key", "the_key")
+	//w2.Set("ieee80211r", true)
+	//w2.Set("encryption", "the_encryption")
+	//err = app.Save(w2)
+	//assert.Equal(t, nil, err)
+
+	// Add a client
+	c := core.NewRecord(clientcollection)
+	c.Id = "somethingclient"
+	c.Set("mac_address", "00:11:22:33:44:55")
+	err = app.Save(c)
+	assert.Equal(t, nil, err)
+
+	// Add a device
+	d1 := core.NewRecord(devicecollection)
+	d1.Id = "somethindevice1"
+	d1.Set("name", "the_device1")
+	d1.Set("wifis", w1.Id)
+	err = app.Save(d1)
+	assert.Equal(t, nil, err)
+
+	// Add a device
+	d2 := core.NewRecord(devicecollection)
+	d2.Id = "somethindevice2"
+	d2.Set("name", "the_device2")
+	d2.Set("wifis", w1.Id)
+	err = app.Save(d2)
+	assert.Equal(t, nil, err)
+
+	// Add a device (with 2 wifi)
+	d3 := core.NewRecord(devicecollection)
+	d3.Id = "somethindevice3"
+	d3.Set("name", "the_device3")
+	d3.Set("wifis", []string{w1.Id})
+	err = app.Save(d3)
+	assert.Equal(t, nil, err)
+
+	cs := core.NewRecord(clientsteeringcollection)
+	cs.Set("client", c.Id)
+	cs.Set("whitelist", []string{d1.Id})
+	cs.Set("wifi", w1.Id)
+	err = app.Save(cs)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, []string{d1.Id}, cs.GetStringSlice("whitelist"))
+
+	{
+		// Whitelisted, don't block
+		csconfig, err := generateClientSteeringConfig(app, w1, d1)
+		assert.Equal(t, err, nil)
+		assert.Equal(t, "", csconfig)
+
+		// Not whitelisted, block
+		csconfig, err = generateClientSteeringConfig(app, w1, d2)
+		assert.Equal(t, err, nil)
+		assert.Equal(t, "        option macfilter 'deny'\n        list maclist '00:11:22:33:44:55'\n", csconfig)
+
+		// Not whitelisted, block
+		csconfig, err = generateClientSteeringConfig(app, w1, d3)
+		assert.Equal(t, err, nil)
+		assert.Equal(t, "        option macfilter 'deny'\n        list maclist '00:11:22:33:44:55'\n", csconfig)
+	}
+
+	// Whitelist a second device
+	{
+		cs.Set("whitelist", []string{d1.Id, d2.Id})
+		err = app.Save(cs)
+		assert.Equal(t, nil, err)
+		assert.Equal(t, []string{d1.Id, d2.Id}, cs.GetStringSlice("whitelist"))
+
+		// Whitelisted, don't block
+		csconfig, err := generateClientSteeringConfig(app, w1, d1)
+		assert.Equal(t, err, nil)
+		assert.Equal(t, "", csconfig)
+
+		// Whitelisted, don't block
+		csconfig, err = generateClientSteeringConfig(app, w1, d2)
+		assert.Equal(t, err, nil)
+		assert.Equal(t, "", csconfig)
+
+		// Not whitelisted, block
+		csconfig, err = generateClientSteeringConfig(app, w1, d3)
+		assert.Equal(t, err, nil)
+		assert.Equal(t, "        option macfilter 'deny'\n        list maclist '00:11:22:33:44:55'\n", csconfig)
+	}
 }
 
 func TestApiGenerateDeviceStatus(t *testing.T) {

@@ -260,7 +260,7 @@ func getVlan(wifi *core.Record, app core.App) string {
 	log.Println("NETWORK NAME 0")
 	if len(errs) > 0 {
 		log.Println(errs)
-    		return "lan"
+		return "lan"
 	}
 	networkentry := wifi.ExpandedOne("network")
 	log.Println("NETWORK NAME 1")
@@ -399,6 +399,40 @@ func getDeviceRecord(app core.App, key string) (*core.Record, error) {
 	}
 
 	return record, nil
+}
+
+func generateClientSteeringConfig(app core.App, wifi *core.Record, device *core.Record) (string, error) {
+	// Select all with the current wifi
+	// Exclude if in the whitelist
+	client_steering_for_wifi, err := app.FindRecordsByFilter("client_steering",
+		`wifi={:wifi} && whitelist!~{:device}`,
+		"", // TODO add sort
+		0, 0,
+		map[string]any{ // params for safe interpolation
+			"device": device.Id,
+			"wifi":   wifi.Id,
+		})
+	if err != nil {
+		return "", err
+	}
+	// We're on the devices whitelist, so don't block it
+	if len(client_steering_for_wifi) == 0 {
+		return "", nil
+	}
+
+	output := "        option macfilter 'deny'\n"
+	for _, client := range client_steering_for_wifi {
+
+		// We need the MAC address of the steered client
+		errs := app.ExpandRecord(client, []string{"", "client"}, nil)
+		if len(errs) > 0 {
+			return output, fmt.Errorf("failed to expand: %v", errs)
+		}
+
+		expandedclient := client.ExpandedOne("client")
+		output += fmt.Sprintf("        list maclist '%s'\n", expandedclient.GetString("mac_address"))
+	}
+	return output, nil
 }
 
 func generateDeviceConfig(app core.App, record *core.Record) ([]byte, string, error) {

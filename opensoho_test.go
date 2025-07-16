@@ -615,6 +615,40 @@ config wifi-iface 'wifi_3_radio4'
 `)
 }
 
+func TestIsUnHealthyQuorumReached(t *testing.T) {
+	allofflineset := make(map[string]struct{})
+	allofflineset["device1"] = struct{}{}
+	allofflineset["device2"] = struct{}{}
+	allofflineset["device3"] = struct{}{}
+
+	{
+		whitelist := []string{}
+		assert.False(t, isUnHealthyQuorumReached(allofflineset, whitelist, true))
+		assert.False(t, isUnHealthyQuorumReached(allofflineset, whitelist, false))
+	}
+
+	{ // List contains one device, which is offline
+		whitelist := []string{"device1"}
+		assert.True(t, isUnHealthyQuorumReached(allofflineset, whitelist, true))
+		assert.True(t, isUnHealthyQuorumReached(allofflineset, whitelist, false))
+	}
+	{ // List contains two devices, which are offline
+		whitelist := []string{"device1", "device2"}
+		assert.True(t, isUnHealthyQuorumReached(allofflineset, whitelist, true))
+		assert.True(t, isUnHealthyQuorumReached(allofflineset, whitelist, false))
+	}
+	{ // List contains two devices, one is offline
+		whitelist := []string{"device1", "device4"}
+		assert.True(t, isUnHealthyQuorumReached(allofflineset, whitelist, true))
+		assert.False(t, isUnHealthyQuorumReached(allofflineset, whitelist, false)) // Not all offline
+	}
+	{ // List contains two devices, none are offline
+		whitelist := []string{"device4", "device5"}
+		assert.False(t, isUnHealthyQuorumReached(allofflineset, whitelist, true))
+		assert.False(t, isUnHealthyQuorumReached(allofflineset, whitelist, false))
+	}
+}
+
 func TestClientSteering(t *testing.T) {
 	app, err := tests.NewTestApp()
 	defer app.Cleanup()

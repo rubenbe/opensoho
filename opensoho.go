@@ -401,6 +401,26 @@ func getDeviceRecord(app core.App, key string) (*core.Record, error) {
 	return record, nil
 }
 
+// Returns true when:
+// * All == true: One device needs to be offline (found in the set)
+// * All == false: All devices need to be offline (found in the set)
+func isUnHealthyQuorumReached(unhealthyfullset map[string]struct{}, subset []string, all bool) bool {
+	quorum := 1
+	count := 0
+	if all == false {
+		quorum = len(subset)
+	}
+	for _, device := range subset {
+		if _, found := unhealthyfullset[device]; found == true {
+			count = count + 1
+			if count == quorum {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func generateClientSteeringConfig(app core.App, wifi *core.Record, device *core.Record) (string, error) {
 	// Select all with the current wifi
 	// Exclude if in the whitelist

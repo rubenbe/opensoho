@@ -422,6 +422,10 @@ func setupDeviceCollection(t *testing.T, app core.App, wificollection *core.Coll
 		Name:     "name",
 		Required: false,
 	})
+	devicecollection.Fields.Add(&core.TextField{
+		Name:     "health_status",
+		Required: true,
+	})
 	devicecollection.Fields.Add(&core.RelationField{
 		Name:         "wifis",
 		MaxSelect:    99,
@@ -507,6 +511,12 @@ func setupClientSteeringCollection(t *testing.T, app core.App, clientcollection 
 		Required:     true,
 		CollectionId: devicecollection.Id,
 	})
+	cscollection.Fields.Add(&core.SelectField{
+		Name:      "mode",
+		MaxSelect: 1,
+		Required:  true,
+		Values:    []string{"Always", "If all healthy", "If any healthy"},
+	})
 	err := app.Save(cscollection)
 	assert.Equal(t, err, nil)
 	return cscollection
@@ -548,6 +558,7 @@ func TestGenerateWifiConfig(t *testing.T) {
 	// Add a device
 	d := core.NewRecord(devicecollection)
 	d.Set("name", "the_device1")
+	d.Set("health_status", "healthy")
 	d.Set("wifis", w.Id)
 	err = app.Save(d)
 	assert.Equal(t, nil, err)
@@ -555,6 +566,7 @@ func TestGenerateWifiConfig(t *testing.T) {
 	// Add a device
 	d2 := core.NewRecord(devicecollection)
 	d2.Set("name", "the_device2")
+	d2.Set("health_status", "healthy")
 	d2.Set("wifis", w.Id)
 	err = app.Save(d2)
 	assert.Equal(t, nil, err)
@@ -690,6 +702,7 @@ func TestClientSteering(t *testing.T) {
 	d1 := core.NewRecord(devicecollection)
 	d1.Id = "somethindevice1"
 	d1.Set("name", "the_device1")
+	d1.Set("health_status", "healthy")
 	d1.Set("wifis", w1.Id)
 	err = app.Save(d1)
 	assert.Equal(t, nil, err)
@@ -698,6 +711,7 @@ func TestClientSteering(t *testing.T) {
 	d2 := core.NewRecord(devicecollection)
 	d2.Id = "somethindevice2"
 	d2.Set("name", "the_device2")
+	d2.Set("health_status", "unhealthy")
 	d2.Set("wifis", w1.Id)
 	err = app.Save(d2)
 	assert.Equal(t, nil, err)
@@ -706,6 +720,7 @@ func TestClientSteering(t *testing.T) {
 	d3 := core.NewRecord(devicecollection)
 	d3.Id = "somethindevice3"
 	d3.Set("name", "the_device3")
+	d3.Set("health_status", "healthy")
 	d3.Set("wifis", []string{w1.Id, w2.Id})
 	err = app.Save(d3)
 	assert.Equal(t, nil, err)
@@ -715,6 +730,7 @@ func TestClientSteering(t *testing.T) {
 	cs.Set("client", c.Id)
 	cs.Set("whitelist", []string{d1.Id})
 	cs.Set("wifi", w1.Id)
+	cs.Set("mode", "Always")
 	err = app.Save(cs)
 	assert.Equal(t, nil, err)
 	assert.Equal(t, []string{d1.Id}, cs.GetStringSlice("whitelist"))
@@ -724,6 +740,7 @@ func TestClientSteering(t *testing.T) {
 	cs2.Set("client", c.Id)
 	cs2.Set("whitelist", []string{d2.Id, d3.Id})
 	cs2.Set("wifi", w2.Id)
+	cs2.Set("mode", "Always")
 	err = app.Save(cs2)
 	assert.Equal(t, nil, err)
 
@@ -783,6 +800,75 @@ func TestClientSteering(t *testing.T) {
 		csconfig, err = generateClientSteeringConfig(app, w2, d3)
 		assert.Equal(t, err, nil)
 		assert.Equal(t, "", csconfig)
+	}
+
+	// Device 2 is unhealthy, steering should be lifted
+	{
+		cs.Set("mode", "If all healthy")
+		err = app.Save(cs)
+		assert.Equal(t, nil, err)
+		assert.Equal(t, []string{d1.Id, d2.Id}, cs.GetStringSlice("whitelist"))
+
+		// Whitelisted, don't block
+		csconfig, err := generateClientSteeringConfig(app, w1, d1)
+		assert.Equal(t, err, nil)
+		assert.Equal(t, "", csconfig)
+
+		// Whitelisted, don't block
+		csconfig, err = generateClientSteeringConfig(app, w1, d2)
+		assert.Equal(t, err, nil)
+		assert.Equal(t, "", csconfig)
+
+		// Not whitelisted, block
+		csconfig, err = generateClientSteeringConfig(app, w1, d3)
+		assert.Equal(t, err, nil)
+		assert.Equal(t, "", csconfig)
+	}
+
+	// Device 2 is unhealthy, device 1 is healthy, steering should be reinstated
+	{
+		cs.Set("mode", "If any healthy")
+		err = app.Save(cs)
+		assert.Equal(t, nil, err)
+		assert.Equal(t, []string{d1.Id, d2.Id}, cs.GetStringSlice("whitelist"))
+
+		// Whitelisted, don't block
+		csconfig, err := generateClientSteeringConfig(app, w1, d1)
+		assert.Equal(t, err, nil)
+		assert.Equal(t, "", csconfig)
+
+		// Whitelisted, don't block
+		csconfig, err = generateClientSteeringConfig(app, w1, d2)
+		assert.Equal(t, err, nil)
+		assert.Equal(t, "", csconfig)
+
+		// Not whitelisted, block
+		csconfig, err = generateClientSteeringConfig(app, w1, d3)
+		assert.Equal(t, err, nil)
+		assert.Equal(t, "        option macfilter 'deny'\n        list maclist '00:11:22:33:44:55'\n", csconfig)
+	}
+
+	// Device 2 is unhealthy, device 1 is healthy, steering should remain enabled
+	{
+		cs.Set("mode", "Always")
+		err = app.Save(cs)
+		assert.Equal(t, nil, err)
+		assert.Equal(t, []string{d1.Id, d2.Id}, cs.GetStringSlice("whitelist"))
+
+		// Whitelisted, don't block
+		csconfig, err := generateClientSteeringConfig(app, w1, d1)
+		assert.Equal(t, err, nil)
+		assert.Equal(t, "", csconfig)
+
+		// Whitelisted, don't block
+		csconfig, err = generateClientSteeringConfig(app, w1, d2)
+		assert.Equal(t, err, nil)
+		assert.Equal(t, "", csconfig)
+
+		// Not whitelisted, block
+		csconfig, err = generateClientSteeringConfig(app, w1, d3)
+		assert.Equal(t, err, nil)
+		assert.Equal(t, "        option macfilter 'deny'\n        list maclist '00:11:22:33:44:55'\n", csconfig)
 	}
 }
 

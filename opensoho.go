@@ -454,7 +454,7 @@ func generateClientSteeringConfig(app core.App, wifi *core.Record, device *core.
 
 		// Check whether sufficient whitelisted devices are online
 		disable_whitelisting := false
-		whitelisting_mode := client.GetString("mode")
+		whitelisting_mode := client.GetString("enable")
 		if whitelisting_mode != "Always" {
 			disable_whitelisting = isUnHealthyQuorumReached(unhealthy_device_ids, whitelisted_devices, whitelisting_mode == "If all healthy")
 		}

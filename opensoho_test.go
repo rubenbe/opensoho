@@ -512,7 +512,7 @@ func setupClientSteeringCollection(t *testing.T, app core.App, clientcollection 
 		CollectionId: devicecollection.Id,
 	})
 	cscollection.Fields.Add(&core.SelectField{
-		Name:      "mode",
+		Name:      "enable",
 		MaxSelect: 1,
 		Required:  true,
 		Values:    []string{"Always", "If all healthy", "If any healthy"},
@@ -730,7 +730,7 @@ func TestClientSteering(t *testing.T) {
 	cs.Set("client", c.Id)
 	cs.Set("whitelist", []string{d1.Id})
 	cs.Set("wifi", w1.Id)
-	cs.Set("mode", "Always")
+	cs.Set("enable", "Always")
 	err = app.Save(cs)
 	assert.Equal(t, nil, err)
 	assert.Equal(t, []string{d1.Id}, cs.GetStringSlice("whitelist"))
@@ -740,7 +740,7 @@ func TestClientSteering(t *testing.T) {
 	cs2.Set("client", c.Id)
 	cs2.Set("whitelist", []string{d2.Id, d3.Id})
 	cs2.Set("wifi", w2.Id)
-	cs2.Set("mode", "Always")
+	cs2.Set("enable", "Always")
 	err = app.Save(cs2)
 	assert.Equal(t, nil, err)
 
@@ -804,7 +804,7 @@ func TestClientSteering(t *testing.T) {
 
 	// Device 2 is unhealthy, steering should be lifted
 	{
-		cs.Set("mode", "If all healthy")
+		cs.Set("enable", "If all healthy")
 		err = app.Save(cs)
 		assert.Equal(t, nil, err)
 		assert.Equal(t, []string{d1.Id, d2.Id}, cs.GetStringSlice("whitelist"))
@@ -827,7 +827,7 @@ func TestClientSteering(t *testing.T) {
 
 	// Device 2 is unhealthy, device 1 is healthy, steering should be reinstated
 	{
-		cs.Set("mode", "If any healthy")
+		cs.Set("enable", "If any healthy")
 		err = app.Save(cs)
 		assert.Equal(t, nil, err)
 		assert.Equal(t, []string{d1.Id, d2.Id}, cs.GetStringSlice("whitelist"))
@@ -850,7 +850,7 @@ func TestClientSteering(t *testing.T) {
 
 	// Device 2 is unhealthy, device 1 is healthy, steering should remain enabled
 	{
-		cs.Set("mode", "Always")
+		cs.Set("enable", "Always")
 		err = app.Save(cs)
 		assert.Equal(t, nil, err)
 		assert.Equal(t, []string{d1.Id, d2.Id}, cs.GetStringSlice("whitelist"))

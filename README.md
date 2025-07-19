@@ -39,16 +39,18 @@ OpenSoho can now be accessed via http://ipaddress:8090/_/
 
 ## Configure the OpenWRT devices
 
-Install the OpenWisp packages
+### Install the OpenWisp packages
 
 ```
 openwisp-config
 openwisp-monitoring
 luci-app-openwisp
-wpad-mbedtls (if you want to use 802.11v client steering)
+wpad-mbedtls (if you want to use 802.11v client steering, reboot afterwards!)
 ```
 
-Configure openwisp in Luci:
+When installing wpad-mbedtls, rebooting is required to switch to the new wpad binary. If not you'll get an error like `daemon.notice netifd: radio1 (28210): WARNING (wireless_add_process): executable path /usr/sbin/wpad does not match process 1842 path (/usr/sbin/wpad (deleted))`
+
+### Configure openwisp in Luci:
 
 * Set the `Server URL` and the `Shared secret` only.
 * Optionally lower the `Update Interval` to 30 seconds for faster updates.

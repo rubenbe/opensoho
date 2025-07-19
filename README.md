@@ -45,6 +45,7 @@ Install the OpenWisp packages
 openwisp-config
 openwisp-monitoring
 luci-app-openwisp
+wpad-mbedtls (if you want to use 802.11v client steering)
 ```
 
 Configure openwisp in Luci:

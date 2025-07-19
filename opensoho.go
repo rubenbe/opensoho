@@ -293,9 +293,11 @@ config wifi-iface 'wifi_%[6]d_radio%[3]d'
         option encryption '%[5]s'
         option key '%[4]s'
         option ieee80211r '%[7]d'
+        option ieee80211v '%[10]d'
+        option bss_transition '%[10]d'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
-%[9]s`, ssid, wifi.GetString("id"), radio, key, wifi.GetString("encryption"), wifiid, wifi.GetInt("ieee80211r"), getVlan(wifi, app), steeringconfig)
+%[9]s`, ssid, wifi.GetString("id"), radio, key, wifi.GetString("encryption"), wifiid, wifi.GetInt("ieee80211r"), getVlan(wifi, app), steeringconfig, wifi.GetInt("ieee80211v"))
 }
 
 func createConfigTar(files map[string]string) ([]byte, string, error) {

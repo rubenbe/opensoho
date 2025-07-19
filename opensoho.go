@@ -849,9 +849,11 @@ func main() {
 	})
 	app.OnServe().Bind(&hook.Handler[*core.ServeEvent]{
 		Func: func(e *core.ServeEvent) error {
-			//e.Router.GET("/_/images/logo.svg", func(e *core.RequestEvent) error {
-			//	return e.String(200, "")
-			//})
+			e.Router.GET("/_/images/logo.svg", func(e *core.RequestEvent) error {
+
+				e.Response.Header().Set("Content-Type", "image/svg+xml")
+				return e.FileFS(os.DirFS("."), "logo.svg")
+			})
 			e.Router.GET("/_/user.css", func(e *core.RequestEvent) error {
 				e.Response.Header().Set("Content-Type", "text/css; charset=utf-8")
 				return e.String(200, `
@@ -865,6 +867,7 @@ td.col-field-health_status span.data--health_status--unhealthy {
 			})
 			e.Router.GET("/_/user.js", func(e *core.RequestEvent) error {
 				e.Response.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+
 				return e.String(200, ``)
 			})
 

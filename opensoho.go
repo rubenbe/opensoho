@@ -280,7 +280,7 @@ func generateWifiConfig(wifi *core.Record, wifiid int, radio uint, app core.App,
 	ssid := wifi.GetString("ssid")
 	key := wifi.GetString("key")
 	steeringconfig, err := generateClientSteeringConfig(app, wifi, device)
-	if err != nil{
+	if err != nil {
 		fmt.Println(err)
 	}
 	return fmt.Sprintf(`
@@ -464,7 +464,7 @@ func generateClientSteeringConfig(app core.App, wifi *core.Record, device *core.
 		}
 		if disable_whitelisting == true {
 			fmt.Println("Disabling whitelisting")
-			continue;
+			continue
 		}
 
 		// We need the MAC address of the steered client
@@ -475,7 +475,7 @@ func generateClientSteeringConfig(app core.App, wifi *core.Record, device *core.
 
 		expandedclient := client.ExpandedOne("client")
 		if output == "" {
-			output  = "        option macfilter 'deny'\n"
+			output = "        option macfilter 'deny'\n"
 		}
 		output += fmt.Sprintf("        list maclist '%s'\n", expandedclient.GetString("mac_address"))
 	}

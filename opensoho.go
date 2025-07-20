@@ -154,6 +154,7 @@ type Radio struct {
 	Channel   int
 	HTmode    string
 	TxPower   int
+	MAC       string
 }
 
 type Wireless struct {
@@ -166,6 +167,7 @@ type Wireless struct {
 }
 
 type Interface struct {
+	MAC      string    `json:"mac"`
 	Type     string    `json:"type"`
 	Name     string    `json:"name"`
 	Wireless *Wireless `json:"wireless,omitempty"`
@@ -190,7 +192,14 @@ func updateRadios(device *core.Record, app core.App, newradios map[int]Radio) {
 	for _, oldradio := range oldradios {
 		oldradionum := oldradio.GetInt("radio")
 		if newradio, ok := newradios[oldradionum]; ok {
-			fmt.Println("EXISTS", newradio)
+			fmt.Println("EXISTS", newradio, oldradio, oldradio.GetString("mac_address"))
+			if len(oldradio.GetString("mac_address")) == 0 {
+				oldradio.Set("mac_address", newradio.MAC)
+				err = app.Save(oldradio)
+				if err != nil {
+					fmt.Println("Fialed to update radio with mac", err)
+				}
+			}
 			delete(newradios, oldradionum)
 		}
 	}
@@ -207,6 +216,7 @@ func updateRadios(device *core.Record, app core.App, newradios map[int]Radio) {
 		fmt.Println(numradio, radio, device.GetString("id"))
 		record := core.NewRecord(radiocollection)
 		record.Set("device", device.GetString("id"))
+		record.Set("mac_address", radio.MAC)
 		record.Set("radio", numradio)
 		record.Set("channel", radio.Channel)
 		record.Set("band", frequencyToBand(radio.Frequency))
@@ -531,6 +541,54 @@ func generateDeviceConfig(app core.App, record *core.Record) ([]byte, string, er
 	}
 	return blob, checksum, err
 }
+func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, collection *core.Collection) (error, map[int]Radio) {
+	e.Response.Header().Set("X-Openwisp-Controller", "true")
+	time := e.Request.URL.Query().Get("time")
+	radios := make(map[int]Radio)
+	var payload MonitoringData
+	if err := e.BindBody(&payload); err != nil {
+		fmt.Println(err)
+		return e.BadRequestError("Failed to parse json", err), radios
+	}
+	if payload.Type != "DeviceMonitoring" {
+		return e.BadRequestError("Invalid type in JSON", ""), radios
+	}
+
+	for _, iface := range payload.Interfaces {
+		if iface.Type == "wireless" && iface.Wireless != nil {
+			radionum, err := extractRadioNumber(iface.Name)
+			if err != nil {
+				fmt.Printf("Found an unknown phy pattern '%s', please report a github issue\n", iface.Name)
+			} else {
+				radios[radionum] = Radio{Frequency: iface.Wireless.Frequency, Channel: iface.Wireless.Channel, HTmode: iface.Wireless.HTmode, TxPower: iface.Wireless.TxPower, MAC: iface.MAC}
+			}
+
+			for _, client := range iface.Wireless.Clients {
+				if client.Assoc {
+					fmt.Printf("Associated client on %s: %s %s\n", iface.Name, client.MAC, device.GetString("id"))
+					cliententry, err := app.FindFirstRecordByData(collection, "mac_address", client.MAC)
+					if err != nil {
+						cliententry = core.NewRecord(collection)
+					}
+					cliententry.Set("mac_address", client.MAC)
+					// TODO expand model
+					cliententry.Set("connected_to_hostname", iface.Name)
+					cliententry.Set("signal", client.Signal)
+					cliententry.Set("ssid", iface.Wireless.SSID)
+					cliententry.Set("frequency", iface.Wireless.Frequency)
+					cliententry.Set("device", device.GetString("id"))
+					err = app.Save(cliententry)
+					if err != nil {
+						return e.InternalServerError("Could not store entry", err), radios
+					}
+				}
+			}
+		}
+	}
+	//current := e.Request.URL.Query().Get("current")
+	fmt.Println(payload.Type, "@", time)
+	return e.Blob(200, "text/plain", []byte("")), radios
+}
 
 func bindAppHooks(app core.App, shared_secret string) {
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
@@ -679,62 +737,21 @@ is-new: %d
 		})
 
 		se.Router.POST("/api/v1/monitoring/device/", func(e *core.RequestEvent) error {
-			e.Response.Header().Set("X-Openwisp-Controller", "true")
+
 			key := e.Request.URL.Query().Get("key")
 			device, err := getDeviceRecord(app, key)
 			if err != nil {
 				return e.ForbiddenError("Not allowed", err)
 			}
-			time := e.Request.URL.Query().Get("time")
-			var payload MonitoringData
-			if err := e.BindBody(&payload); err != nil {
-				return e.BadRequestError("Failed to parse json", err)
-			}
-			if payload.Type != "DeviceMonitoring" {
-				return e.BadRequestError("Invalid type in JSON", err)
-			}
+
 			collection, err := app.FindCollectionByNameOrId("clients")
 			if err != nil {
 				return e.InternalServerError("Could not find collection", err)
 			}
 
-			radios := make(map[int]Radio)
-
-			for _, iface := range payload.Interfaces {
-				if iface.Type == "wireless" && iface.Wireless != nil {
-					radionum, err := extractRadioNumber(iface.Name)
-					if err != nil {
-						fmt.Printf("Found an unknown phy pattern '%s', please report a github issue\n", iface.Name)
-					} else {
-						radios[radionum] = Radio{Frequency: iface.Wireless.Frequency, Channel: iface.Wireless.Channel, HTmode: iface.Wireless.HTmode, TxPower: iface.Wireless.TxPower}
-					}
-
-					for _, client := range iface.Wireless.Clients {
-						if client.Assoc {
-							fmt.Printf("Associated client on %s: %s %s\n", iface.Name, client.MAC, device.GetString("id"))
-							cliententry, err := app.FindFirstRecordByData(collection, "mac_address", client.MAC)
-							if err != nil {
-								cliententry = core.NewRecord(collection)
-							}
-							cliententry.Set("mac_address", client.MAC)
-							// TODO expand model
-							cliententry.Set("connected_to_hostname", iface.Name)
-							cliententry.Set("signal", client.Signal)
-							cliententry.Set("ssid", iface.Wireless.SSID)
-							cliententry.Set("frequency", iface.Wireless.Frequency)
-							cliententry.Set("device", device.GetString("id"))
-							err = app.Save(cliententry)
-							if err != nil {
-								return e.InternalServerError("Could not store entry", err)
-							}
-						}
-					}
-				}
-			}
+			err, radios := handleMonitoring(e, app, device, collection)
 			updateRadios(device, app, radios)
-			//current := e.Request.URL.Query().Get("current")
-			fmt.Println(payload.Type, "@", time)
-			return e.Blob(200, "text/plain", []byte(""))
+			return err
 		})
 		return se.Next()
 	})

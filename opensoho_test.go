@@ -2,7 +2,7 @@ package main
 
 import (
 	"errors"
-	//"fmt"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -118,6 +118,151 @@ func TestRegisterEndpoint(t *testing.T) {
 	for _, scenario := range scenarios {
 		scenario.Test(t)
 	}
+}
+
+func TestUpdateMonitoring(t *testing.T) {
+	json := `
+{
+  "type": "DeviceMonitoring",
+  "general": {
+    "local_time": 1000000000,
+    "uptime": 2000000,
+    "hostname": "OpenWRThostname"
+  },
+  "interfaces": [
+    {
+      "mac": "aa:bb:cc:dd:ee:ff",
+      "type": "wireless",
+      "mtu": 1500,
+      "txqueuelen": 1000,
+      "name": "phy1-ap0",
+      "wireless": {
+        "noise": -95,
+        "ssid": "OpenWRT",
+        "country": "US",
+        "clients": [
+          {
+            "wps": false,
+            "wds": false,
+            "ht": true,
+            "vht": false,
+            "wmm": true,
+            "aid": 1,
+            "assoc": true,
+            "bytes": {
+              "rx": 1691924,
+              "tx": 27379187
+            },
+            "capabilities": {},
+            "mac": "11:22:33:44:55:66",
+            "signal": -82,
+            "rate": {
+              "rx": 4330000,
+              "tx": 8670000
+            },
+            "he": false,
+            "rrm": [
+              114,
+              0,
+              0,
+              0,
+              0
+            ],
+            "packets": {
+              "rx": 6190,
+              "tx": 20992
+            },
+            "airtime": {
+              "rx": 557004,
+              "tx": 4863610
+            },
+            "authorized": true,
+            "extended_capabilities": [
+              4,
+              0,
+              136,
+              128,
+              1,
+              64,
+              0,
+              192,
+              0,
+              0
+            ],
+            "preauth": false,
+            "mbo": false,
+            "mfp": false,
+            "auth": true
+          }
+        ],
+        "signal": -82,
+        "bitrate": 86700,
+        "quality_max": 70,
+        "quality": 28,
+        "channel": 11,
+        "tx_power": 22,
+        "mode": "access_point",
+        "htmode": "HT20",
+        "frequency": 2462
+      }
+    }
+  ]
+}`
+	var err error
+	app, _ := tests.NewTestApp()
+	event := core.RequestEvent{}
+	event.Request, err = http.NewRequest("POST", "/api/v1/monitoring/device/", strings.NewReader(json))
+	assert.Equal(t, err, nil)
+	event.Request.SetPathValue("key", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	event.Request.Header.Set("content-type", "application/json")
+	event.App = app
+	rec := httptest.NewRecorder()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	clientcollection := setupClientsCollection(t, app)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+
+	// Add a device
+	d := core.NewRecord(devicecollection)
+	d.Set("name", "the_device1")
+	d.Set("health_status", "healthy")
+	err = app.Save(d)
+	assert.Equal(t, nil, err)
+
+	event.Response = rec
+
+	// Verify the response
+	response, radios := handleMonitoring(&event, app, d, clientcollection)
+	//var apiresponse *router.ApiError
+	assert.Equal(t, response, nil)
+	assert.NotEqual(t, radios, nil)
+	httpResponse := rec.Result()
+	defer httpResponse.Body.Close()
+	body, err := io.ReadAll(httpResponse.Body)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, 200, httpResponse.StatusCode)
+	assert.Equal(t, "", string(body))
+
+	// Verify the client data
+	clients, err := app.FindAllRecords("clients2")
+	assert.Equal(t, nil, err)
+	assert.NotEqual(t, nil, clients)
+	assert.Equal(t, 1, len(clients))
+	client := clients[0]
+	assert.Equal(t, "11:22:33:44:55:66", client.GetString("mac_address"))
+	assert.Equal(t, "phy1-ap0", client.GetString("connected_to_hostname"))
+	assert.Equal(t, -82, client.GetInt("signal"))
+	assert.Equal(t, 2462, client.GetInt("frequency"))
+	assert.NotEqual(t, "", client.GetString("device"))
+
+	// Verify the radio data
+	assert.NotEqual(t, nil, radios)
+	assert.Equal(t, 1, len(radios))
+	fmt.Println(radios)
+	radio := radios[1]
+	assert.NotEqual(t, nil, radio)
+	assert.Equal(t, Radio{Frequency: 2462, Channel: 11, HTmode: "HT20", TxPower: 22, MAC: "aa:bb:cc:dd:ee:ff"}, radio)
 }
 
 func TestUpdateLastSeen(t *testing.T) {
@@ -477,6 +622,26 @@ func setupClientsCollection(t *testing.T, app core.App) *core.Collection {
 	clientcollection.Fields.Add(&core.TextField{
 		Name:     "mac_address",
 		Required: true,
+	})
+	clientcollection.Fields.Add(&core.TextField{
+		Name:     "connected_to_hostname",
+		Required: false,
+	})
+	clientcollection.Fields.Add(&core.NumberField{
+		Name:     "signal",
+		Required: false,
+	})
+	clientcollection.Fields.Add(&core.TextField{
+		Name:     "ssid",
+		Required: false,
+	})
+	clientcollection.Fields.Add(&core.NumberField{
+		Name:     "frequency",
+		Required: false,
+	})
+	clientcollection.Fields.Add(&core.TextField{
+		Name:     "device",
+		Required: false,
 	})
 	err := app.Save(clientcollection)
 	assert.Equal(t, err, nil)

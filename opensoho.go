@@ -868,6 +868,11 @@ func main() {
 	})
 	app.OnServe().Bind(&hook.Handler[*core.ServeEvent]{
 		Func: func(e *core.ServeEvent) error {
+			e.Router.GET("/_/images/favicon/favicon.png", func(e *core.RequestEvent) error {
+
+				e.Response.Header().Set("Content-Type", "image/png")
+				return e.FileFS(os.DirFS("."), "favicon.png")
+			})
 			e.Router.GET("/_/images/logo.svg", func(e *core.RequestEvent) error {
 
 				e.Response.Header().Set("Content-Type", "image/svg+xml")

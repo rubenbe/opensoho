@@ -455,6 +455,10 @@ func setupWifiCollection(t *testing.T, app core.App, vlancollection *core.Collec
 		Name:     "ieee80211r",
 		Required: true,
 	})
+	wificollection.Fields.Add(&core.BoolField{
+		Name:     "ieee80211v",
+		Required: false,
+	})
 	wificollection.Fields.Add(&core.RelationField{
 		Name:         "network",
 		MaxSelect:    1,
@@ -583,11 +587,15 @@ config wifi-iface 'wifi_3_radio4'
         option encryption 'the_encryption'
         option key 'the_key'
         option ieee80211r '1'
+        option ieee80211v '0'
+        option bss_transition '0'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
 `)
 	// Generate a config with 80211r disabled
 	w.Set("ieee80211r", false)
+	// and with 80211v enabled
+	w.Set("ieee80211v", true)
 	err = app.Save(w)
 
 	// Generate a config
@@ -602,6 +610,8 @@ config wifi-iface 'wifi_3_radio4'
         option encryption 'the_encryption'
         option key 'the_key'
         option ieee80211r '0'
+        option ieee80211v '1'
+        option bss_transition '1'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
 `)
@@ -622,6 +632,8 @@ config wifi-iface 'wifi_3_radio4'
         option encryption 'the_encryption'
         option key 'the_key'
         option ieee80211r '0'
+        option ieee80211v '1'
+        option bss_transition '1'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
 `)
@@ -646,6 +658,8 @@ config wifi-iface 'wifi_3_radio4'
         option encryption 'the_encryption'
         option key 'the_key'
         option ieee80211r '0'
+        option ieee80211v '1'
+        option bss_transition '1'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
         option macfilter 'deny'

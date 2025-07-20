@@ -289,7 +289,7 @@ func getVlan(wifi *core.Record, app core.App) string {
 func generateWifiConfig(wifi *core.Record, wifiid int, radio uint, app core.App, device *core.Record) string {
 	ssid := wifi.GetString("ssid")
 	key := wifi.GetString("key")
-	steeringconfig, err := generateClientSteeringConfig(app, wifi, device)
+	steeringconfig, err := generateClientSteeringConfig(app, wifi, device, "mac blacklist")
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -437,16 +437,17 @@ func isUnHealthyQuorumReached(unhealthyfullset map[string]struct{}, subset []str
 	return false
 }
 
-func generateClientSteeringConfig(app core.App, wifi *core.Record, device *core.Record) (string, error) {
+func generateClientSteeringConfig(app core.App, wifi *core.Record, device *core.Record, method string) (string, error) {
 	// Select all with the current wifi
 	// Exclude if in the whitelist
 	client_steering_for_wifi, err := app.FindRecordsByFilter("client_steering",
-		`wifi={:wifi} && whitelist!~{:device}`,
+		`wifi={:wifi} && whitelist!~{:device} && method ~{:method}`,
 		"", // TODO add sort
 		0, 0,
 		map[string]any{ // params for safe interpolation
 			"device": device.Id,
 			"wifi":   wifi.Id,
+			"method": method,
 		})
 	if err != nil {
 		return "", err

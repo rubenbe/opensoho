@@ -43,4 +43,10 @@ curl -H "Authorization: TOKEN" http://192.168.1.1:8090/api/hass/v1/devicestatus/
 Since the access token needs to be rotated monthly it's best to set up an automation:
 
 
-*TODO* add details
+*TODO* add more details
+
+Tokens can be refreshed via an API call:
+
+```
+curl -X POST -H "Authorization: OLDTOKEN" http://192.168.1.1:8090/api/collections/users/auth-refresh
+```

@@ -960,17 +960,17 @@ func TestClientSteering(t *testing.T) {
 
 	{
 		// Whitelisted, don't block
-		csconfig, err := generateClientSteeringConfig(app, w1, d1, "mac blacklist")
+		csconfig, err := generateMacClientSteeringConfig(app, w1, d1)
 		assert.Equal(t, err, nil)
 		assert.Equal(t, "", csconfig)
 
 		// Not whitelisted, block
-		csconfig, err = generateClientSteeringConfig(app, w1, d2, "mac blacklist")
+		csconfig, err = generateMacClientSteeringConfig(app, w1, d2)
 		assert.Equal(t, err, nil)
 		assert.Equal(t, "        option macfilter 'deny'\n        list maclist '00:11:22:33:44:55'\n", csconfig)
 
 		// Not whitelisted, block
-		csconfig, err = generateClientSteeringConfig(app, w1, d3, "mac blacklist")
+		csconfig, err = generateMacClientSteeringConfig(app, w1, d3)
 		assert.Equal(t, err, nil)
 		assert.Equal(t, "        option macfilter 'deny'\n        list maclist '00:11:22:33:44:55'\n", csconfig)
 	}
@@ -983,17 +983,17 @@ func TestClientSteering(t *testing.T) {
 		assert.Equal(t, []string{d1.Id, d2.Id}, cs.GetStringSlice("whitelist"))
 
 		// Whitelisted, don't block
-		csconfig, err := generateClientSteeringConfig(app, w1, d1, "mac blacklist")
+		csconfig, err := generateMacClientSteeringConfig(app, w1, d1)
 		assert.Equal(t, err, nil)
 		assert.Equal(t, "", csconfig)
 
 		// Whitelisted, don't block
-		csconfig, err = generateClientSteeringConfig(app, w1, d2, "mac blacklist")
+		csconfig, err = generateMacClientSteeringConfig(app, w1, d2)
 		assert.Equal(t, err, nil)
 		assert.Equal(t, "", csconfig)
 
 		// Not whitelisted, block
-		csconfig, err = generateClientSteeringConfig(app, w1, d3, "mac blacklist")
+		csconfig, err = generateMacClientSteeringConfig(app, w1, d3)
 		assert.Equal(t, err, nil)
 		assert.Equal(t, "        option macfilter 'deny'\n        list maclist '00:11:22:33:44:55'\n", csconfig)
 	}
@@ -1001,17 +1001,17 @@ func TestClientSteering(t *testing.T) {
 	// Test the second wifi
 	{
 		// Not whitelisted, block
-		csconfig, err := generateClientSteeringConfig(app, w2, d1, "mac blacklist")
+		csconfig, err := generateMacClientSteeringConfig(app, w2, d1)
 		assert.Equal(t, err, nil)
 		assert.Equal(t, "        option macfilter 'deny'\n        list maclist '00:11:22:33:44:55'\n", csconfig)
 
 		// Whitelisted, don't block
-		csconfig, err = generateClientSteeringConfig(app, w2, d2, "mac blacklist")
+		csconfig, err = generateMacClientSteeringConfig(app, w2, d2)
 		assert.Equal(t, err, nil)
 		assert.Equal(t, "", csconfig)
 
 		// Not whitelisted, block
-		csconfig, err = generateClientSteeringConfig(app, w2, d3, "mac blacklist")
+		csconfig, err = generateMacClientSteeringConfig(app, w2, d3)
 		assert.Equal(t, err, nil)
 		assert.Equal(t, "", csconfig)
 	}
@@ -1024,17 +1024,17 @@ func TestClientSteering(t *testing.T) {
 		assert.Equal(t, []string{d1.Id, d2.Id}, cs.GetStringSlice("whitelist"))
 
 		// Whitelisted, don't block
-		csconfig, err := generateClientSteeringConfig(app, w1, d1, "mac blacklist")
+		csconfig, err := generateMacClientSteeringConfig(app, w1, d1)
 		assert.Equal(t, err, nil)
 		assert.Equal(t, "", csconfig)
 
 		// Whitelisted, don't block
-		csconfig, err = generateClientSteeringConfig(app, w1, d2, "mac blacklist")
+		csconfig, err = generateMacClientSteeringConfig(app, w1, d2)
 		assert.Equal(t, err, nil)
 		assert.Equal(t, "", csconfig)
 
 		// Not whitelisted, block
-		csconfig, err = generateClientSteeringConfig(app, w1, d3, "mac blacklist")
+		csconfig, err = generateMacClientSteeringConfig(app, w1, d3)
 		assert.Equal(t, err, nil)
 		assert.Equal(t, "", csconfig)
 	}
@@ -1047,17 +1047,17 @@ func TestClientSteering(t *testing.T) {
 		assert.Equal(t, []string{d1.Id, d2.Id}, cs.GetStringSlice("whitelist"))
 
 		// Whitelisted, don't block
-		csconfig, err := generateClientSteeringConfig(app, w1, d1, "mac blacklist")
+		csconfig, err := generateMacClientSteeringConfig(app, w1, d1)
 		assert.Equal(t, err, nil)
 		assert.Equal(t, "", csconfig)
 
 		// Whitelisted, don't block
-		csconfig, err = generateClientSteeringConfig(app, w1, d2, "mac blacklist")
+		csconfig, err = generateMacClientSteeringConfig(app, w1, d2)
 		assert.Equal(t, err, nil)
 		assert.Equal(t, "", csconfig)
 
 		// Not whitelisted, block
-		csconfig, err = generateClientSteeringConfig(app, w1, d3, "mac blacklist")
+		csconfig, err = generateMacClientSteeringConfig(app, w1, d3)
 		assert.Equal(t, err, nil)
 		assert.Equal(t, "        option macfilter 'deny'\n        list maclist '00:11:22:33:44:55'\n", csconfig)
 	}
@@ -1070,17 +1070,17 @@ func TestClientSteering(t *testing.T) {
 		assert.Equal(t, []string{d1.Id, d2.Id}, cs.GetStringSlice("whitelist"))
 
 		// Whitelisted, don't block
-		csconfig, err := generateClientSteeringConfig(app, w1, d1, "mac blacklist")
+		csconfig, err := generateMacClientSteeringConfig(app, w1, d1)
 		assert.Equal(t, err, nil)
 		assert.Equal(t, "", csconfig)
 
 		// Whitelisted, don't block
-		csconfig, err = generateClientSteeringConfig(app, w1, d2, "mac blacklist")
+		csconfig, err = generateMacClientSteeringConfig(app, w1, d2)
 		assert.Equal(t, err, nil)
 		assert.Equal(t, "", csconfig)
 
 		// Not whitelisted, block
-		csconfig, err = generateClientSteeringConfig(app, w1, d3, "mac blacklist")
+		csconfig, err = generateMacClientSteeringConfig(app, w1, d3)
 		assert.Equal(t, err, nil)
 		assert.Equal(t, "        option macfilter 'deny'\n        list maclist '00:11:22:33:44:55'\n", csconfig)
 	}

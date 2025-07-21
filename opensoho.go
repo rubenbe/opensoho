@@ -289,7 +289,7 @@ func getVlan(wifi *core.Record, app core.App) string {
 func generateWifiConfig(wifi *core.Record, wifiid int, radio uint, app core.App, device *core.Record) string {
 	ssid := wifi.GetString("ssid")
 	key := wifi.GetString("key")
-	steeringconfig, err := generateClientSteeringConfig(app, wifi, device, "mac blacklist")
+	steeringconfig, err := generateMacClientSteeringConfig(app, wifi, device)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -437,9 +437,25 @@ func isUnHealthyQuorumReached(unhealthyfullset map[string]struct{}, subset []str
 	return false
 }
 
-func generateClientSteeringConfig(app core.App, wifi *core.Record, device *core.Record, method string) (string, error) {
+func generateMacClientSteeringConfig(app core.App, wifi *core.Record, device *core.Record) (string, error) {
+	expandedclients, err := generateClientSteeringConfigInt(app, wifi, device, "mac blacklist")
+	if err != nil {
+		return "", err
+	}
+	if len(expandedclients) > 0 {
+		output := "        option macfilter 'deny'\n"
+		for _, client := range expandedclients {
+			output += fmt.Sprintf("        list maclist '%[1]s'\n", client.GetString("mac_address"))
+
+		}
+		return output, nil
+	}
+	return "", err
+}
+func generateClientSteeringConfigInt(app core.App, wifi *core.Record, device *core.Record, method string) ([]*core.Record, error) {
 	// Select all with the current wifi
 	// Exclude if in the whitelist
+	expandedclients := []*core.Record{}
 	client_steering_for_wifi, err := app.FindRecordsByFilter("client_steering",
 		`wifi={:wifi} && whitelist!~{:device} && method ~{:method}`,
 		"", // TODO add sort
@@ -450,11 +466,11 @@ func generateClientSteeringConfig(app core.App, wifi *core.Record, device *core.
 			"method": method,
 		})
 	if err != nil {
-		return "", err
+		return expandedclients, err
 	}
 	// We're on the devices whitelist, so don't block it
 	if len(client_steering_for_wifi) == 0 {
-		return "", nil
+		return expandedclients, nil
 	}
 
 	unhealthy_devices, err := app.FindRecordsByFilter("devices", `health_status!="healthy"`, "", 0, 0, map[string]any{})
@@ -463,7 +479,6 @@ func generateClientSteeringConfig(app core.App, wifi *core.Record, device *core.
 		unhealthy_device_ids[device.Id] = struct{}{}
 	}
 	fmt.Println("Full list", unhealthy_device_ids)
-	expandedclients := []*core.Record{}
 	for _, client := range client_steering_for_wifi {
 
 		whitelisted_devices := client.GetStringSlice("whitelist")
@@ -483,20 +498,12 @@ func generateClientSteeringConfig(app core.App, wifi *core.Record, device *core.
 		// We need the MAC address of the steered client
 		errs := app.ExpandRecord(client, []string{"", "client"}, nil)
 		if len(errs) > 0 {
-			return "", fmt.Errorf("failed to expand: %v", errs)
+			return expandedclients, fmt.Errorf("failed to expand: %v", errs)
 		}
 
 		expandedclients = append(expandedclients, client.ExpandedOne("client"))
 	}
-	if len(expandedclients) > 0 {
-		output := "        option macfilter 'deny'\n"
-		for _, client := range expandedclients {
-			output += fmt.Sprintf("        list maclist '%[1]s'\n", client.GetString("mac_address"))
-
-		}
-		return output, nil
-	}
-	return "", nil
+	return expandedclients, nil
 }
 
 func generateDeviceConfig(app core.App, record *core.Record) ([]byte, string, error) {

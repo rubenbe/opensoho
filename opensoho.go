@@ -892,7 +892,6 @@ func main() {
 		"Extracts the embedded migrations and frontend files",
 	)
 
-
 	app.RootCmd.ParseFlags(os.Args[1:])
 
 	// ---------------------------------------------------------------
@@ -931,7 +930,7 @@ func main() {
 				e.Router.GET("/{path...}", func(e *core.RequestEvent) error {
 					e.Response.Header().Set("Content-Type", "text/html; charset=utf-8")
 					return e.String(200,
-`<!DOCTYPE html>
+						`<!DOCTYPE html>
 <html>
   <head>
     <meta http-equiv="refresh" content="0; url='/_/" />

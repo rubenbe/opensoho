@@ -35,7 +35,7 @@ import (
 	"github.com/rubenbe/pocketbase/tools/types"
 )
 
-//go:embed pb_public/** pb_migrations/**
+//go:embed pb_migrations/**
 var embeddedFiles embed.FS
 
 func copyEmbedDirToDisk(embedFS fs.FS, targetDir string) error {
@@ -928,7 +928,19 @@ func main() {
 	app.OnServe().Bind(&hook.Handler[*core.ServeEvent]{
 		Func: func(e *core.ServeEvent) error {
 			if !e.Router.HasRoute(http.MethodGet, "/{path...}") {
-				e.Router.GET("/{path...}", apis.Static(os.DirFS(publicDir), indexFallback))
+				e.Router.GET("/{path...}", func(e *core.RequestEvent) error {
+					e.Response.Header().Set("Content-Type", "text/html; charset=utf-8")
+					return e.String(200,
+`<!DOCTYPE html>
+<html>
+  <head>
+    <meta http-equiv="refresh" content="0; url='/_/" />
+  </head>
+  <body>
+    <p>You will be redirected to the admin page</p>
+  </body>
+</html>`)
+				})
 			}
 
 			return e.Next()

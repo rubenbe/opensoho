@@ -5,9 +5,12 @@ import (
 	"bytes"
 	"compress/gzip"
 	"crypto/md5"
+	"embed"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"log"
 	"math/big"
 	"net/http"
@@ -31,6 +34,45 @@ import (
 	"github.com/rubenbe/pocketbase/tools/security"
 	"github.com/rubenbe/pocketbase/tools/types"
 )
+
+//go:embed pb_public/** pb_migrations/**
+var embeddedFiles embed.FS
+
+func copyEmbedDirToDisk(embedFS fs.FS, targetDir string) error {
+	return fs.WalkDir(embedFS, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		targetPath := filepath.Join(targetDir, path)
+
+		if d.IsDir() {
+			return os.MkdirAll(targetPath, os.ModePerm)
+		}
+
+		// Ensure parent directory exists
+		if err := os.MkdirAll(filepath.Dir(targetPath), os.ModePerm); err != nil {
+			return err
+		}
+
+		// Open embedded file
+		srcFile, err := embedFS.Open(path)
+		if err != nil {
+			return err
+		}
+		defer srcFile.Close()
+
+		// Create or overwrite file on disk
+		dstFile, err := os.Create(targetPath)
+		if err != nil {
+			return err
+		}
+		defer dstFile.Close()
+
+		_, err = io.Copy(dstFile, srcFile)
+		return err
+	})
+}
 
 func extractRadioNumber(s string) (int, error) {
 	re := regexp.MustCompile(`phy(\d+)-`)
@@ -842,11 +884,26 @@ func main() {
 		"fallback the request to index.html on missing static path, e.g. when pretty urls are used with SPA",
 	)
 
+	var doFileExtraction bool
+	app.RootCmd.PersistentFlags().BoolVar(
+		&doFileExtraction,
+		"doEmbeddedFileExtraction",
+		true,
+		"Extracts the embedded migrations and frontend files",
+	)
+
+
 	app.RootCmd.ParseFlags(os.Args[1:])
 
 	// ---------------------------------------------------------------
 	// Plugins and hooks:
 	// ---------------------------------------------------------------
+
+	if doFileExtraction {
+		if err := copyEmbedDirToDisk(embeddedFiles, ""); err != nil {
+			log.Fatal(err)
+		}
+	}
 
 	// load jsvm (pb_hooks and pb_migrations)
 	jsvm.MustRegister(app, jsvm.Config{

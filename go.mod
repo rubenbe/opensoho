@@ -1,4 +1,4 @@
-module opensohopb
+module opensoho
 
 go 1.23.6
 

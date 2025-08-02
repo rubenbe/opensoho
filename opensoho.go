@@ -27,7 +27,7 @@ import (
 	"github.com/rubenbe/pocketbase"
 	"github.com/rubenbe/pocketbase/apis"
 	"github.com/rubenbe/pocketbase/core"
-	"github.com/rubenbe/pocketbase/plugins/ghupdate"
+	//"github.com/rubenbe/pocketbase/plugins/ghupdate"
 	"github.com/rubenbe/pocketbase/plugins/jsvm"
 	"github.com/rubenbe/pocketbase/plugins/migratecmd"
 	"github.com/rubenbe/pocketbase/tools/hook"
@@ -927,7 +927,7 @@ func main() {
 	})
 
 	// GitHub selfupdate
-	ghupdate.MustRegister(app, app.RootCmd, ghupdate.Config{})
+	//ghupdate.MustRegister(app, app.RootCmd, ghupdate.Config{})
 
 	// static route to serves files from the provided public dir
 	// (if publicDir exists and the route path is not already defined)

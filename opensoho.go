@@ -975,6 +975,10 @@ td.col-field-health_status span.data--health_status--unhealthy {
 .page-footer > a:nth-child(4){
 	display: none;
 }
+/* Hide column type icons */
+.col-header-content > i {
+	display: none;
+}
 				`)
 			})
 			e.Router.GET("/_/user.js", func(e *core.RequestEvent) error {

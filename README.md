@@ -1,5 +1,7 @@
 *Warning this is an early release*
 
+* [Frequently asked questions](doc/faq.md)
+
 # OpenSOHO
 
 OpenSOHO is built to manage a small number OpenWRT based network devices. Hence the name SOHO from Small Office Home Office (SOHO) Networks.
@@ -22,20 +24,20 @@ As OpenWisp mentioned:
 
 ## Start OpenSOHO
 
-* Install the dependencies
+* Download the latest OpenSOHO release
 
-```
-go mod tidy
-```
+[Releases](https://github.com/rubenbe/opensoho/releases)
+
 
 * Start OpenSOHO
 
 The shared secret will be used by openwisp-config to register. Choose a long random string for optimal security.
+It needs to match what you will configure in Luci in the next steps.
 
 ```
-OPENSOHO_SHARED_SECRET=randompassphrase go run . serve --http ipaddress:8090
+OPENSOHO_SHARED_SECRET=randompassphrase ./opensoho serve --http 0.0.0.0:8090
 ```
-OpenSoho can now be accessed via http://ipaddress:8090/_/
+OpenSOHO can now be accessed via http://ipaddress:8090/_/
 
 ## Configure the OpenWRT devices
 
@@ -119,6 +121,16 @@ There seems to be an issue in OpenWRT where the first configured SSID on the a W
 This can be worked around with a click on the enable button in Luci.
 
 # Developers
+
+* Install the dependencies
+
+```
+go mod tidy
+```
+
+* Start OpenSOHO
+
+The shared secret will be used by openwisp-config to register. Choose a long random string for optimal security.
 
 Running the unit tests:
 ```

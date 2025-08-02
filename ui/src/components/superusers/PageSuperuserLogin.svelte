@@ -191,7 +191,7 @@
                 <label for={uniqueId}>Password</label>
                 <input type="password" id={uniqueId} bind:value={password} required />
                 <div class="help-block">
-                    <a href="/request-password-reset" class="link-hint" use:link>Forgotten password?</a>
+                    <a href="https://github.com/rubenbe/opensoho/blob/main/doc/faq.md#i-forgot-my-admin-password-how-can-i-reset-it" class="link-hint" rel="noopener" target="_blank">Forgotten password?</a>
                 </div>
             </Field>
 

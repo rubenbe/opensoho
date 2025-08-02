@@ -978,6 +978,12 @@ td.col-field-health_status span.data--health_status--unhealthy {
 .page-content > .page-header > .btns-group > button:nth-child(1){
 	display: none;
 }
+/* Hide PocketBase references in bottom right footer */
+.page-footer > a:nth-child(2),
+.page-footer > span:nth-child(3),
+.page-footer > a:nth-child(4){
+	display: none;
+}
 				`)
 			})
 			e.Router.GET("/_/user.js", func(e *core.RequestEvent) error {

@@ -35,8 +35,15 @@ import (
 	"github.com/rubenbe/pocketbase/tools/types"
 )
 
+// Files that need to be extracted at startup
+//
 //go:embed pb_migrations/**
 var embeddedFiles embed.FS
+
+// Files that can be served directly from the binary
+//
+//go:embed favicon.png logo.svg
+var internalFiles embed.FS
 
 func copyEmbedDirToDisk(embedFS fs.FS, targetDir string) error {
 	return fs.WalkDir(embedFS, ".", func(path string, d fs.DirEntry, err error) error {
@@ -950,13 +957,13 @@ func main() {
 		Func: func(e *core.ServeEvent) error {
 			e.Router.GET("/_/images/favicon/favicon.png", func(e *core.RequestEvent) error {
 
-				e.Response.Header().Set("Content-Type", "image/png")
-				return e.FileFS(os.DirFS("."), "favicon.png")
+				bytes, _ := internalFiles.ReadFile("favicon.png")
+				return e.Blob(200, "image/png", bytes)
 			})
 			e.Router.GET("/_/images/logo.svg", func(e *core.RequestEvent) error {
 
-				e.Response.Header().Set("Content-Type", "image/svg+xml")
-				return e.FileFS(os.DirFS("."), "logo.svg")
+				bytes, _ := internalFiles.ReadFile("logo.svg")
+				return e.Blob(200, "image/svg+xml", bytes)
 			})
 			e.Router.GET("/_/user.css", func(e *core.RequestEvent) error {
 				e.Response.Header().Set("Content-Type", "text/css; charset=utf-8")

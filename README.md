@@ -147,3 +147,9 @@ Some OpenWISP features are (currently) consided out of scope for OpenSOHO
 
 ### Development
 The goal is to leverage the pocketbase to its fullest. Small modifications can be made since the pocketbase backend currently does not contain a plugin system. But it is not the goal to create a fork of pocketbase, so merging upstream changed should be remain straightforward.
+
+
+### Releasing
+```
+GITHUB_TOKEN=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa goreleaser release
+```

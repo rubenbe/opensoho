@@ -947,6 +947,11 @@ func main() {
 	})
 	app.OnServe().Bind(&hook.Handler[*core.ServeEvent]{
 		Func: func(e *core.ServeEvent) error {
+			e.Router.GET("/_/images/favicon/apple-touch-icon.png", func(e *core.RequestEvent) error {
+
+				bytes, _ := internalFiles.ReadFile("favicon.png")
+				return e.Blob(200, "image/png", bytes)
+			})
 			e.Router.GET("/_/images/favicon/favicon.png", func(e *core.RequestEvent) error {
 
 				bytes, _ := internalFiles.ReadFile("favicon.png")

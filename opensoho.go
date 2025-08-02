@@ -974,6 +974,10 @@ td.col-field-health_status span.data--health_status--healthy {
 td.col-field-health_status span.data--health_status--unhealthy {
 	background: var(--dangerAltColor);
 }
+/* Hide the API Preview button */
+.page-content > .page-header > .btns-group > button:nth-child(1){
+	display: none;
+}
 				`)
 			})
 			e.Router.GET("/_/user.js", func(e *core.RequestEvent) error {

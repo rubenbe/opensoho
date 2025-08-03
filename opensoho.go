@@ -900,7 +900,22 @@ func main() {
 		"Extracts the embedded migrations and frontend files",
 	)
 
+	var developerMode bool
+	app.RootCmd.PersistentFlags().BoolVar(
+		&developerMode,
+		"developerMode",
+		strings.HasPrefix(os.Args[0], os.TempDir()),
+		"Run in developer Mode (shows extra controls to modify collections)",
+	)
+
 	app.RootCmd.ParseFlags(os.Args[1:])
+
+	app.OnSettingsListRequest().BindFunc(func(e *core.SettingsListRequestEvent) error {
+		e.Settings.Meta.AppName = "OpenSOHO"
+		e.Settings.Meta.HideControls = !developerMode
+
+		return e.Next()
+	})
 
 	// ---------------------------------------------------------------
 	// Plugins and hooks:

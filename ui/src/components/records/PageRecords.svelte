@@ -35,6 +35,7 @@
     let selectedCollectionIdOrName = initialQueryParams.get("collection") || $activeCollection?.id;
     let totalCount = 0; // used to manully change the count without the need of reloading the recordsCount component
     let showCollectionsSidebar = true;
+    let viewUpdateInterval;
 
     loadCollections(selectedCollectionIdOrName);
 
@@ -98,6 +99,12 @@
         collectionDocsPanel?.hide();
     }
 
+    function reloadView() {
+        console.log('Reloading view at', new Date().toLocaleTimeString());
+        recordsList?.load();
+        recordsCount?.reload();
+    }
+
     // ensures that the sort fields exist in the collection
     async function normalizeSort() {
         if (!sort) {
@@ -138,6 +145,10 @@
 
         CommonHelper.replaceHashQueryParams(queryParams);
     }
+
+    viewUpdateInterval = setInterval(reloadView, 15000);
+
+
 </script>
 
 {#if $isCollectionsLoading && !$collections.length}

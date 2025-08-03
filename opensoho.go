@@ -985,6 +985,11 @@ td.col-field-health_status span.data--health_status--unhealthy {
 .col-header-content > i {
 	display: none;
 }
+header.page-header > nav.breadcrumbs > div.breadcrumb-item,
+div.sidebar-content > a.sidebar-list-item > span.txt
+{
+  text-transform: capitalize;
+}
 				`)
 			})
 			e.Router.GET("/_/user.js", func(e *core.RequestEvent) error {

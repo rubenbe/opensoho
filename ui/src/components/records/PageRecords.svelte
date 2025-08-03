@@ -34,6 +34,7 @@
     let sort = initialQueryParams.get("sort") || "-@rowid";
     let selectedCollectionIdOrName = initialQueryParams.get("collection") || $activeCollection?.id;
     let totalCount = 0; // used to manully change the count without the need of reloading the recordsCount component
+    let showCollectionsSidebar = true;
 
     loadCollections(selectedCollectionIdOrName);
 
@@ -168,12 +169,19 @@
         </div>
     </PageWrapper>
 {:else}
+    {#if showCollectionsSidebar}
     <CollectionsSidebar />
+    {/if}
 
     <PageWrapper class="flex-content">
         <header class="page-header">
             <nav class="breadcrumbs">
-                <div class="breadcrumb-item">Collections</div>
+                <div class="breadcrumb-item">
+		<button
+		    use:tooltip={{ text: "Toggle collection list visibility", position: "bottom" }}
+		    on:click={() => showCollectionsSidebar = !showCollectionsSidebar}
+		>Collections</button>
+		</div>
                 <div class="breadcrumb-item">{$activeCollection.name}</div>
             </nav>
 

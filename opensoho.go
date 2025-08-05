@@ -993,7 +993,6 @@ td.col-field-health_status span.data--health_status--unhealthy {
 /* Hide PocketBase references in bottom right footer */
 .page-footer > a:nth-child(2),
 .page-footer > span:nth-child(3),
-.page-footer > a:nth-child(4){
 	display: none;
 }
 /* Hide column type icons */

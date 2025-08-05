@@ -191,7 +191,14 @@
 		<button
 		    use:tooltip={{ text: "Toggle collection list visibility", position: "bottom" }}
 		    on:click={() => showCollectionsSidebar = !showCollectionsSidebar}
-		>Collections</button>
+		>
+                {#if showCollectionsSidebar}
+		    <i class="ri-sidebar-fold-line"></i>
+                {:else}
+		    <i class="ri-sidebar-unfold-line"></i>
+                {/if}
+		</button>
+		Collections
 		</div>
                 <div class="breadcrumb-item">{$activeCollection.name}</div>
             </nav>

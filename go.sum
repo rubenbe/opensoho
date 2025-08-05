@@ -65,8 +65,8 @@ github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec h1:W09IVJc94
 github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec/go.mod h1:qqbHyh8v60DhA7CoWK5oRCqLrMHRGoxYCSS9EjAz6Eo=
 github.com/rogpeppe/go-internal v1.9.0 h1:73kH8U+JUqXU8lRuOHeVHaa/SZPifC7BkcraZVejAe8=
 github.com/rogpeppe/go-internal v1.9.0/go.mod h1:WtVeX8xhTBvf0smdhujwtBcq4Qrzq/fJaraNFVN+nFs=
-github.com/rubenbe/pocketbase v0.28.3-0.20250803194100-607c77b57f18 h1:cuptG0F0BD9kyhc6mZeFpmWKKVWDp9+JB8ZR5xffHwU=
-github.com/rubenbe/pocketbase v0.28.3-0.20250803194100-607c77b57f18/go.mod h1:iZ4sps9T0FBr7YRP2lkZzvHBph7ya3/vAiTi1PBvWwI=
+github.com/rubenbe/pocketbase v0.28.3-0.20250805195813-7fbb7fd40ba9 h1:363ihHG3q+34fklcwpZq7/tRkZgKRvw1SgXTrB+hNw8=
+github.com/rubenbe/pocketbase v0.28.3-0.20250805195813-7fbb7fd40ba9/go.mod h1:iZ4sps9T0FBr7YRP2lkZzvHBph7ya3/vAiTi1PBvWwI=
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
 github.com/spf13/cast v1.8.0 h1:gEN9K4b8Xws4EX0+a0reLmhq8moKn7ntRlQYgjPeCDk=
 github.com/spf13/cast v1.8.0/go.mod h1:ancEpBxwJDODSW/UG4rDrAqiKolqNNh2DX3mk86cAdo=

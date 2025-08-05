@@ -71,7 +71,6 @@
     }
 
     $: collumnsToHide = fields
-        .filter((f) => !f.primaryKey)
         .map((f) => {
             return { id: f.id, name: f.name };
         });

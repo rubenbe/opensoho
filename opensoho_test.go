@@ -660,6 +660,29 @@ func setupVlanCollection(t *testing.T, app core.App) *core.Collection {
 	return vlancollection
 }
 
+func setupDhcpLeaseCollection(t *testing.T, app core.App) *core.Collection {
+	dhcpcollection := core.NewBaseCollection("dhcp_leases")
+	dhcpcollection.Fields.Add(&core.TextField{
+		Name:     "mac_address",
+		Required: true,
+	})
+	dhcpcollection.Fields.Add(&core.TextField{
+		Name:     "ip_address",
+		Required: true,
+	})
+	dhcpcollection.Fields.Add(&core.TextField{
+		Name:     "hostname",
+		Required: false,
+	})
+	dhcpcollection.Fields.Add(&core.TextField{
+		Name:     "expiry",
+		Required: false,
+	})
+	err := app.Save(dhcpcollection)
+	assert.Equal(t, err, nil)
+	return dhcpcollection
+}
+
 func setupClientSteeringCollection(t *testing.T, app core.App, clientcollection *core.Collection, devicecollection *core.Collection, wificollection *core.Collection) *core.Collection {
 	cscollection := core.NewBaseCollection("client_steering")
 	cscollection.Fields.Add(&core.RelationField{
@@ -871,6 +894,85 @@ func TestIsUnHealthyQuorumReached(t *testing.T) {
 		assert.False(t, isUnHealthyQuorumReached(allofflineset, whitelist, true))
 		assert.False(t, isUnHealthyQuorumReached(allofflineset, whitelist, false))
 	}
+}
+
+func TestDhcpClientUpdate(t *testing.T) {
+	app, err := tests.NewTestApp()
+	assert.Equal(t, nil, err)
+	defer app.Cleanup()
+	leaseslist := []DHCPLease{
+		{
+			MACAddress: "00:1A:2B:3C:4D:5E",
+			ClientID:   "01:00:1A:2B:3C:4D:5E",
+			IPAddress:  "192.168.1.10",
+			Hostname:   "device1",
+			Expiry:     1234,
+		},
+		{
+			MACAddress: "00:1A:2B:3C:4D:5F",
+			ClientID:   "01:00:1A:2B:3C:4D:5F",
+			IPAddress:  "192.168.1.11",
+			Hostname:   "device2",
+			Expiry:     5678,
+		},
+	}
+	setupDhcpLeaseCollection(t, app)
+	storeDHCPLeases(app, leaseslist)
+	records, err := app.FindAllRecords("dhcp_leases")
+	assert.Equal(t, 2, len(records))
+
+	assert.Equal(t, "00:1A:2B:3C:4D:5E", records[0].GetString("mac_address"))
+	assert.Equal(t, "192.168.1.10", records[0].GetString("ip_address"))
+	assert.Equal(t, "device1", records[0].GetString("hostname"))
+	assert.Equal(t, "1234", records[0].GetString("expiry"))
+
+	assert.Equal(t, "00:1A:2B:3C:4D:5F", records[1].GetString("mac_address"))
+	assert.Equal(t, "192.168.1.11", records[1].GetString("ip_address"))
+	assert.Equal(t, "device2", records[1].GetString("hostname"))
+	assert.Equal(t, "5678", records[1].GetString("expiry"))
+
+	// Test another case, hostname should be reset to NULL when a * is received
+	leaseslist = []DHCPLease{
+		{
+			MACAddress: "00:1A:2B:3C:4D:5E",
+			ClientID:   "01:00:1A:2B:3C:4D:5E",
+			IPAddress:  "192.168.1.10",
+			Hostname:   "device3",
+			Expiry:     12340,
+		},
+		{
+			MACAddress: "00:1A:2B:3C:4D:5F",
+			ClientID:   "01:00:1A:2B:3C:4D:5F",
+			IPAddress:  "192.168.1.11",
+			Hostname:   "*",
+			Expiry:     56780,
+		},
+		{
+			MACAddress: "00:1A:2B:3C:4D:60",
+			ClientID:   "01:00:1A:2B:3C:4D:60",
+			IPAddress:  "192.168.1.12",
+			Hostname:   "*",
+			Expiry:     56780,
+		},
+	}
+	storeDHCPLeases(app, leaseslist)
+	records, err = app.FindAllRecords("dhcp_leases")
+	assert.Equal(t, 3, len(records))
+
+	assert.Equal(t, "00:1A:2B:3C:4D:5E", records[0].GetString("mac_address"))
+	assert.Equal(t, "192.168.1.10", records[0].GetString("ip_address"))
+	assert.Equal(t, "device3", records[0].GetString("hostname"))
+	assert.Equal(t, "12340", records[0].GetString("expiry"))
+
+	assert.Equal(t, "00:1A:2B:3C:4D:5F", records[1].GetString("mac_address"))
+	assert.Equal(t, "192.168.1.11", records[1].GetString("ip_address"))
+	assert.Equal(t, "", records[1].GetString("hostname"))
+	assert.Equal(t, "56780", records[1].GetString("expiry"))
+
+	assert.Equal(t, "00:1A:2B:3C:4D:60", records[2].GetString("mac_address"))
+	assert.Equal(t, "192.168.1.12", records[2].GetString("ip_address"))
+	assert.Equal(t, "", records[2].GetString("hostname"))
+	assert.Equal(t, "56780", records[2].GetString("expiry"))
 }
 
 func TestClientSteering(t *testing.T) {

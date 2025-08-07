@@ -215,6 +215,14 @@ type Wireless struct {
 	TxPower   int      `json:"tx_power"`
 }
 
+type DHCPLease struct {
+	MACAddress string `json:"mac"`
+	ClientID   string `json:"client_id,omitempty"`
+	Hostname   string `json:"client_name,omitempty"`
+	IPAddress  string `json:"ip"`
+	Expiry     int    `json:"expiry"`
+}
+
 type Interface struct {
 	MAC      string    `json:"mac"`
 	Type     string    `json:"type"`
@@ -222,13 +230,25 @@ type Interface struct {
 	Wireless *Wireless `json:"wireless,omitempty"`
 }
 
+type Resources struct {
+	Load []float32 `json:"load"`
+}
+
+type Neighbor struct {
+	MAC       string `json:"mac"`
+	State     string `json:"state"`
+	Interface string `json:"Interface"`
+	IP        string `json:"ip"`
+}
+
 type MonitoringData struct {
 	Type string `json:"type"`
 	//General    GeneralInfo      `json:"general"`
 	Interfaces []Interface `json:"interfaces"`
-	//Resources  Resources        `json:"resources"`
-	DNSServers []string `json:"dns_servers"`
-	//Neighbors  []Neighbor       `json:"neighbors"`
+	Resources  Resources   `json:"resources"`
+	DNSServers []string    `json:"dns_servers"`
+	Neighbors  []Neighbor  `json:"neighbors"`
+	DHCPLeases []DHCPLease `json:"dhcp_leases,omitempty"`
 }
 
 func updateRadios(device *core.Record, app core.App, newradios map[int]Radio) {
@@ -602,6 +622,15 @@ func generateDeviceConfig(app core.App, record *core.Record) ([]byte, string, er
 	}
 	return blob, checksum, err
 }
+
+func findFirstOrNew(app core.App, collection *core.Collection, column string, value string) *core.Record {
+	record, err := app.FindFirstRecordByData(collection, column, value)
+	if err != nil {
+		record = core.NewRecord(collection)
+	}
+	return record
+}
+
 func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, collection *core.Collection) (error, map[int]Radio) {
 	e.Response.Header().Set("X-Openwisp-Controller", "true")
 	time := e.Request.URL.Query().Get("time")
@@ -647,9 +676,35 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 			}
 		}
 	}
+
+	storeDHCPLeases(app, payload.DHCPLeases)
+
 	//current := e.Request.URL.Query().Get("current")
 	fmt.Println(payload.Type, "@", time)
 	return e.Blob(200, "text/plain", []byte("")), radios
+}
+
+func storeDHCPLeases(app core.App, leaseslist []DHCPLease) {
+	collection, _ := app.FindCollectionByNameOrId("dhcp_leases")
+	//var leasesmap map[string]DHCPLease
+	for _, lease := range leaseslist {
+		fmt.Println("DHCPLEASE", lease.MACAddress, lease.ClientID, lease.IPAddress, lease.Hostname, lease.Expiry)
+		record := findFirstOrNew(app, collection, "mac_address", lease.MACAddress)
+		record.Set("mac_address", lease.MACAddress)
+		record.Set("ip_address", lease.IPAddress)
+		if lease.Hostname != "*" {
+			record.Set("hostname", lease.Hostname)
+		} else {
+			record.Set("hostname", nil)
+		}
+		record.Set("expiry", lease.Expiry)
+		err := app.Save(record)
+		if err != nil {
+			fmt.Println("Could not store DHCP LEASE", err)
+		}
+		//leasesmap[lease.MACAddress] = lease
+	}
+	//return leasesmap
 }
 
 func bindAppHooks(app core.App, shared_secret string) {

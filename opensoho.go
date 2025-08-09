@@ -677,14 +677,15 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 		}
 	}
 
-	storeDHCPLeases(app, payload.DHCPLeases)
+	storeDHCPLeases(app, payload.DHCPLeases, types.NowDateTime())
 
 	//current := e.Request.URL.Query().Get("current")
 	fmt.Println(payload.Type, "@", time)
 	return e.Blob(200, "text/plain", []byte("")), radios
 }
 
-func storeDHCPLeases(app core.App, leaseslist []DHCPLease) {
+func storeDHCPLeases(app core.App, leaseslist []DHCPLease, expirytime types.DateTime) {
+	// TODO needs to run in a transaction?
 	collection, _ := app.FindCollectionByNameOrId("dhcp_leases")
 	//var leasesmap map[string]DHCPLease
 	for _, lease := range leaseslist {
@@ -704,6 +705,12 @@ func storeDHCPLeases(app core.App, leaseslist []DHCPLease) {
 		}
 		//leasesmap[lease.MACAddress] = lease
 	}
+
+	_, err := app.DB().Delete("dhcp_leases", dbx.NewExp("expiry < {:expiry}", dbx.Params{"expiry": expirytime.String()})).Execute()
+	if err != nil {
+		fmt.Println("Failed to clean expired DHCP Leases", err)
+	}
+
 	//return leasesmap
 }
 

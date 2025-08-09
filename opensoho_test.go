@@ -674,7 +674,7 @@ func setupDhcpLeaseCollection(t *testing.T, app core.App) *core.Collection {
 		Name:     "hostname",
 		Required: false,
 	})
-	dhcpcollection.Fields.Add(&core.TextField{
+	dhcpcollection.Fields.Add(&core.DateField{
 		Name:     "expiry",
 		Required: false,
 	})
@@ -916,20 +916,22 @@ func TestDhcpClientUpdate(t *testing.T) {
 			Expiry:     5678,
 		},
 	}
+	expiryTime := types.DateTime{}
 	setupDhcpLeaseCollection(t, app)
-	storeDHCPLeases(app, leaseslist)
+	storeDHCPLeases(app, leaseslist, expiryTime)
 	records, err := app.FindAllRecords("dhcp_leases")
+	assert.Equal(t, nil, err)
 	assert.Equal(t, 2, len(records))
 
 	assert.Equal(t, "00:1A:2B:3C:4D:5E", records[0].GetString("mac_address"))
 	assert.Equal(t, "192.168.1.10", records[0].GetString("ip_address"))
 	assert.Equal(t, "device1", records[0].GetString("hostname"))
-	assert.Equal(t, "1234", records[0].GetString("expiry"))
+	assert.Equal(t, "1970-01-01 00:20:34.000Z", records[0].GetString("expiry"))
 
 	assert.Equal(t, "00:1A:2B:3C:4D:5F", records[1].GetString("mac_address"))
 	assert.Equal(t, "192.168.1.11", records[1].GetString("ip_address"))
 	assert.Equal(t, "device2", records[1].GetString("hostname"))
-	assert.Equal(t, "5678", records[1].GetString("expiry"))
+	assert.Equal(t, "1970-01-01 01:34:38.000Z", records[1].GetString("expiry"))
 
 	// Test another case, hostname should be reset to NULL when a * is received
 	leaseslist = []DHCPLease{
@@ -955,24 +957,32 @@ func TestDhcpClientUpdate(t *testing.T) {
 			Expiry:     56780,
 		},
 	}
-	storeDHCPLeases(app, leaseslist)
+	storeDHCPLeases(app, leaseslist, expiryTime)
 	records, err = app.FindAllRecords("dhcp_leases")
+	assert.Equal(t, nil, err)
 	assert.Equal(t, 3, len(records))
 
 	assert.Equal(t, "00:1A:2B:3C:4D:5E", records[0].GetString("mac_address"))
 	assert.Equal(t, "192.168.1.10", records[0].GetString("ip_address"))
 	assert.Equal(t, "device3", records[0].GetString("hostname"))
-	assert.Equal(t, "12340", records[0].GetString("expiry"))
+	assert.Equal(t, "1970-01-01 03:25:40.000Z", records[0].GetString("expiry"))
 
 	assert.Equal(t, "00:1A:2B:3C:4D:5F", records[1].GetString("mac_address"))
 	assert.Equal(t, "192.168.1.11", records[1].GetString("ip_address"))
 	assert.Equal(t, "", records[1].GetString("hostname"))
-	assert.Equal(t, "56780", records[1].GetString("expiry"))
+	assert.Equal(t, "1970-01-01 15:46:20.000Z", records[1].GetString("expiry"))
 
 	assert.Equal(t, "00:1A:2B:3C:4D:60", records[2].GetString("mac_address"))
 	assert.Equal(t, "192.168.1.12", records[2].GetString("ip_address"))
 	assert.Equal(t, "", records[2].GetString("hostname"))
-	assert.Equal(t, "56780", records[2].GetString("expiry"))
+	assert.Equal(t, "1970-01-01 15:46:20.000Z", records[2].GetString("expiry"))
+
+	leaseslist = []DHCPLease{}
+	expiryTime, err = types.ParseDateTime("1970-01-01 15:46:20.000Z")
+	assert.Equal(t, nil, err)
+	storeDHCPLeases(app, leaseslist, expiryTime)
+	records, err = app.FindAllRecords("dhcp_leases")
+	assert.Equal(t, 2, len(records))
 }
 
 func TestClientSteering(t *testing.T) {

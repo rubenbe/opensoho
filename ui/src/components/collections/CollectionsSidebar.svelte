@@ -117,6 +117,7 @@
             {/each}
         {/if}
 
+        {#if !$hideControls}
         {#if unpinnedSystemCollections.length}
             <button
                 type="button"
@@ -141,6 +142,7 @@
                     <CollectionSidebarItem {collection} bind:pinnedIds />
                 {/each}
             {/if}
+        {/if}
         {/if}
 
         {#if normalizedSearch.length && !filtered.length}

@@ -33,6 +33,7 @@ import (
 	"github.com/rubenbe/pocketbase/tools/hook"
 	"github.com/rubenbe/pocketbase/tools/security"
 	"github.com/rubenbe/pocketbase/tools/types"
+	"github.com/rubenbe/opensoho/ui"
 )
 
 // Files that need to be extracted at startup
@@ -1048,6 +1049,21 @@ func main() {
 	})
 	app.OnServe().Bind(&hook.Handler[*core.ServeEvent]{
 		Func: func(e *core.ServeEvent) error {
+			e.Router.GET("/_/{path...}", apis.Static(ui.DistDirFS, false)).
+				BindFunc(func(e *core.RequestEvent) error {
+					// ignore root path
+					if e.Request.PathValue(apis.StaticWildcardParam) != "" {
+						e.Response.Header().Set("Cache-Control", "max-age=1209600, stale-while-revalidate=86400")
+					}
+
+					// add a default CSP
+					if e.Response.Header().Get("Content-Security-Policy") == "" {
+						e.Response.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' http://127.0.0.1:* https://tile.openstreetmap.org data: blob:; connect-src 'self' http://127.0.0.1:* https://nominatim.openstreetmap.org; script-src 'self' 'sha256-GRUzBA7PzKYug7pqxv5rJaec5bwDCw1Vo6/IXwvD3Tc='")
+					}
+
+					return e.Next()
+				}).
+				Bind(apis.Gzip())
 			e.Router.GET("/_/images/favicon/apple-touch-icon.png", func(e *core.RequestEvent) error {
 
 				bytes, _ := internalFiles.ReadFile("favicon.png")

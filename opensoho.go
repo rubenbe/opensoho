@@ -1102,7 +1102,8 @@ td.col-field-health_status span.data--health_status--unhealthy {
 	display: none;
 }
 header.page-header > nav.breadcrumbs > div.breadcrumb-item,
-div.sidebar-content > a.sidebar-list-item > span.txt
+div.sidebar-content > a.sidebar-list-item > span.txt,
+table.table > thead > tr > th > div.col-header-content > span.txt
 {
   text-transform: capitalize;
 }

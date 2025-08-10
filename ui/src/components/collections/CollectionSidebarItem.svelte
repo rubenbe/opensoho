@@ -29,7 +29,7 @@
 >
     <i class={CommonHelper.getCollectionTypeIcon(collection.type)} aria-hidden="true" />
 
-    <span class="txt">{collection.name}</span>
+    <span class="txt">{CommonHelper.cleanupName(collection.name)}</span>
 
     {#if collection.type == "auth" && collection.oauth2?.enabled && !collection.oauth2.providers?.length}
         <i

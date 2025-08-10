@@ -200,7 +200,7 @@
 		</button>
 		Collections
 		</div>
-                <div class="breadcrumb-item">{$activeCollection.name}</div>
+                <div class="breadcrumb-item">{CommonHelper.cleanupName($activeCollection.name)}</div>
             </nav>
 
             <div class="inline-flex gap-5">

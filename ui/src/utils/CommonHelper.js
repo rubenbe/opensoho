@@ -73,6 +73,10 @@ export default class CommonHelper {
         return typeof structuredClone !== "undefined" ? structuredClone(value) : JSON.parse(JSON.stringify(value));
     }
 
+    static cleanupName(value){
+	return value.replace(/_/g, " ");
+    }
+
     /**
      * Returns the zero/empty value of val (only primitive values are supported).
      * @param  {Mixed} val

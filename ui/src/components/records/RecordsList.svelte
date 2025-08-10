@@ -356,12 +356,7 @@
                         bind:sort
                     >
                         <div class="col-header-content">
-                            {#if field.primaryKey}
-                                <i class={CommonHelper.getFieldTypeIcon("primary")} />
-                            {:else}
-                                <i class={CommonHelper.getFieldTypeIcon(field.type)} />
-                            {/if}
-                            <span class="txt">{field.name}</span>
+                            <span class="txt">{CommonHelper.cleanupName(field.name)}</span>
                         </div>
                     </SortHeader>
                 {/each}

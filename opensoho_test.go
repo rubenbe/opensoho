@@ -372,6 +372,7 @@ func TestUpdateRadios(t *testing.T) {
 		assert.Equal(t, r.GetInt("frequency"), 2412)
 		assert.Equal(t, r.GetInt("channel"), 1)
 		assert.Equal(t, r.GetString("band"), "2.4")
+		assert.Equal(t, r.GetBool("enabled"), true)
 		assert.Equal(t, r.GetString("device"), d.GetString("id"))
 	}
 	{
@@ -381,6 +382,7 @@ func TestUpdateRadios(t *testing.T) {
 		assert.Equal(t, r.GetInt("frequency"), 5200)
 		assert.Equal(t, r.GetInt("channel"), 40)
 		assert.Equal(t, r.GetString("band"), "5")
+		assert.Equal(t, r.GetBool("enabled"), true)
 		assert.Equal(t, r.GetString("device"), d.GetString("id"))
 	}
 	// Now do this again but only a partial update should happen
@@ -397,6 +399,7 @@ func TestUpdateRadios(t *testing.T) {
 		assert.Equal(t, r.GetInt("radio"), 0)
 		assert.Equal(t, r.GetInt("frequency"), 2412)
 		assert.Equal(t, r.GetInt("channel"), 1)
+		assert.Equal(t, r.GetBool("enabled"), true)
 		assert.Equal(t, r.GetString("band"), "2.4")
 	}
 	{
@@ -405,6 +408,7 @@ func TestUpdateRadios(t *testing.T) {
 		assert.Equal(t, r.GetInt("radio"), 1)
 		assert.Equal(t, r.GetInt("frequency"), 5200)
 		assert.Equal(t, r.GetInt("channel"), 40)
+		assert.Equal(t, r.GetBool("enabled"), true)
 		assert.Equal(t, r.GetString("band"), "5")
 	}
 	{
@@ -413,6 +417,78 @@ func TestUpdateRadios(t *testing.T) {
 		assert.Equal(t, r.GetInt("radio"), 2)
 		assert.Equal(t, r.GetInt("frequency"), 5955)
 		assert.Equal(t, r.GetInt("channel"), 100)
+		assert.Equal(t, r.GetBool("enabled"), true)
+		assert.Equal(t, r.GetString("band"), "6")
+	}
+
+	radios2 := make(map[int]Radio)
+	radios2[0] = Radio{Frequency: 2417, Channel: 1, HTmode: "HT20", TxPower: 23}
+	radios2[2] = Radio{Frequency: 5955, Channel: 100, HTmode: "HT40", TxPower: 19}
+	fmt.Println("---------------")
+	// If a radio is not in the list, it is disabled. Mark it so in the DB
+	updateRadios(d, app, radios2)
+	radiocount, err = app.CountRecords("radios")
+	assert.Equal(t, err, nil)
+	assert.Equal(t, int64(3), radiocount, "Disabled radio should not be removed")
+	{
+		r, err := app.FindFirstRecordByData("radios", "radio", "0")
+		assert.Equal(t, err, nil)
+		assert.Equal(t, r.GetInt("radio"), 0)
+		assert.Equal(t, r.GetInt("frequency"), 2412)
+		assert.Equal(t, r.GetInt("channel"), 1)
+		assert.Equal(t, r.GetBool("enabled"), true)
+		assert.Equal(t, r.GetString("band"), "2.4")
+	}
+	{
+		r, err := app.FindFirstRecordByData("radios", "radio", "1")
+		assert.Equal(t, err, nil)
+		assert.Equal(t, r.GetInt("radio"), 1)
+		assert.Equal(t, r.GetInt("frequency"), 5200)
+		assert.Equal(t, r.GetInt("channel"), 40)
+		assert.Equal(t, r.GetBool("enabled"), false)
+		assert.Equal(t, r.GetString("band"), "5")
+	}
+	{
+		r, err := app.FindFirstRecordByData("radios", "radio", "2")
+		assert.Equal(t, err, nil)
+		assert.Equal(t, r.GetInt("radio"), 2)
+		assert.Equal(t, r.GetInt("frequency"), 5955)
+		assert.Equal(t, r.GetInt("channel"), 100)
+		assert.Equal(t, r.GetBool("enabled"), true)
+		assert.Equal(t, r.GetString("band"), "6")
+	}
+
+	fmt.Println("---------------")
+	// Re-add the disabled radio and verify it is marked as enabled again
+	radios2[0] = Radio{Frequency: 2417, Channel: 1, HTmode: "HT20", TxPower: 23}
+	radios2[1] = Radio{Frequency: 5180, Channel: 40, HTmode: "HT40", TxPower: 19}
+	radios2[2] = Radio{Frequency: 5955, Channel: 100, HTmode: "HT40", TxPower: 19}
+	updateRadios(d, app, radios2)
+	{
+		r, err := app.FindFirstRecordByData("radios", "radio", "0")
+		assert.Equal(t, err, nil)
+		assert.Equal(t, r.GetInt("radio"), 0)
+		assert.Equal(t, r.GetInt("frequency"), 2412)
+		assert.Equal(t, r.GetInt("channel"), 1)
+		assert.Equal(t, r.GetBool("enabled"), true)
+		assert.Equal(t, r.GetString("band"), "2.4")
+	}
+	{
+		r, err := app.FindFirstRecordByData("radios", "radio", "1")
+		assert.Equal(t, err, nil)
+		assert.Equal(t, r.GetInt("radio"), 1)
+		assert.Equal(t, r.GetInt("frequency"), 5200)
+		assert.Equal(t, r.GetInt("channel"), 40)
+		assert.Equal(t, r.GetBool("enabled"), true)
+		assert.Equal(t, r.GetString("band"), "5")
+	}
+	{
+		r, err := app.FindFirstRecordByData("radios", "radio", "2")
+		assert.Equal(t, err, nil)
+		assert.Equal(t, r.GetInt("radio"), 2)
+		assert.Equal(t, r.GetInt("frequency"), 5955)
+		assert.Equal(t, r.GetInt("channel"), 100)
+		assert.Equal(t, r.GetBool("enabled"), true)
 		assert.Equal(t, r.GetString("band"), "6")
 	}
 }
@@ -557,6 +633,10 @@ func setupRadioCollection(t *testing.T, app core.App, devicecollection *core.Col
 	})
 	radiocollection.Fields.Add(&core.TextField{
 		Name:     "band",
+		Required: false,
+	})
+	radiocollection.Fields.Add(&core.BoolField{
+		Name:     "enabled",
 		Required: false,
 	})
 	err := app.Save(radiocollection)

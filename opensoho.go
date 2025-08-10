@@ -252,16 +252,28 @@ type MonitoringData struct {
 }
 
 func updateRadios(device *core.Record, app core.App, newradios map[int]Radio) {
+	// Radio has radio number as index, it is not an index in a list.
+	// Function modifies the existing newradios list, important for tests
 	oldradios, err := app.FindAllRecords("radios", dbx.HashExp{"device": device.GetString("id")})
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 	// Loop over the existing (old) radios for this device, and update if not found.
+	// Update the MAC address and set it to enabled
 	for _, oldradio := range oldradios {
+		fmt.Println("oldradio:", oldradio)
 		oldradionum := oldradio.GetInt("radio")
 		if newradio, ok := newradios[oldradionum]; ok {
+			// Old radio exists within the updated list (newradios)
 			fmt.Println("EXISTS", newradio, oldradio, oldradio.GetString("mac_address"))
+			if oldradio.GetBool("enabled") == false {
+				oldradio.Set("enabled", true)
+				err := app.Save(oldradio)
+				if err != nil {
+					fmt.Println("Fialed to mark radio as enabled:", err)
+				}
+			}
 			if len(oldradio.GetString("mac_address")) == 0 {
 				oldradio.Set("mac_address", newradio.MAC)
 				err = app.Save(oldradio)
@@ -270,6 +282,17 @@ func updateRadios(device *core.Record, app core.App, newradios map[int]Radio) {
 				}
 			}
 			delete(newradios, oldradionum)
+		} else {
+			fmt.Println("Not in list:", oldradio)
+			// Old radio does not exist within the updated list
+			if oldradio.GetBool("enabled") == true {
+				oldradio.Set("enabled", false)
+				err := app.Save(oldradio)
+				if err != nil {
+					fmt.Println("Fialed to mark radio as disabled:", err)
+				}
+			}
+
 		}
 	}
 
@@ -290,6 +313,7 @@ func updateRadios(device *core.Record, app core.App, newradios map[int]Radio) {
 		record.Set("channel", radio.Channel)
 		record.Set("band", frequencyToBand(radio.Frequency))
 		record.Set("frequency", radio.Frequency)
+		record.Set("enabled", true)
 		err := app.Save(record)
 		if err != nil {
 			fmt.Println("Failed to save radio config")

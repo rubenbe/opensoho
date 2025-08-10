@@ -355,40 +355,7 @@ func TestUpdateRadios(t *testing.T) {
 	err := app.Save(devicecollection)
 	assert.Equal(t, err, nil)
 
-	// Create radios collection
-	radiocollection := core.NewBaseCollection("radios")
-	x := 0.0
-	radiocollection.Fields.Add(&core.NumberField{
-		Name:     "radio",
-		Required: false,
-		Min:      &x,
-		OnlyInt:  true,
-	})
-	radiocollection.Fields.Add(&core.RelationField{
-		Name:          "device",
-		Required:      false,
-		MaxSelect:     1,
-		CascadeDelete: false,
-		CollectionId:  devicecollection.Id,
-	})
-	radiocollection.Fields.Add(&core.NumberField{
-		Name:     "channel",
-		Required: false,
-		Min:      &x,
-		OnlyInt:  true,
-	})
-	radiocollection.Fields.Add(&core.NumberField{
-		Name:     "frequency",
-		Required: false,
-		Min:      &x,
-		OnlyInt:  true,
-	})
-	radiocollection.Fields.Add(&core.TextField{
-		Name:     "band",
-		Required: false,
-	})
-	err = app.Save(radiocollection)
-	assert.Equal(t, err, nil)
+	setupRadioCollection(t, app, devicecollection)
 
 	// Add a dummy radio
 	d := core.NewRecord(devicecollection)
@@ -560,7 +527,43 @@ config wifi-device 'radio1'
 `, generateRadioConfigs(d, app))
 
 }
+func setupRadioCollection(t *testing.T, app core.App, devicecollection *core.Collection) *core.Collection {
+	radiocollection := core.NewBaseCollection("radios")
+	x := 0.0
+	radiocollection.Fields.Add(&core.NumberField{
+		Name:     "radio",
+		Required: false,
+		Min:      &x,
+		OnlyInt:  true,
+	})
+	radiocollection.Fields.Add(&core.RelationField{
+		Name:          "device",
+		Required:      false,
+		MaxSelect:     1,
+		CascadeDelete: false,
+		CollectionId:  devicecollection.Id,
+	})
+	radiocollection.Fields.Add(&core.NumberField{
+		Name:     "channel",
+		Required: false,
+		Min:      &x,
+		OnlyInt:  true,
+	})
+	radiocollection.Fields.Add(&core.NumberField{
+		Name:     "frequency",
+		Required: false,
+		Min:      &x,
+		OnlyInt:  true,
+	})
+	radiocollection.Fields.Add(&core.TextField{
+		Name:     "band",
+		Required: false,
+	})
+	err := app.Save(radiocollection)
+	assert.Equal(t, err, nil)
+	return radiocollection
 
+}
 func setupDeviceCollection(t *testing.T, app core.App, wificollection *core.Collection) *core.Collection {
 	devicecollection := core.NewBaseCollection("devices")
 	devicecollection.Fields.Add(&core.TextField{

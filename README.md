@@ -85,7 +85,7 @@ These are the clients connected to wifi. This table should be considered read-on
 It can be used to give devices a human-readable name. This only works properly when the client does not randomize its mac-address.
 ### Devices
 These are the connected devices.
-* Use enable/disable to temporarily disable configuration updates. This is useful to avoid updating all devices at once.
+* Use enable/disable to disable configuration updates. This is useful to avoid updating all devices at once. The monitoring remains active.
 * Health status is read-only field. Healty means the device has sent/requested data during the last minute. If it didn't, the health status becomes critical and there might be something wrong with the device or its connection.
 * Leds allows to choose led configs
 * Numradios allows to set the number of radios on this device. This is not initially sent by OpenWisp, so this needs to be set by the user.

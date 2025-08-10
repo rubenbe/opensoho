@@ -27,7 +27,7 @@
     class:active={$activeCollection?.id === collection.id}
     use:link
 >
-    <i class={CommonHelper.getCollectionTypeIcon(collection.type)} aria-hidden="true" />
+    <i class={CommonHelper.getCollectionIcon(collection.type, collection.name)} aria-hidden="true" />
 
     <span class="txt">{CommonHelper.cleanupName(collection.name)}</span>
 

@@ -1168,6 +1168,17 @@ export default class CommonHelper {
         }
     }
 
+    static getCollectionIcon(type, name){
+        switch (name?.toLowerCase()){
+	    case "connected_clients":
+		return "ri-wifi-line";
+	    case "disconnected_clients":
+		return "ri-signal-wifi-off-line";
+	    default:
+		return CommonHelper.getCollectionTypeIcon(type);
+        }
+    }
+
     /**
      * Returns a field type icon.
      *

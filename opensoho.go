@@ -28,12 +28,12 @@ import (
 	"github.com/rubenbe/pocketbase/apis"
 	"github.com/rubenbe/pocketbase/core"
 	//"github.com/rubenbe/pocketbase/plugins/ghupdate"
+	"github.com/rubenbe/opensoho/ui"
 	"github.com/rubenbe/pocketbase/plugins/jsvm"
 	"github.com/rubenbe/pocketbase/plugins/migratecmd"
 	"github.com/rubenbe/pocketbase/tools/hook"
 	"github.com/rubenbe/pocketbase/tools/security"
 	"github.com/rubenbe/pocketbase/tools/types"
-	"github.com/rubenbe/opensoho/ui"
 )
 
 // Files that need to be extracted at startup

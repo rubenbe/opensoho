@@ -37,6 +37,16 @@
     function onError() {
         thumbUrl = "";
     }
+
+    async function openInNewTab(filename) {
+        try {
+            let token = await ApiClient.getSuperuserFileToken(record.collectionId);
+            let url = ApiClient.files.getURL(record, filename, { token });
+            window.open(url, "_blank", "noreferrer, noopener");
+        } catch (err) {
+            console.warn("openInNewTab file token failure:", err);
+        }
+    }
 </script>
 
 {#if isLoadingToken}
@@ -47,8 +57,10 @@
         draggable={false}
         class="handle thumb {size ? `thumb-${size}` : ''}"
         title={(hasPreview ? "Preview" : "Download") + " " + filename}
+        on:auxclick={() => openInNewTab(filename)}
         on:click|stopPropagation={async () => {
             if (!hasPreview) {
+                openInNewTab(filename)
                 return;
             }
 

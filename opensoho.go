@@ -31,6 +31,7 @@ import (
 	"github.com/rubenbe/opensoho/ui"
 	"github.com/rubenbe/pocketbase/plugins/jsvm"
 	"github.com/rubenbe/pocketbase/plugins/migratecmd"
+	"github.com/rubenbe/pocketbase/tools/filesystem"
 	"github.com/rubenbe/pocketbase/tools/hook"
 	"github.com/rubenbe/pocketbase/tools/security"
 	"github.com/rubenbe/pocketbase/tools/types"
@@ -860,12 +861,13 @@ is-new: %d
 				return e.ForbiddenError("Not allowed", err)
 			}
 
-			_, response, err := generateDeviceConfig(app, record)
+			data, checksum, err := generateDeviceConfig(app, record)
 			if err != nil {
 				return e.InternalServerError("Internal error", err)
 			}
+			saveDeviceConfig(e.App, record, data, checksum)
 
-			return e.Blob(200, "text/plain", []byte(response))
+			return e.Blob(200, "text/plain", []byte(checksum))
 		})
 
 		se.Router.GET("/controller/download-config/{device_uuid}/", func(e *core.RequestEvent) error {
@@ -909,6 +911,27 @@ is-new: %d
 		})
 		return se.Next()
 	})
+}
+
+func saveDeviceConfig(app core.App, record *core.Record, data []byte, checksum string) error {
+	filename := checksum + ".tar.gz"
+	if strings.SplitN(record.GetString("config"), "_", 2)[0] != checksum {
+		f, err := filesystem.NewFileFromBytes(data, filename)
+		if err != nil {
+			return err
+		}
+
+		fmt.Println(filename)
+		record.Set("config", f)
+		err = app.Save(record)
+		if err != nil {
+			return err
+		}
+		fmt.Println("SAVED NEW CONFIG TO RECORD", record.GetString("config"), filename)
+	} else {
+		fmt.Println("record config up to date")
+	}
+	return nil
 }
 
 func main() {

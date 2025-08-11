@@ -660,6 +660,13 @@ func setupDeviceCollection(t *testing.T, app core.App, wificollection *core.Coll
 		Required:     false,
 		CollectionId: wificollection.Id,
 	})
+	devicecollection.Fields.Add(&core.FileField{
+		Name:      "config",
+		Required:  false,
+		Protected: true,
+		MimeTypes: []string{"application/x-tar"},
+		Hidden:    true,
+	})
 	err := app.Save(devicecollection)
 	assert.Equal(t, err, nil)
 	return devicecollection

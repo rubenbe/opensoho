@@ -1170,6 +1170,22 @@ export default class CommonHelper {
 
     static getCollectionIcon(type, name){
         switch (name?.toLowerCase()){
+	    case "vlan":
+		return "ri-stack-line"
+	    case "wifi":
+		return "ri-home-wifi-line"
+	    case "dhcp_leases":
+		return "ri-home-office-line"
+	    case "interfaces":
+		return "ri-git-fork-line"
+	    case "radios":
+                return "ri-broadcast-line"
+	    case "leds":
+                return "ri-lightbulb-line"
+	    case "client_steering":
+                return "ri-steering-2-line"
+            case "devices":
+		return "ri-router-line";
 	    case "connected_clients":
 		return "ri-wifi-line";
 	    case "disconnected_clients":

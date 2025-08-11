@@ -242,9 +242,14 @@ type Neighbor struct {
 	IP        string `json:"ip"`
 }
 
+type GeneralInfo struct {
+	LocalTime int `json:"local_time"`
+	Uptime    int `json:"uptime"`
+}
+
 type MonitoringData struct {
-	Type string `json:"type"`
-	//General    GeneralInfo      `json:"general"`
+	Type       string      `json:"type"`
+	General    GeneralInfo `json:"general"`
 	Interfaces []Interface `json:"interfaces"`
 	Resources  Resources   `json:"resources"`
 	DNSServers []string    `json:"dns_servers"`

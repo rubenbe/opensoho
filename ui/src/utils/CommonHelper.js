@@ -74,7 +74,15 @@ export default class CommonHelper {
     }
 
     static cleanupName(value){
-	return value.replace(/_/g, " ");
+        const replacements = {
+            "ssh_keys": "SSH keys",
+            "mac_address": "MAC address",
+            "dhcp_leases": "DHCP leases",
+            "ip_address": "IP address",
+        }
+        const pattern = new RegExp("^"+ Object.keys(replacements).join("|"), "");
+        const cleaned = value.replace(pattern, (matched) => replacements[matched.toLowerCase()]);
+	return cleaned.replace(/_/g, " ");
     }
 
     /**
@@ -1190,6 +1198,8 @@ export default class CommonHelper {
 		return "ri-wifi-line";
 	    case "disconnected_clients":
 		return "ri-signal-wifi-off-line";
+            case "ssh_keys":
+                return "ri-key-line";
 	    default:
 		return CommonHelper.getCollectionTypeIcon(type);
         }

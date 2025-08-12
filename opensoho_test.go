@@ -524,6 +524,14 @@ func TestFrequencyToChannel(t *testing.T) {
 		assert.Equal(t, result, tt.expectedChannel, tt.freq)
 	}
 }
+
+func TestGenerateMonitoringConfig(t *testing.T) {
+	assert.Equal(t, generateMonitoringConfig(), `
+config monitoring 'monitoring'
+        option interval '15'
+`)
+}
+
 func TestGenerateRadioConfig(t *testing.T) {
 	app, _ := tests.NewTestApp()
 	radiocollection := core.NewBaseCollection("radios")

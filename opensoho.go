@@ -386,6 +386,13 @@ func getVlan(wifi *core.Record, app core.App) string {
 	return networkname
 }
 
+func generateMonitoringConfig() string {
+	return fmt.Sprintf(`
+config monitoring 'monitoring'
+        option interval '15'
+`)
+}
+
 func generateWifiConfig(wifi *core.Record, wifiid int, radio uint, app core.App, device *core.Record) string {
 	ssid := wifi.GetString("ssid")
 	key := wifi.GetString("key")
@@ -646,6 +653,10 @@ func generateDeviceConfig(app core.App, record *core.Record) ([]byte, string, er
 				configfiles["etc/config/wireless"] = radioconfigs
 			}
 		}
+	}
+	{
+		// Currently the monitoring config is static
+		configfiles["etc/config/openwisp-monitoring"] = generateMonitoringConfig()
 	}
 
 	blob, checksum, err := createConfigTar(configfiles)

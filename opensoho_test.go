@@ -525,11 +525,40 @@ func TestFrequencyToChannel(t *testing.T) {
 	}
 }
 
+func TestGenerateOpenWispConfig(t *testing.T) {
+	assert.Equal(t, generateOpenWispConfig(), `
+config controller 'http'
+        option enabled 'monitoring'
+        option interval '30'
+`)
+}
+
 func TestGenerateMonitoringConfig(t *testing.T) {
 	assert.Equal(t, generateMonitoringConfig(), `
 config monitoring 'monitoring'
         option interval '15'
 `)
+}
+
+func TestSshKeyConfig(t *testing.T) {
+	app, _ := tests.NewTestApp()
+	collection := setupSshKeyCollection(t, app)
+
+	key1 := core.NewRecord(collection)
+	key1.Set("key", "ssh-key aaaaaa\r\n")
+	err := app.Save(key1)
+	assert.Equal(t, nil, err)
+
+	key2 := core.NewRecord(collection)
+	key2.Set("key", "ssh-key bbbbbb \n\r")
+	err = app.Save(key2)
+	assert.Equal(t, nil, err)
+
+	key3 := core.NewRecord(collection)
+	key3.Set("key", "ssh-key cccccc ")
+	err = app.Save(key3)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, "ssh-key aaaaaa\nssh-key bbbbbb\nssh-key cccccc\n", generateSshKeyConfig(app))
 }
 
 func TestGenerateRadioConfig(t *testing.T) {
@@ -611,6 +640,19 @@ config wifi-device 'radio1'
 `, generateRadioConfigs(d, app))
 
 }
+
+func setupSshKeyCollection(t *testing.T, app core.App) *core.Collection {
+	sshkeycollection := core.NewBaseCollection("ssh_keys")
+	sshkeycollection.Fields.Add(&core.TextField{
+		Name:     "key",
+		Required: true,
+		Min:      10,
+	})
+	err := app.Save(sshkeycollection)
+	assert.Equal(t, err, nil)
+	return sshkeycollection
+}
+
 func setupRadioCollection(t *testing.T, app core.App, devicecollection *core.Collection) *core.Collection {
 	radiocollection := core.NewBaseCollection("radios")
 	x := 0.0

@@ -386,11 +386,32 @@ func getVlan(wifi *core.Record, app core.App) string {
 	return networkname
 }
 
+func generateOpenWispConfig() string {
+	return fmt.Sprintf(`
+config controller 'http'
+        option enabled 'monitoring'
+        option interval '30'
+`)
+}
+
 func generateMonitoringConfig() string {
 	return fmt.Sprintf(`
 config monitoring 'monitoring'
         option interval '15'
 `)
+}
+
+func generateSshKeyConfig(app core.App) string {
+	keys, err := app.FindAllRecords("ssh_keys")
+	if err != nil {
+		fmt.Println(err)
+		return ""
+	}
+	output := []string{}
+	for _, key := range keys {
+		output = append(output, strings.TrimSpace(key.GetString("key")))
+	}
+	return strings.Join(output, "\n") + "\n"
 }
 
 func generateWifiConfig(wifi *core.Record, wifiid int, radio uint, app core.App, device *core.Record) string {
@@ -657,6 +678,14 @@ func generateDeviceConfig(app core.App, record *core.Record) ([]byte, string, er
 	{
 		// Currently the monitoring config is static
 		configfiles["etc/config/openwisp-monitoring"] = generateMonitoringConfig()
+		configfiles["etc/config/openwisp"] = generateOpenWispConfig()
+	}
+	{
+		sshkeyconfigs := generateSshKeyConfig(app)
+		fmt.Println(sshkeyconfigs)
+		if len(sshkeyconfigs) > 0 {
+			configfiles["etc/dropbear/authorized_keys"] = sshkeyconfigs
+		}
 	}
 
 	blob, checksum, err := createConfigTar(configfiles)

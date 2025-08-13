@@ -1,6 +1,6 @@
 *Warning this is an early release*
 
-# OpenSOHO
+# About OpenSOHO
 <a href="https://www.buymeacoffee.com/rubenbe" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/default-orange.png" alt="Buy Me A Coffee" height="41" width="174"></a>
 
 * [Frequently asked questions](doc/faq.md)
@@ -23,7 +23,7 @@ As OpenWisp mentioned:
   </a>
 </p>
 
-## Start OpenSOHO
+# Getting Started with OpenSOHO
 
 * Download the latest OpenSOHO release
 
@@ -42,7 +42,7 @@ OpenSOHO can now be accessed via http://ipaddress:8090/_/
 
 ## Configure the OpenWRT devices
 
-### Install the OpenWisp packages
+### Install the OpenWISP packages
 
 ```
 openwisp-config
@@ -52,17 +52,13 @@ wpad-mbedtls (if you want to use 802.11v client steering, reboot afterwards!)
 ```
 
 When installing wpad-mbedtls, rebooting is required to switch to the new wpad binary. If not you'll get an error like `daemon.notice netifd: radio1 (28210): WARNING (wireless_add_process): executable path /usr/sbin/wpad does not match process 1842 path (/usr/sbin/wpad (deleted))`
+(Please note that 802.11v client steering is still a work in progress)
 
-### Configure openwisp in Luci:
+### Configure OpenWISP in Luci:
 
 * Set the `Server URL` and the `Shared secret` only.
-* Optionally lower the `Update Interval` to 30 seconds for faster updates.
-* OpenWISP monitoring cannot be configure through Luci. Shorten its update interval to make the monitoring behave correctly.
-```
-uci set openwisp-monitoring.monitoring.interval='15'
-uci commit
-/etc/init.d/openwisp-monitoring restart
-```
+* Optionally lower the `Update Interval` to 30 seconds for faster updates. (OpenSOHO will do this for you if you don't)
+* OpenSOHO will also enable monitoring and lower the monitoring interval to 15 seconds to have snappier updates of the network state.
 
 It is highly recommended to enable monitoring, since OpenSOHO will deduce a lot of the current OpenWRT settings and fill them in for easy configuration.
 

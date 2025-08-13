@@ -122,10 +122,23 @@ func TestRegisterEndpoint(t *testing.T) {
 
 func TestInterfacesConfig(t *testing.T) {
 	app, _ := tests.NewTestApp()
+
 	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+
+	// Add a device
+	d1 := core.NewRecord(devicecollection)
+	d1.Id = "somethindevice1"
+	d1.Set("name", "the_device1")
+	d1.Set("health_status", "healthy")
+	d1.Set("ip_address", "8.8.8.8")
+	err := app.Save(d1)
+	assert.Equal(t, nil, err)
+
 	wan := core.NewRecord(vlancollection)
 	wan.Set("name", "wan")
-	err := app.Save(wan)
+	err = app.Save(wan)
 	assert.Equal(t, nil, err)
 
 	lan := core.NewRecord(vlancollection)
@@ -136,7 +149,7 @@ func TestInterfacesConfig(t *testing.T) {
 	guest := core.NewRecord(vlancollection)
 	guest.Set("name", "guest")
 	guest.Set("vlan_id", "7")
-	guest.Set("ip_range", "10.11.12.13")
+	guest.Set("subnet", "10.11.12.13")
 	guest.Set("netmask", "255.255.128.0")
 	err = app.Save(guest)
 	assert.Equal(t, nil, err)
@@ -144,7 +157,7 @@ func TestInterfacesConfig(t *testing.T) {
 	iot := core.NewRecord(vlancollection)
 	iot.Set("name", "iot")
 	iot.Set("vlan_id", "123")
-	iot.Set("ip_range", "192.168.1.1")
+	iot.Set("subnet", "192.168.1.1")
 	iot.Set("netmask", "255.255.255.00")
 	err = app.Save(iot)
 	assert.Equal(t, nil, err)
@@ -153,15 +166,15 @@ func TestInterfacesConfig(t *testing.T) {
 config interface 'guest'
         option device 'br-lan.7'
         option proto 'static'
-        option ipaddr '10.11.12.13'
+        option ipaddr '10.11.12.8'
         option netmask '255.255.128.0'
 
 config interface 'iot'
         option device 'br-lan.123'
         option proto 'static'
-        option ipaddr '192.168.1.1'
+        option ipaddr '192.168.1.8'
         option netmask '255.255.255.00'
-`, generateInterfacesConfig(app))
+`, generateInterfacesConfig(app, d1))
 }
 
 func TestUpdateMonitoring(t *testing.T) {
@@ -748,6 +761,10 @@ func setupDeviceCollection(t *testing.T, app core.App, wificollection *core.Coll
 		Name:     "health_status",
 		Required: true,
 	})
+	devicecollection.Fields.Add(&core.TextField{
+		Name:     "ip_address",
+		Required: false, // True in the real collection
+	})
 	devicecollection.Fields.Add(&core.RelationField{
 		Name:         "wifis",
 		MaxSelect:    99,
@@ -849,7 +866,7 @@ func setupVlanCollection(t *testing.T, app core.App) *core.Collection {
 		OnlyInt:  true,
 	})
 	vlancollection.Fields.Add(&core.TextField{
-		Name:     "ip_range",
+		Name:     "subnet",
 		Pattern:  "^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$",
 		Required: false,
 	})

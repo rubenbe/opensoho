@@ -13,6 +13,7 @@ import (
 	"io/fs"
 	"log"
 	"math/big"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -564,8 +565,41 @@ func isUnHealthyQuorumReached(unhealthyfullset map[string]struct{}, subset []str
 	}
 	return false
 }
+func lastOctet(ipStr string) (byte, error) {
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		return 0, errors.New("invalid IP address")
+	}
 
-func generateInterfacesConfig(app core.App) string {
+	ip4 := ip.To4()
+	if ip4 == nil {
+		return 0, errors.New("not an IPv4 address")
+	}
+
+	return ip4[3], nil
+}
+
+func replaceLastOctet(ip_range string, device_ip string) (string, error) {
+	ip := net.ParseIP(ip_range)
+	if ip == nil {
+		return "", errors.New("invalid IP address")
+	}
+
+	ip4 := ip.To4()
+	if ip4 == nil {
+		return "", errors.New("not an IPv4 address")
+	}
+
+	newOctet, err := lastOctet(device_ip)
+	if err != nil {
+		return "", err
+	}
+
+	ip4[3] = newOctet
+	return ip4.String(), nil
+}
+
+func generateInterfacesConfig(app core.App, device *core.Record) string {
 	// Select all inferfaces that are OpenSOHO maintained
 	vlans, err := app.FindRecordsByFilter(
 		"vlan",                           // collection
@@ -582,13 +616,19 @@ func generateInterfacesConfig(app core.App) string {
 	fmt.Println(vlans)
 	output := ""
 	for _, vlan := range vlans {
+		new_ip, err := replaceLastOctet(vlan.GetString("subnet"), device.GetString("ip_address"))
+		if err != nil {
+			fmt.Println(err)
+			//return ""
+			continue
+		}
 		output += fmt.Sprintf(`
 config interface '%[1]s'
         option device 'br-lan.%[2]d'
         option proto 'static'
         option ipaddr '%[3]s'
         option netmask '%[4]s'
-`, vlan.GetString("name"), vlan.GetInt("vlan_id"), vlan.GetString("ip_range"), vlan.GetString("netmask"))
+`, vlan.GetString("name"), vlan.GetInt("vlan_id"), new_ip, vlan.GetString("netmask"))
 	}
 
 	return output
@@ -714,6 +754,13 @@ func generateDeviceConfig(app core.App, record *core.Record) ([]byte, string, er
 		fmt.Println(sshkeyconfigs)
 		if len(sshkeyconfigs) > 0 {
 			configfiles["etc/dropbear/authorized_keys"] = sshkeyconfigs
+		}
+	}
+	{
+		interfacesconfigs := generateInterfacesConfig(app, record)
+		fmt.Println(interfacesconfigs)
+		if len(interfacesconfigs) > 0 {
+			configfiles["etc/config/network"] = interfacesconfigs
 		}
 	}
 

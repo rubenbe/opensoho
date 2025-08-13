@@ -18,8 +18,8 @@ As OpenWisp mentioned:
 > However, OpenWISP may not be the best fit for very small networks (fewer than 20 devices), organizations lacking IT expertise, or enterprises seeking open-source alternatives solely for cost-saving purposes.
 
 <p align="center">
-  <a href="https://raw.githubusercontent.com/opensoho/assets/38f7e6d46408e0b3ff37929e34342d1f5b564e50/devices.png" target="_blank">
-    <img src="https://raw.githubusercontent.com/opensoho/assets/38f7e6d46408e0b3ff37929e34342d1f5b564e50/devices.png" width="80%" />
+  <a href="https://raw.githubusercontent.com/opensoho/assets/074a4c5c353fcbb295e2da84fb3490869c6c4de0/devices.png" target="_blank">
+    <img src="https://raw.githubusercontent.com/opensoho/assets/074a4c5c353fcbb295e2da84fb3490869c6c4de0/devices.png" width="80%" />
   </a>
 </p>
 

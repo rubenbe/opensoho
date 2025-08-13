@@ -877,7 +877,7 @@ func bindAppHooks(app core.App, shared_secret string) {
 				record.Set("model", data.Model)
 				record.Set("os", data.Os)
 				record.Set("system", data.System)
-				record.Set("last_ip_address", e.RealIP())
+				record.Set("ip_address", e.RealIP())
 				record.Set("health_status", "unknown")
 				record.Set("config_status", "applied")
 				record.Set("enabled", "true")

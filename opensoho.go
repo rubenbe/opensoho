@@ -565,6 +565,35 @@ func isUnHealthyQuorumReached(unhealthyfullset map[string]struct{}, subset []str
 	return false
 }
 
+func generateInterfacesConfig(app core.App) string {
+	// Select all inferfaces that are OpenSOHO maintained
+	vlans, err := app.FindRecordsByFilter(
+		"vlan",                           // collection
+		"name != 'lan' && name != 'wan'", // filter
+		"created",                        // sort
+		0,                                // limit
+		0,                                // offset
+	)
+
+	if err != nil {
+		fmt.Println(err)
+		return ""
+	}
+	fmt.Println(vlans)
+	output := ""
+	for _, vlan := range vlans {
+		output += fmt.Sprintf(`
+config interface '%[1]s'
+        option device 'br-lan.%[2]d'
+        option proto 'static'
+        option ipaddr '%[3]s'
+        option netmask '%[4]s'
+`, vlan.GetString("name"), vlan.GetInt("vlan_id"), vlan.GetString("ip_range"), vlan.GetString("netmask"))
+	}
+
+	return output
+}
+
 func generateMacClientSteeringConfig(app core.App, wifi *core.Record, device *core.Record) (string, error) {
 	expandedclients, err := generateClientSteeringConfigInt(app, wifi, device, "mac blacklist")
 	if err != nil {

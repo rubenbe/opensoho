@@ -120,6 +120,50 @@ func TestRegisterEndpoint(t *testing.T) {
 	}
 }
 
+func TestInterfacesConfig(t *testing.T) {
+	app, _ := tests.NewTestApp()
+	vlancollection := setupVlanCollection(t, app)
+	wan := core.NewRecord(vlancollection)
+	wan.Set("name", "wan")
+	err := app.Save(wan)
+	assert.Equal(t, nil, err)
+
+	lan := core.NewRecord(vlancollection)
+	lan.Set("name", "lan")
+	err = app.Save(lan)
+	assert.Equal(t, nil, err)
+
+	guest := core.NewRecord(vlancollection)
+	guest.Set("name", "guest")
+	guest.Set("vlan_id", "7")
+	guest.Set("ip_range", "10.11.12.13")
+	guest.Set("netmask", "255.255.128.0")
+	err = app.Save(guest)
+	assert.Equal(t, nil, err)
+
+	iot := core.NewRecord(vlancollection)
+	iot.Set("name", "iot")
+	iot.Set("vlan_id", "123")
+	iot.Set("ip_range", "192.168.1.1")
+	iot.Set("netmask", "255.255.255.00")
+	err = app.Save(iot)
+	assert.Equal(t, nil, err)
+
+	assert.Equal(t, `
+config interface 'guest'
+        option device 'br-lan.7'
+        option proto 'static'
+        option ipaddr '10.11.12.13'
+        option netmask '255.255.128.0'
+
+config interface 'iot'
+        option device 'br-lan.123'
+        option proto 'static'
+        option ipaddr '192.168.1.1'
+        option netmask '255.255.255.00'
+`, generateInterfacesConfig(app))
+}
+
 func TestUpdateMonitoring(t *testing.T) {
 	json := `
 {
@@ -794,6 +838,29 @@ func setupVlanCollection(t *testing.T, app core.App) *core.Collection {
 	vlancollection.Fields.Add(&core.TextField{
 		Name:     "name",
 		Required: true,
+	})
+	x := 1.0
+	y := 4096.0
+	vlancollection.Fields.Add(&core.NumberField{
+		Name:     "vlan_id",
+		Required: false,
+		Min:      &x,
+		Max:      &y,
+		OnlyInt:  true,
+	})
+	vlancollection.Fields.Add(&core.TextField{
+		Name:     "ip_range",
+		Pattern:  "^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$",
+		Required: false,
+	})
+	vlancollection.Fields.Add(&core.TextField{
+		Name:     "netmask",
+		Pattern:  "^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$",
+		Required: false,
+	})
+	vlancollection.Fields.Add(&core.AutodateField{
+		Name:     "created",
+		OnCreate: true,
 	})
 	err := app.Save(vlancollection)
 	assert.Equal(t, err, nil)

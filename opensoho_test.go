@@ -1015,6 +1015,8 @@ config wifi-iface 'wifi_3_radio4'
 	// and with 80211v enabled
 	w.Set("ieee80211v", true)
 	err = app.Save(w)
+	// Verify the encryption defaults to WPA2
+	w.Set("encryption", "")
 
 	// Generate a config
 	wificonfig = generateWifiConfig(w, 3, 4, app, d)
@@ -1025,7 +1027,7 @@ config wifi-iface 'wifi_3_radio4'
         option disabled '0'
         option mode 'ap'
         option ssid 'the_ssid'
-        option encryption 'the_encryption'
+        option encryption 'psk2+ccmp'
         option key 'the_key'
         option ieee80211r '0'
         option ieee80211v '1'
@@ -1047,7 +1049,7 @@ config wifi-iface 'wifi_3_radio4'
         option disabled '0'
         option mode 'ap'
         option ssid 'the_ssid'
-        option encryption 'the_encryption'
+        option encryption 'psk2+ccmp'
         option key 'the_key'
         option ieee80211r '0'
         option ieee80211v '1'
@@ -1074,7 +1076,7 @@ config wifi-iface 'wifi_3_radio4'
         option disabled '0'
         option mode 'ap'
         option ssid 'the_ssid'
-        option encryption 'the_encryption'
+        option encryption 'psk2+ccmp'
         option key 'the_key'
         option ieee80211r '0'
         option ieee80211v '1'

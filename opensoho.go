@@ -422,6 +422,10 @@ func generateWifiConfig(wifi *core.Record, wifiid int, radio uint, app core.App,
 	if err != nil {
 		fmt.Println(err)
 	}
+	encryption := wifi.GetString("encryption")
+	if len(encryption) == 0 {
+		encryption = "psk2+ccmp"
+	}
 	return fmt.Sprintf(`
 config wifi-iface 'wifi_%[6]d_radio%[3]d'
         option device 'radio%[3]d'
@@ -436,7 +440,7 @@ config wifi-iface 'wifi_%[6]d_radio%[3]d'
         option bss_transition '%[10]d'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
-%[9]s`, ssid, wifi.GetString("id"), radio, key, wifi.GetString("encryption"), wifiid, wifi.GetInt("ieee80211r"), getVlan(wifi, app), steeringconfig, wifi.GetInt("ieee80211v"))
+%[9]s`, ssid, wifi.GetString("id"), radio, key, encryption, wifiid, wifi.GetInt("ieee80211r"), getVlan(wifi, app), steeringconfig, wifi.GetInt("ieee80211v"))
 }
 
 func createConfigTar(files map[string]string) ([]byte, string, error) {

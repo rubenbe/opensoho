@@ -163,11 +163,37 @@ func TestInterfacesConfig(t *testing.T) {
 	assert.Equal(t, nil, err)
 
 	assert.Equal(t, `
+config device 'guest_dev'
+        option type 'bridge'
+        option name 'br-guest'
+
+config bridge-vlan
+        option device 'br-guest'
+        option vlan '7'
+	list ports 'eth0:t'
+        list ports 'lan1:t'
+        list ports 'lan2:t'
+        list ports 'lan3:t'
+        list ports 'lan4:t'
+
 config interface 'guest'
         option device 'br-lan.7'
         option proto 'static'
         option ipaddr '10.11.12.8'
         option netmask '255.255.128.0'
+
+config device 'iot_dev'
+        option type 'bridge'
+        option name 'br-iot'
+
+config bridge-vlan
+        option device 'br-iot'
+        option vlan '123'
+	list ports 'eth0:t'
+        list ports 'lan1:t'
+        list ports 'lan2:t'
+        list ports 'lan3:t'
+        list ports 'lan4:t'
 
 config interface 'iot'
         option device 'br-lan.123'

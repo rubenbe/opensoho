@@ -627,6 +627,19 @@ func generateInterfacesConfig(app core.App, device *core.Record) string {
 			continue
 		}
 		output += fmt.Sprintf(`
+config device '%[1]s_dev'
+        option type 'bridge'
+        option name 'br-%[1]s'
+
+config bridge-vlan
+        option device 'br-%[1]s'
+        option vlan '%[2]d'
+	list ports 'eth0:t'
+        list ports 'lan1:t'
+        list ports 'lan2:t'
+        list ports 'lan3:t'
+        list ports 'lan4:t'
+
 config interface '%[1]s'
         option device 'br-lan.%[2]d'
         option proto 'static'

@@ -1243,10 +1243,13 @@ func main() {
 			e.Router.GET("/_/user.css", func(e *core.RequestEvent) error {
 				e.Response.Header().Set("Content-Type", "text/css; charset=utf-8")
 				return e.String(200, `
-td.col-field-health_status span.data--health_status--healthy {
+td.col-field-health_status span.data--health_status--healthy,
+td.col-field-config_status span.data--config_status--applied {
 	background: var(--successAltColor);
 }
-td.col-field-health_status span.data--health_status--unhealthy {
+td.col-field-health_status span.data--health_status--unhealthy,
+td.col-field-config_status span.data--config_status--error{
+
 	background: var(--dangerAltColor);
 }
 /* Hide the API Preview button */

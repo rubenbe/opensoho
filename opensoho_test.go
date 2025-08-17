@@ -137,7 +137,7 @@ func TestInterfacesConfigDefaultNoVLAN(t *testing.T) {
 	assert.Equal(t, nil, err)
 	assert.Equal(t, `
 config interface 'lan'
-	option device 'br-lan'
+        option device 'br-lan'
 `, generateInterfacesConfig(app, d1))
 }
 
@@ -160,7 +160,7 @@ func TestInterfacesConfigDefaultVLAN(t *testing.T) {
 	assert.Equal(t, nil, err)
 	assert.Equal(t, `
 config interface 'lan'
-	option device 'br-lan.1'
+        option device 'br-lan.1'
 
 config bridge-vlan 'bridge_vlan_1'
 	option device 'br-lan'
@@ -185,7 +185,6 @@ config bridge-vlan 'bridge_vlan_1'
 `, generateInterfacesConfig(app, d1))
 }
 
-/*
 func TestInterfacesConfig(t *testing.T) {
 	app, _ := tests.NewTestApp()
 
@@ -228,46 +227,97 @@ func TestInterfacesConfig(t *testing.T) {
 	err = app.Save(iot)
 	assert.Equal(t, nil, err)
 
+	// VLANs not enabled
 	assert.Equal(t, `
-config device 'guest_dev'
-        option type 'bridge'
-        option name 'br-guest'
+config interface 'lan'
+        option device 'br-lan'
+`, generateInterfacesConfig(app, d1))
 
-config bridge-vlan 'bridge_guest'
-        option device 'br-guest'
+	// VLANs enabled
+	d1.Set("apply", []string{"vlan"})
+	err = app.Save(d1)
+	assert.Equal(t, nil, err)
+
+	assert.Equal(t, `
+config interface 'lan'
+        option device 'br-lan.1'
+
+config bridge-vlan 'bridge_vlan_1'
+	option device 'br-lan'
+	option vlan '1'
+        list ports 'eth0:u*'
+        list ports 'lan1:u*'
+        list ports 'lan2:u*'
+        list ports 'lan3:u*'
+        list ports 'lan4:u*'
+        list ports 'lan5:u*'
+        list ports 'lan6:u*'
+        list ports 'lan7:u*'
+        list ports 'lan8:u*'
+        list ports 'lan9:u*'
+        list ports 'lan10:u*'
+        list ports 'lan11:u*'
+        list ports 'lan12:u*'
+        list ports 'lan13:u*'
+        list ports 'lan14:u*'
+        list ports 'lan15:u*'
+        list ports 'lan16:u*'
+
+config bridge-vlan 'bridge_vlan_7'
+        option device 'br-lan'
         option vlan '7'
-	list ports 'eth0:t'
+        list ports 'eth0:t'
         list ports 'lan1:t'
         list ports 'lan2:t'
         list ports 'lan3:t'
         list ports 'lan4:t'
+        list ports 'lan5:t'
+        list ports 'lan6:t'
+        list ports 'lan7:t'
+        list ports 'lan8:t'
+        list ports 'lan9:t'
+        list ports 'lan10:t'
+        list ports 'lan11:t'
+        list ports 'lan12:t'
+        list ports 'lan13:t'
+        list ports 'lan14:t'
+        list ports 'lan15:t'
+        list ports 'lan16:t'
 
 config interface 'guest'
-        option device 'br-guest.7'
+        option device 'br-lan.7'
         option proto 'static'
         option ipaddr '10.11.12.8'
         option netmask '255.255.128.0'
 
-config device 'iot_dev'
-        option type 'bridge'
-        option name 'br-iot'
-
-config bridge-vlan 'bridge_iot'
-        option device 'br-iot'
+config bridge-vlan 'bridge_vlan_123'
+        option device 'br-lan'
         option vlan '123'
-	list ports 'eth0:t'
+        list ports 'eth0:t'
         list ports 'lan1:t'
         list ports 'lan2:t'
         list ports 'lan3:t'
         list ports 'lan4:t'
+        list ports 'lan5:t'
+        list ports 'lan6:t'
+        list ports 'lan7:t'
+        list ports 'lan8:t'
+        list ports 'lan9:t'
+        list ports 'lan10:t'
+        list ports 'lan11:t'
+        list ports 'lan12:t'
+        list ports 'lan13:t'
+        list ports 'lan14:t'
+        list ports 'lan15:t'
+        list ports 'lan16:t'
 
 config interface 'iot'
-        option device 'br-iot.123'
+        option device 'br-lan.123'
         option proto 'static'
         option ipaddr '192.168.1.8'
         option netmask '255.255.255.00'
 `, generateInterfacesConfig(app, d1))
-}*/
+}
 
 func TestUpdateMonitoring(t *testing.T) {
 	json := `

@@ -617,7 +617,7 @@ func generateInterfacesConfig(app core.App, device *core.Record) string {
 	if false == IsFeatureApplied(device, "vlan") {
 		return `
 config interface 'lan'
-	option device 'br-lan'
+        option device 'br-lan'
 `
 	}
 
@@ -637,7 +637,7 @@ config interface 'lan'
 	fmt.Println(vlans)
 	output := `
 config interface 'lan'
-	option device 'br-lan.1'
+        option device 'br-lan.1'
 
 config bridge-vlan 'bridge_vlan_1'
 	option device 'br-lan'
@@ -660,57 +660,42 @@ config bridge-vlan 'bridge_vlan_1'
         list ports 'lan15:u*'
         list ports 'lan16:u*'
 `
-	/*
-	   	for _, vlan := range vlans {
-	   		new_ip, err := replaceLastOctet(vlan.GetString("subnet"), device.GetString("ip_address"))
-	   		if err != nil {
-	   			fmt.Println(err)
-	   			//return ""
-	   			continue
-	   		}
-	   		output += fmt.Sprintf(`
-	   config bridge-vlan
-	          option device 'br-lan'
-	          option vlan '1'
-	          list ports 'eth0:u*'
-	          list ports 'lan1:u*'
-	          list ports 'lan2:u*'
-	          list ports 'lan3:u*'
-	          list ports 'lan4:u*'
-	          list ports 'lan5:u*'
-	          list ports 'lan6:u*'
-	          list ports 'lan7:u*'
-	          list ports 'lan8:u*'
-	          list ports 'lan9:u*'
-	          list ports 'lan10:u*'
-	          list ports 'lan11:u*'
-	          list ports 'lan12:u*'
-	          list ports 'lan13:u*'
-	          list ports 'lan14:u*'
-	          list ports 'lan15:u*'
-	          list ports 'lan16:u*'
+	for _, vlan := range vlans {
+		new_ip, err := replaceLastOctet(vlan.GetString("subnet"), device.GetString("ip_address"))
+		if err != nil {
+			fmt.Println(err)
+			//return ""
+			continue
+		}
+		output += fmt.Sprintf(`
+config bridge-vlan 'bridge_vlan_%[2]d'
+        option device 'br-lan'
+        option vlan '%[2]d'
+        list ports 'eth0:t'
+        list ports 'lan1:t'
+        list ports 'lan2:t'
+        list ports 'lan3:t'
+        list ports 'lan4:t'
+        list ports 'lan5:t'
+        list ports 'lan6:t'
+        list ports 'lan7:t'
+        list ports 'lan8:t'
+        list ports 'lan9:t'
+        list ports 'lan10:t'
+        list ports 'lan11:t'
+        list ports 'lan12:t'
+        list ports 'lan13:t'
+        list ports 'lan14:t'
+        list ports 'lan15:t'
+        list ports 'lan16:t'
 
-	   config device '%[1]s_dev'
-	           option type 'bridge'
-	           option name 'br-%[1]s'
-
-	   config bridge-vlan 'bridge_%[1]s'
-	           option device 'br-%[1]s'
-	           option vlan '%[2]d'
-	   	list ports 'eth0:t'
-	           list ports 'lan1:t'
-	           list ports 'lan2:t'
-	           list ports 'lan3:t'
-	           list ports 'lan4:t'
-
-	   config interface '%[1]s'
-	           option device 'br-%[1]s.%[2]d'
-	           option proto 'static'
-	           option ipaddr '%[3]s'
-	           option netmask '%[4]s'
-	   `, vlan.GetString("name"), vlan.GetInt("vlan_id"), new_ip, vlan.GetString("netmask"))
-	   	}
-	*/
+config interface '%[1]s'
+        option device 'br-lan.%[2]d'
+        option proto 'static'
+        option ipaddr '%[3]s'
+        option netmask '%[4]s'
+`, vlan.GetString("name"), vlan.GetInt("vlan_id"), new_ip, vlan.GetString("netmask"))
+	}
 
 	return output
 }

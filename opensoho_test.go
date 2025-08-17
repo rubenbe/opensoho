@@ -120,6 +120,72 @@ func TestRegisterEndpoint(t *testing.T) {
 	}
 }
 
+// Test that the default VLAN is present
+func TestInterfacesConfigDefaultNoVLAN(t *testing.T) {
+	app, _ := tests.NewTestApp()
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+
+	// Add a device
+	d1 := core.NewRecord(devicecollection)
+	d1.Id = "somethindevice1"
+	d1.Set("name", "the_device1")
+	d1.Set("health_status", "healthy")
+	d1.Set("ip_address", "8.8.8.8")
+	err := app.Save(d1)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, `
+config interface 'lan'
+	option device 'br-lan'
+`, generateInterfacesConfig(app, d1))
+}
+
+// Test that the default VLAN is present
+func TestInterfacesConfigDefaultVLAN(t *testing.T) {
+	app, _ := tests.NewTestApp()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+
+	// Add a device
+	d1 := core.NewRecord(devicecollection)
+	d1.Id = "somethindevice1"
+	d1.Set("name", "the_device1")
+	d1.Set("health_status", "healthy")
+	d1.Set("apply", []string{"vlan"})
+	d1.Set("ip_address", "8.8.8.8")
+	err := app.Save(d1)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, `
+config interface 'lan'
+	option device 'br-lan.1'
+
+config bridge-vlan 'bridge_vlan_1'
+	option device 'br-lan'
+	option vlan '1'
+        list ports 'eth0:u*'
+        list ports 'lan1:u*'
+        list ports 'lan2:u*'
+        list ports 'lan3:u*'
+        list ports 'lan4:u*'
+        list ports 'lan5:u*'
+        list ports 'lan6:u*'
+        list ports 'lan7:u*'
+        list ports 'lan8:u*'
+        list ports 'lan9:u*'
+        list ports 'lan10:u*'
+        list ports 'lan11:u*'
+        list ports 'lan12:u*'
+        list ports 'lan13:u*'
+        list ports 'lan14:u*'
+        list ports 'lan15:u*'
+        list ports 'lan16:u*'
+`, generateInterfacesConfig(app, d1))
+}
+
+/*
 func TestInterfacesConfig(t *testing.T) {
 	app, _ := tests.NewTestApp()
 
@@ -167,7 +233,7 @@ config device 'guest_dev'
         option type 'bridge'
         option name 'br-guest'
 
-config bridge-vlan
+config bridge-vlan 'bridge_guest'
         option device 'br-guest'
         option vlan '7'
 	list ports 'eth0:t'
@@ -177,7 +243,7 @@ config bridge-vlan
         list ports 'lan4:t'
 
 config interface 'guest'
-        option device 'br-lan.7'
+        option device 'br-guest.7'
         option proto 'static'
         option ipaddr '10.11.12.8'
         option netmask '255.255.128.0'
@@ -186,7 +252,7 @@ config device 'iot_dev'
         option type 'bridge'
         option name 'br-iot'
 
-config bridge-vlan
+config bridge-vlan 'bridge_iot'
         option device 'br-iot'
         option vlan '123'
 	list ports 'eth0:t'
@@ -196,12 +262,12 @@ config bridge-vlan
         list ports 'lan4:t'
 
 config interface 'iot'
-        option device 'br-lan.123'
+        option device 'br-iot.123'
         option proto 'static'
         option ipaddr '192.168.1.8'
         option netmask '255.255.255.00'
 `, generateInterfacesConfig(app, d1))
-}
+}*/
 
 func TestUpdateMonitoring(t *testing.T) {
 	json := `
@@ -790,6 +856,12 @@ func setupDeviceCollection(t *testing.T, app core.App, wificollection *core.Coll
 	devicecollection.Fields.Add(&core.TextField{
 		Name:     "ip_address",
 		Required: false, // True in the real collection
+	})
+	devicecollection.Fields.Add(&core.SelectField{
+		Name:      "apply",
+		MaxSelect: 1,
+		Required:  false,
+		Values:    []string{"vlan"},
 	})
 	devicecollection.Fields.Add(&core.RelationField{
 		Name:         "wifis",

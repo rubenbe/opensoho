@@ -116,7 +116,7 @@
         }
     }
 
-    export async function load(page = 1, breakTasks = true) {
+    export async function load(page = 1, breakTasks = true, resetVerticalScroll=true) {
         if (!collection?.id) {
             return;
         }
@@ -170,7 +170,7 @@
             })
             .then(async (result) => {
                 if (page <= 1) {
-                    clearList();
+                    clearList(resetVerticalScroll);
                 }
 
                 isLoading = false;
@@ -218,8 +218,10 @@
             });
     }
 
-    function clearList() {
-        scrollWrapper?.resetVerticalScroll();
+    function clearList(resetVerticalScroll = true) {
+        if(resetVerticalScroll == true){
+            scrollWrapper?.resetVerticalScroll();
+	}
         records = [];
         currentPage = 1;
         lastTotal = 0;

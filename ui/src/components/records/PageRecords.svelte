@@ -101,7 +101,7 @@
 
     function reloadView() {
         console.log('Reloading view at', new Date().toLocaleTimeString());
-        recordsList?.load();
+        recordsList?.load(1, true, false);
         recordsCount?.reload();
     }
 

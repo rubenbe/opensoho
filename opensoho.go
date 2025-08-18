@@ -452,8 +452,15 @@ func createConfigTar(files map[string]string) ([]byte, string, error) {
 	tarWriter := tar.NewWriter(gzWriter)
 	defer tarWriter.Close()
 
-	for filePath, content := range files {
-		fileBytes := []byte(content)
+	var filenames []string
+	for filename := range files {
+		filenames = append(filenames, filename)
+	}
+
+	sort.Strings(filenames)
+
+	for _, filePath := range filenames {
+		fileBytes := []byte(files[filePath])
 
 		header := &tar.Header{
 			Name: filePath,
@@ -831,6 +838,7 @@ func generateDeviceConfig(app core.App, record *core.Record) ([]byte, string, er
 	}
 
 	blob, checksum, err := createConfigTar(configfiles)
+
 	if err != nil {
 	}
 	return blob, checksum, err
@@ -1098,6 +1106,7 @@ is-new: %d
 
 func saveDeviceConfig(app core.App, record *core.Record, data []byte, checksum string) error {
 	filename := checksum + ".tar.gz"
+	//os.WriteFile(record.GetString("name")+"_"+checksum+".tar.gz", data, 0644)
 	if strings.SplitN(record.GetString("config"), "_", 2)[0] != checksum {
 		f, err := filesystem.NewFileFromBytes(data, filename)
 		if err != nil {

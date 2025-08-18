@@ -879,6 +879,7 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 					cliententry.Set("signal", client.Signal)
 					cliententry.Set("ssid", iface.Wireless.SSID)
 					cliententry.Set("frequency", iface.Wireless.Frequency)
+					cliententry.Set("channel", iface.Wireless.Channel)
 					cliententry.Set("band", frequencyToBand(iface.Wireless.Frequency))
 					cliententry.Set("device", device.GetString("id"))
 					err = app.Save(cliententry)

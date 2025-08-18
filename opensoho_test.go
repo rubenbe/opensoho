@@ -453,6 +453,7 @@ func TestUpdateMonitoring(t *testing.T) {
 	assert.Equal(t, "phy1-ap0", client.GetString("connected_to_hostname"))
 	assert.Equal(t, -82, client.GetInt("signal"))
 	assert.Equal(t, 2462, client.GetInt("frequency"))
+	assert.Equal(t, 11, client.GetInt("channel"))
 	assert.NotEqual(t, "", client.GetString("device"))
 
 	// Verify the radio data
@@ -986,6 +987,10 @@ func setupClientsCollection(t *testing.T, app core.App) *core.Collection {
 	})
 	clientcollection.Fields.Add(&core.NumberField{
 		Name:     "frequency",
+		Required: false,
+	})
+	clientcollection.Fields.Add(&core.NumberField{
+		Name:     "channel",
 		Required: false,
 	})
 	clientcollection.Fields.Add(&core.TextField{

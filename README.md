@@ -48,7 +48,12 @@ OpenSOHO can now be accessed via http://ipaddress:8090/_/
 openwisp-config
 openwisp-monitoring
 luci-app-openwisp
-wpad-mbedtls (if you want to use 802.11v client steering, reboot afterwards!)
+```
+if you want to use 802.11v client steering, you will need the full wpad-mbedtls. A Reboot afterwards is required!
+```
+opkg remove wpad-basic-mbedtls && \
+opkg install wpad-mbedtls && \
+reboot
 ```
 
 When installing wpad-mbedtls, rebooting is required to switch to the new wpad binary. If not you'll get an error like `daemon.notice netifd: radio1 (28210): WARNING (wireless_add_process): executable path /usr/sbin/wpad does not match process 1842 path (/usr/sbin/wpad (deleted))`

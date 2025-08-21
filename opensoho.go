@@ -862,7 +862,9 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 		return e.BadRequestError("Failed to parse json", err), radios
 	}
 	if payload.Type != "DeviceMonitoring" {
-		return e.BadRequestError("Invalid type in JSON", ""), radios
+		errormsg := fmt.Sprintf(`Invalid type '%s' in JSON`, payload.Type)
+		fmt.Println(errormsg)
+		return e.BadRequestError(errormsg, ""), radios
 	}
 
 	for _, iface := range payload.Interfaces {

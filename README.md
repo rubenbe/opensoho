@@ -38,7 +38,13 @@ It needs to match what you will configure in Luci in the next steps.
 ```
 OPENSOHO_SHARED_SECRET=randompassphrase ./opensoho serve --http 0.0.0.0:8090
 ```
-OpenSOHO can now be accessed via http://ipaddress:8090/_/
+OpenSOHO will output a URL on the commandline which will allow you to create the admin account.
+Simply copy paste it into your browser.
+
+Alternatively you can create a superuser in via the commandline:
+```
+./opensoho superuser upsert EMAIL PASS
+```
 
 ## Configure the OpenWRT devices
 

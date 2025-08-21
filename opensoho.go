@@ -938,6 +938,35 @@ func storeDHCPLeases(app core.App, leaseslist []DHCPLease, expirytime types.Date
 	//return leasesmap
 }
 
+func handleDeviceStatusUpdate(e *core.RequestEvent) error {
+	e.Response.Header().Set("X-Openwisp-Controller", "true")
+	data := struct {
+		// unexported to prevent binding
+		somethingPrivate string
+
+		Status      string `form:"status"`
+		Key         string `form:"key"`
+		ErrorReason string `form:"error_reason"`
+	}{}
+	if err := e.BindBody(&data); err != nil {
+		return e.BadRequestError("Missing fields", err)
+	}
+	record, err := getDeviceRecord(e.App, data.Key)
+	if err != nil {
+		fmt.Println(err)
+		return e.ForbiddenError("Not allowed", err)
+	}
+	record.Set("config_status", data.Status)
+	record.Set("error_reason", data.ErrorReason)
+	err = e.App.Save(record)
+	if err != nil {
+		return e.InternalServerError("Status update failed", err)
+	}
+	response := fmt.Sprintf("report-result: success\ncurrent-status: %s\n", data.Status)
+
+	return e.Blob(200, "text/plain", []byte(response))
+}
+
 func bindAppHooks(app core.App, shared_secret string) {
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
 		se.Router.POST("/controller/register/", func(e *core.RequestEvent) error {
@@ -1019,32 +1048,7 @@ is-new: %d
 
 			return e.Blob(201, "text/plain", []byte(response))
 		})
-		se.Router.POST("/controller/report-status/{device_uuid}/", func(e *core.RequestEvent) error {
-			e.Response.Header().Set("X-Openwisp-Controller", "true")
-			data := struct {
-				// unexported to prevent binding
-				somethingPrivate string
-
-				Status string `form:"status"`
-				Key    string `form:"key"`
-			}{}
-			if err := e.BindBody(&data); err != nil {
-				return e.BadRequestError("Missing fields", err)
-			}
-			record, err := getDeviceRecord(app, data.Key)
-			if err != nil {
-				return e.ForbiddenError("Not allowed", err)
-			}
-			record.Set("config_status", data.Status)
-			err = app.Save(record)
-			if err != nil {
-				return e.InternalServerError("Status update failed", err)
-			}
-			response := fmt.Sprintf("report-result: success\ncurrent-status: %s\n", data.Status)
-			fmt.Println(response)
-
-			return e.Blob(200, "text/plain", []byte(response))
-		})
+		se.Router.POST("/controller/report-status/{device_uuid}/", handleDeviceStatusUpdate)
 
 		se.Router.GET("/controller/checksum/{device_uuid}/", func(e *core.RequestEvent) error {
 			e.Response.Header().Set("X-Openwisp-Controller", "true")

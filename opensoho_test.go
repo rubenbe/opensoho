@@ -35,6 +35,93 @@ func generateToken(collectionNameOrId string, email string) (string, error) {
 	return record.NewAuthToken()
 }
 
+func TestReportStatusEndpoint(t *testing.T) {
+	app, _ := tests.NewTestApp()
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+
+	// Add a device
+	d1 := core.NewRecord(devicecollection)
+	d1.Id = "a3qnbxklglw121g"
+	d1.Set("name", "the_device1")
+	d1.Set("health_status", "healthy")
+	d1.Set("config_status", "healthy")
+	d1.Set("key", "aaaabbbbccccddddaaaabbbbccccdddd")
+	err := app.Save(d1)
+	assert.Equal(t, nil, err)
+	{
+
+		// Setup fake report-status event
+		event := core.RequestEvent{}
+		reqbody := strings.NewReader(url.Values{
+			"status":       {"error"},
+			"key":          {"aaaabbbbccccddddaaaabbbbccccdddd"},
+			"error_reason": {"something"},
+		}.Encode())
+		event.Request, err = http.NewRequest("POST", "/controller/report-status/somethindevice1/", reqbody)
+
+		event.Request.Header.Set("content-type", "application/x-www-form-urlencoded")
+		event.App = app
+		rec := httptest.NewRecorder()
+		event.Response = rec
+
+		err = handleDeviceStatusUpdate(&event)
+		assert.Equal(t, nil, err)
+
+		// Check the response
+		httpResponse := rec.Result()
+
+		defer httpResponse.Body.Close()
+		body, err := io.ReadAll(httpResponse.Body)
+		assert.Equal(t, nil, err)
+		assert.Equal(t, 200, httpResponse.StatusCode)
+		assert.Equal(t, "report-result: success\ncurrent-status: error\n", string(body))
+	}
+
+	// Check the updated record
+	record, err := app.FindRecordById("devices", d1.Id)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, "a3qnbxklglw121g", record.Id)
+	assert.Equal(t, "error", record.GetString("config_status"))
+	assert.Equal(t, "something", record.GetString("error_reason"))
+
+	// Second step is to reset it to healthy
+	{
+		event := core.RequestEvent{}
+		reqbody := strings.NewReader(url.Values{
+			"status": {"healthy"},
+			"key":    {"aaaabbbbccccddddaaaabbbbccccdddd"},
+		}.Encode())
+		event.Request, err = http.NewRequest("POST", "/controller/report-status/somethindevice1/", reqbody)
+
+		event.Request.Header.Set("content-type", "application/x-www-form-urlencoded")
+		event.App = app
+		rec := httptest.NewRecorder()
+		event.Response = rec
+
+		err = handleDeviceStatusUpdate(&event)
+		assert.Equal(t, nil, err)
+
+		// Check the response
+		httpResponse := rec.Result()
+
+		defer httpResponse.Body.Close()
+		body, err := io.ReadAll(httpResponse.Body)
+		assert.Equal(t, nil, err)
+		assert.Equal(t, 200, httpResponse.StatusCode)
+		assert.Equal(t, "report-result: success\ncurrent-status: healthy\n", string(body))
+	}
+
+	// Check the updated record
+	// Error reason should be reset and status back to healthy
+	record, err = app.FindRecordById("devices", d1.Id)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, "a3qnbxklglw121g", record.Id)
+	assert.Equal(t, "healthy", record.GetString("config_status"))
+	assert.Equal(t, "", record.GetString("error_reason"))
+}
+
 func TestRegisterEndpoint(t *testing.T) {
 	// setup the test ApiScenario app instance
 	setupTestApp := func(t testing.TB) *tests.TestApp {
@@ -926,6 +1013,18 @@ func setupDeviceCollection(t *testing.T, app core.App, wificollection *core.Coll
 		Protected: true,
 		MimeTypes: []string{"application/x-tar"},
 		Hidden:    true,
+	})
+	devicecollection.Fields.Add(&core.TextField{
+		Name:     "config_status",
+		Required: false,
+	})
+	devicecollection.Fields.Add(&core.TextField{
+		Name:     "error_reason",
+		Required: false,
+	})
+	devicecollection.Fields.Add(&core.TextField{
+		Name:     "key",
+		Required: false,
 	})
 	err := app.Save(devicecollection)
 	assert.Equal(t, err, nil)

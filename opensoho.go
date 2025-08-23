@@ -1121,6 +1121,7 @@ func saveDeviceConfig(app core.App, record *core.Record, data []byte, checksum s
 
 		fmt.Println(filename)
 		record.Set("config", f)
+		record.Set("config_status", "modified")
 		err = app.Save(record)
 		if err != nil {
 			return err
@@ -1354,6 +1355,13 @@ table.table > thead > tr > th > div.col-header-content > span.txt
 	app.OnRecordValidate("radios").BindFunc(func(e *core.RecordEvent) error {
 		return validateRadio(e.Record)
 	})
+	app.OnRecordCreateExecute("device").BindFunc(func(e *core.RecordEvent) error {
+		fmt.Println()
+		if err := updateAndStoreDeviceConfig(e.App, e.Record); err != nil {
+			return err
+		}
+		return e.Next()
+	})
 
 	app.Cron().MustAdd("updateDeviceHealth", "* * * * *", func() {
 		fmt.Println("Update Device health")
@@ -1363,6 +1371,15 @@ table.table > thead > tr > th > div.col-header-content > span.txt
 	if err := app.Start(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func updateAndStoreDeviceConfig(app core.App, record *core.Record) error {
+	data, checksum, err := generateDeviceConfig(app, record)
+	if err != nil {
+		return err
+	}
+	saveDeviceConfig(app, record, data, checksum)
+	return nil
 }
 
 // the default pb_public dir location is relative to the executable

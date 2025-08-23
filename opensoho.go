@@ -830,11 +830,11 @@ func generateDeviceConfig(app core.App, record *core.Record) ([]byte, string, er
 		}
 	}
 	{
-		interfacesconfigs := generateInterfacesConfig(app, record)
-		fmt.Println(interfacesconfigs)
-		if len(interfacesconfigs) > 0 {
-			configfiles["etc/config/network"] = interfacesconfigs
-		}
+		//interfacesconfigs := generateInterfacesConfig(app, record)
+		//fmt.Println(interfacesconfigs)
+		//if len(interfacesconfigs) > 0 {
+		//	configfiles["etc/config/network"] = interfacesconfigs
+		//}
 	}
 
 	blob, checksum, err := createConfigTar(configfiles)

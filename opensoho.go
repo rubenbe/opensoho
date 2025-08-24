@@ -974,86 +974,90 @@ func handleDeviceStatusUpdate(e *core.RequestEvent) error {
 	return e.Blob(200, "text/plain", []byte(response))
 }
 
-func bindAppHooks(app core.App, shared_secret string) {
-	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
-		se.Router.POST("/controller/register/", func(e *core.RequestEvent) error {
-			e.Response.Header().Set("X-Openwisp-Controller", "true")
-			data := struct {
-				// unexported to prevent binding
-				somethingPrivate string
+func handleDeviceRegistration(e *core.RequestEvent, shared_secret string, enableNewDevices bool) error {
+	e.Response.Header().Set("X-Openwisp-Controller", "true")
+	data := struct {
+		// unexported to prevent binding
+		somethingPrivate string
 
-				Backend    string `form:"backend"`
-				Key        string `form:"key"`
-				Secret     string `form:"secret"`
-				Name       string `form:"name"`
-				HardwareId string `form:"hardware_id"`
-				MacAddress string `form:"mac_address"`
-				Tags       string `form:"tags"`
-				Model      string `form:"model"`
-				Os         string `form:"os"`
-				System     string `form:"system"`
-			}{}
-			if err := e.BindBody(&data); err != nil {
-				fmt.Println(err)
-				return e.BadRequestError("Missing fields", err)
-			}
-			if data.Secret != shared_secret {
-				return e.ForbiddenError("Registration failed!", "unrecognized secret")
-			}
-			pbID, err := hexToPocketBaseID(data.Key)
-			fmt.Println(pbID)
-			record, err := app.FindRecordById("devices", pbID)
+		Backend    string `form:"backend"`
+		Key        string `form:"key"`
+		Secret     string `form:"secret"`
+		Name       string `form:"name"`
+		HardwareId string `form:"hardware_id"`
+		MacAddress string `form:"mac_address"`
+		Tags       string `form:"tags"`
+		Model      string `form:"model"`
+		Os         string `form:"os"`
+		System     string `form:"system"`
+	}{}
+	if err := e.BindBody(&data); err != nil {
+		fmt.Println(err)
+		return e.BadRequestError("Missing fields", err)
+	}
+	if data.Secret != shared_secret {
+		return e.ForbiddenError("Registration failed!", "unrecognized secret")
+	}
+	pbID, err := hexToPocketBaseID(data.Key)
+	if err != nil {
+		return e.BadRequestError("Bad key", err)
+	}
+	record, err := e.App.FindRecordById("devices", pbID)
 
-			isNew := 1
-			var device_uuid string = uuid.New().String()
-			fmt.Println(device_uuid)
+	isNew := 1
+	var device_uuid string = uuid.New().String()
 
-			if err == nil {
-				isNew = 0
-				fmt.Print("Hello back")
-				device_uuid = record.GetString("uuid")
-			} else {
-				// Register new device
-				if data.Backend != "netjsonconfig.OpenWrt" {
-					return e.BadRequestError("Registration failed!", "wrong backend")
-				}
-				fmt.Print("Hello")
-				collection, err := app.FindCollectionByNameOrId("devices")
+	if err == nil {
+		isNew = 0
+		fmt.Println("Hello back")
+		device_uuid = record.GetString("uuid")
+	} else {
+		// Register new device
+		if data.Backend != "netjsonconfig.OpenWrt" {
+			return e.BadRequestError("Registration failed!", "wrong backend")
+		}
+		fmt.Println("Hello")
+		collection, err := e.App.FindCollectionByNameOrId("devices")
 
-				if err != nil {
-					return e.BadRequestError("Registration failed!", err)
-				}
-				fmt.Print(pbID)
+		if err != nil {
+			return e.BadRequestError("Registration failed!", err)
+		}
 
-				record := core.NewRecord(collection)
-				record.Set("id", pbID)
-				record.Set("backend", data.Backend)
-				record.Set("key", data.Key)
-				record.Set("name", data.Name)
-				record.Set("hardware_id", data.HardwareId)
-				record.Set("mac_address", data.MacAddress)
-				record.Set("uuid", device_uuid)
-				record.Set("tags", data.Tags)
-				record.Set("model", data.Model)
-				record.Set("os", data.Os)
-				record.Set("system", data.System)
-				record.Set("ip_address", e.RealIP())
-				record.Set("health_status", "unknown")
-				record.Set("config_status", "applied")
-				record.Set("enabled", "true")
-				err = app.Save(record)
-				if err != nil {
-					return e.BadRequestError("Registration failed!", err)
-				}
-			}
-			response := fmt.Sprintf(`registration-result: %s
+		record := core.NewRecord(collection)
+		record.Set("id", pbID)
+		record.Set("backend", data.Backend)
+		record.Set("key", data.Key)
+		record.Set("name", data.Name)
+		record.Set("hardware_id", data.HardwareId)
+		record.Set("mac_address", data.MacAddress)
+		record.Set("uuid", device_uuid)
+		record.Set("tags", data.Tags)
+		record.Set("model", data.Model)
+		record.Set("os", data.Os)
+		record.Set("system", data.System)
+		record.Set("ip_address", e.RealIP())
+		record.Set("health_status", "unknown")
+		record.Set("config_status", "applied")
+		record.Set("enabled", enableNewDevices)
+		err = e.App.Save(record)
+		if err != nil {
+			return e.BadRequestError("Registration failed!", err)
+		}
+	}
+	response := fmt.Sprintf(`registration-result: %s
 uuid: %s
 key: %s
 hostname: %s
 is-new: %d
 `, "success", device_uuid, data.Key, data.Name, isNew)
 
-			return e.Blob(201, "text/plain", []byte(response))
+	return e.Blob(201, "text/plain", []byte(response))
+}
+
+func bindAppHooks(app core.App, shared_secret string, enableNewDevices bool) {
+	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
+		se.Router.POST("/controller/register/", func(e *core.RequestEvent) error {
+			return handleDeviceRegistration(e, shared_secret, enableNewDevices)
 		})
 		se.Router.POST("/controller/report-status/{device_uuid}/", handleDeviceStatusUpdate)
 
@@ -1150,7 +1154,8 @@ func main() {
 
 	app := pocketbase.New()
 
-	bindAppHooks(app, shared_secret)
+	enableNewDevices := false
+	bindAppHooks(app, shared_secret, enableNewDevices)
 
 	// Upstream commands
 	// ---------------------------------------------------------------
@@ -1219,6 +1224,13 @@ func main() {
 		"doEmbeddedFileExtraction",
 		true,
 		"Extracts the embedded migrations and frontend files",
+	)
+
+	app.RootCmd.PersistentFlags().BoolVar(
+		&enableNewDevices,
+		"enableNewDevices",
+		true,
+		"Enable newly discovered devices, set to false for \"monitoring mode\"",
 	)
 
 	var developerMode bool

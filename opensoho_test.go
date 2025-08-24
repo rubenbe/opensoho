@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -132,7 +133,7 @@ func TestRegisterEndpoint(t *testing.T) {
 		// no need to cleanup since scenario.Test() will do that for us
 		// defer testApp.Cleanup()
 
-		bindAppHooks(testApp, "testsecret")
+		bindAppHooks(testApp, "testsecret", true)
 
 		return testApp
 	}
@@ -204,6 +205,160 @@ func TestRegisterEndpoint(t *testing.T) {
 
 	for _, scenario := range scenarios {
 		scenario.Test(t)
+	}
+}
+
+func TestHandleDeviceRegistration(t *testing.T) {
+	app, _ := tests.NewTestApp()
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	_ = setupDeviceCollection(t, app, wificollection)
+
+	extracted_uuid := "dummy"
+
+	// First registration
+	{
+		pbID, err := hexToPocketBaseID("0123456789abcdef0123456789abcdef")
+		reqbody := strings.NewReader(url.Values{
+			"backend":     {"netjsonconfig.OpenWrt"},
+			"key":         {"0123456789abcdef0123456789abcdef"},
+			"secret":      {"testsecret"},
+			"name":        {""},
+			"hardware_id": {""},
+			"mac_address": {""},
+			"tags":        {""},
+			"model":       {""},
+			"os":          {""},
+			"system":      {""},
+		}.Encode())
+		event := core.RequestEvent{}
+		event.Request, err = http.NewRequest("POST", "/controller/register/", reqbody)
+		event.Request.Header.Set("content-type", "application/x-www-form-urlencoded")
+		event.App = app
+		rec := httptest.NewRecorder()
+		event.Response = rec
+
+		err = handleDeviceRegistration(&event, "testsecret", true)
+		assert.Equal(t, nil, err)
+
+		// Check the response
+		httpResponse := rec.Result()
+
+		defer httpResponse.Body.Close()
+		body, err := io.ReadAll(httpResponse.Body)
+		assert.Equal(t, nil, err)
+		bodystring := string(body)
+		re := regexp.MustCompile(`[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`)
+		extracted_uuid = re.FindString(bodystring)
+		normalized := re.ReplaceAllString(bodystring, "44ee4fee-1a20-470e-9044-ad9df88a0889")
+
+		assert.Equal(t, `registration-result: success
+uuid: 44ee4fee-1a20-470e-9044-ad9df88a0889
+key: 0123456789abcdef0123456789abcdef
+hostname: 
+is-new: 1
+`, normalized)
+		record, err := app.FindRecordById("devices", pbID)
+		assert.Equal(t, nil, err)
+		assert.Equal(t, true, record.GetBool("enabled"))
+	}
+
+	// Reregistration of the same device, ensure enabled flag is not overwritten
+	{
+		pbID, err := hexToPocketBaseID("0123456789abcdef0123456789abcdef")
+		assert.Equal(t, nil, err)
+		reqbody := strings.NewReader(url.Values{
+			"backend":     {"netjsonconfig.OpenWrt"},
+			"key":         {"0123456789abcdef0123456789abcdef"},
+			"secret":      {"testsecret"},
+			"name":        {""},
+			"hardware_id": {""},
+			"mac_address": {""},
+			"tags":        {""},
+			"model":       {""},
+			"os":          {""},
+			"system":      {""},
+		}.Encode())
+		event := core.RequestEvent{}
+		event.Request, err = http.NewRequest("POST", "/controller/register/", reqbody)
+		assert.Equal(t, nil, err)
+		event.Request.Header.Set("content-type", "application/x-www-form-urlencoded")
+		event.App = app
+		rec := httptest.NewRecorder()
+		event.Response = rec
+
+		err = handleDeviceRegistration(&event, "testsecret", false)
+		assert.Equal(t, nil, err)
+
+		// Check the response
+		httpResponse := rec.Result()
+
+		defer httpResponse.Body.Close()
+		body, err := io.ReadAll(httpResponse.Body)
+		assert.Equal(t, nil, err)
+		bodystring := string(body)
+		normalized := strings.ReplaceAll(bodystring, extracted_uuid, "44ee4fee-1a20-470e-9044-ad9df88a0889")
+
+		assert.Equal(t, `registration-result: success
+uuid: 44ee4fee-1a20-470e-9044-ad9df88a0889
+key: 0123456789abcdef0123456789abcdef
+hostname: 
+is-new: 0
+`, normalized)
+
+		record, err := app.FindRecordById("devices", pbID)
+		assert.Equal(t, nil, err)
+		assert.Equal(t, true, record.GetBool("enabled"))
+	}
+
+	// Registration of the another device, set enabled flag to false
+	{
+		pbID, err := hexToPocketBaseID("ffffffffffffffffffffffffffffffff")
+		reqbody := strings.NewReader(url.Values{
+			"backend":     {"netjsonconfig.OpenWrt"},
+			"key":         {"ffffffffffffffffffffffffffffffff"},
+			"secret":      {"testsecret"},
+			"name":        {""},
+			"hardware_id": {""},
+			"mac_address": {""},
+			"tags":        {""},
+			"model":       {""},
+			"os":          {""},
+			"system":      {""},
+		}.Encode())
+		event := core.RequestEvent{}
+		event.Request, err = http.NewRequest("POST", "/controller/register/", reqbody)
+		event.Request.Header.Set("content-type", "application/x-www-form-urlencoded")
+		event.App = app
+		rec := httptest.NewRecorder()
+		event.Response = rec
+
+		err = handleDeviceRegistration(&event, "testsecret", false)
+		assert.Equal(t, nil, err)
+
+		// Check the response
+		httpResponse := rec.Result()
+
+		defer httpResponse.Body.Close()
+		body, err := io.ReadAll(httpResponse.Body)
+		assert.Equal(t, nil, err)
+		bodystring := string(body)
+		// Replace the regex with a fixed one
+
+		re := regexp.MustCompile(`[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`)
+		new_extracted_uuid := re.FindString(bodystring)
+		assert.NotEqual(t, new_extracted_uuid, extracted_uuid)
+		normalized := strings.ReplaceAll(bodystring, new_extracted_uuid, "44ee4fee-1a20-470e-9044-ad9df88a0889")
+
+		assert.Equal(t, `registration-result: success
+uuid: 44ee4fee-1a20-470e-9044-ad9df88a0889
+key: ffffffffffffffffffffffffffffffff
+hostname: 
+is-new: 1
+`, normalized)
+		record, err := app.FindRecordById("devices", pbID)
+		assert.Equal(t, nil, err)
+		assert.Equal(t, false, record.GetBool("enabled"))
 	}
 }
 
@@ -1029,6 +1184,14 @@ func setupDeviceCollection(t *testing.T, app core.App, wificollection *core.Coll
 	})
 	devicecollection.Fields.Add(&core.TextField{
 		Name:     "key",
+		Required: false,
+	})
+	devicecollection.Fields.Add(&core.TextField{
+		Name:     "uuid",
+		Required: false,
+	})
+	devicecollection.Fields.Add(&core.BoolField{
+		Name:     "enabled",
 		Required: false,
 	})
 	err := app.Save(devicecollection)

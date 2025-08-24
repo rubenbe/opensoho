@@ -402,6 +402,13 @@ config monitoring 'monitoring'
 `)
 }
 
+func JoinLines(lines []string) string {
+	if len(lines) == 0 {
+		return ""
+	}
+	return strings.Join(lines, "\n") + "\n"
+}
+
 func generateSshKeyConfig(app core.App) string {
 	keys, err := app.FindAllRecords("ssh_keys")
 	if err != nil {
@@ -412,7 +419,7 @@ func generateSshKeyConfig(app core.App) string {
 	for _, key := range keys {
 		output = append(output, strings.TrimSpace(key.GetString("key")))
 	}
-	return strings.Join(output, "\n") + "\n"
+	return JoinLines(output)
 }
 
 func generateWifiConfig(wifi *core.Record, wifiid int, radio uint, app core.App, device *core.Record) string {

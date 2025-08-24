@@ -827,7 +827,7 @@ config monitoring 'monitoring'
 `)
 }
 
-func TestSshKeyConfig(t *testing.T) {
+func TestSshKeyConfig1(t *testing.T) {
 	app, _ := tests.NewTestApp()
 	collection := setupSshKeyCollection(t, app)
 
@@ -848,6 +848,11 @@ func TestSshKeyConfig(t *testing.T) {
 	assert.Equal(t, "ssh-key aaaaaa\nssh-key bbbbbb\nssh-key cccccc\n", generateSshKeyConfig(app))
 }
 
+func TestSshKeyConfig2Empty(t *testing.T) {
+	app, _ := tests.NewTestApp()
+	setupSshKeyCollection(t, app)
+	assert.Equal(t, "", generateSshKeyConfig(app))
+}
 func TestGenerateRadioConfig(t *testing.T) {
 	app, _ := tests.NewTestApp()
 	radiocollection := core.NewBaseCollection("radios")

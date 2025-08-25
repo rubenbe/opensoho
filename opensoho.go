@@ -226,11 +226,38 @@ type DHCPLease struct {
 	Expiry     int    `json:"expiry"`
 }
 
+type Statistics struct {
+	RxFrameErrors     uint64 `json:"rx_frame_errors"`
+	RxCrcErrors       uint64 `json:"rx_crc_errors"`
+	TxHeartbeatErrors uint64 `json:"tx_heartbeat_errors"`
+	RxOverErrors      uint64 `json:"rx_over_errors"`
+	RxErrors          uint64 `json:"rx_errors"`
+	TxPackets         uint64 `json:"tx_packets"`
+	TxCarrierErrors   uint64 `json:"tx_carrier_errors"`
+	RxPackets         uint64 `json:"rx_packets"`
+	RxLengthErrors    uint64 `json:"rx_length_errors"`
+	TxErrors          uint64 `json:"tx_errors"`
+	TxAbortedErrors   uint64 `json:"tx_aborted_errors"`
+	TxWindowErrors    uint64 `json:"tx_window_errors"`
+	TxBytes           uint64 `json:"tx_bytes"`
+	Collisions        uint64 `json:"collisions"`
+	RxBytes           uint64 `json:"rx_bytes"`
+	RxFifoErrors      uint64 `json:"rx_fifo_errors"`
+	RxDropped         uint64 `json:"rx_dropped"`
+	TxFifoErrors      uint64 `json:"tx_fifo_errors"`
+	RxCompressed      uint64 `json:"rx_compressed"`
+	Multicast         uint64 `json:"multicast"`
+	TxCompressed      uint64 `json:"tx_compressed"`
+	RxMissedErrors    uint64 `json:"rx_missed_errors"`
+	TxDropped         uint64 `json:"tx_dropped"`
+}
+
 type Interface struct {
-	MAC      string    `json:"mac"`
-	Type     string    `json:"type"`
-	Name     string    `json:"name"`
-	Wireless *Wireless `json:"wireless,omitempty"`
+	MAC        string      `json:"mac"`
+	Type       string      `json:"type"`
+	Name       string      `json:"name"`
+	Wireless   *Wireless   `json:"wireless,omitempty"`
+	Statistics *Statistics `json:"statistics,omitempty"`
 }
 
 type Resources struct {

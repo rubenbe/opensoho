@@ -67,7 +67,7 @@ When installing wpad-mbedtls, rebooting is required to switch to the new wpad bi
 
 ### Configure OpenWISP in Luci:
 
-* Set the `Server URL` and the `Shared secret` only.
+* Set the `Server URL` and the `Shared secret` only. It is important to *NOT* a trailing slash to the `Server URL`.
 * Optionally lower the `Update Interval` to 30 seconds for faster updates. (OpenSOHO will do this for you if you don't)
 * OpenSOHO will also enable monitoring and lower the monitoring interval to 15 seconds to have snappier updates of the network state.
 

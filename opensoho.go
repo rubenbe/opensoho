@@ -199,6 +199,15 @@ type Client struct {
 	MAC    string `json:"mac"`
 	Assoc  bool   `json:"assoc"`
 	Signal int    `json:"signal"`
+	Bytes  struct {
+		Rx uint64 `json:"rx"`
+		Tx uint64 `json:"tx"`
+	} `json:"bytes"`
+
+	Rate struct {
+		Rx uint64 `json:"rx"`
+		Tx uint64 `json:"tx"`
+	} `json:"rate"`
 }
 
 type Radio struct {
@@ -925,6 +934,10 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 					cliententry.Set("frequency", iface.Wireless.Frequency)
 					cliententry.Set("channel", iface.Wireless.Channel)
 					cliententry.Set("band", frequencyToBand(iface.Wireless.Frequency))
+					cliententry.Set("tx_rate", client.Rate.Tx)
+					cliententry.Set("rx_rate", client.Rate.Rx)
+					cliententry.Set("tx_bytes", client.Bytes.Tx)
+					cliententry.Set("rx_bytes", client.Bytes.Rx)
 					cliententry.Set("device", device.GetString("id"))
 					err = app.Save(cliententry)
 					if err != nil {

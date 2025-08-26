@@ -1202,30 +1202,6 @@ func main() {
 	// Optional plugin flags:
 	// ---------------------------------------------------------------
 
-	var hooksDir string
-	app.RootCmd.PersistentFlags().StringVar(
-		&hooksDir,
-		"hooksDir",
-		"",
-		"the directory with the JS app hooks",
-	)
-
-	var hooksWatch bool
-	app.RootCmd.PersistentFlags().BoolVar(
-		&hooksWatch,
-		"hooksWatch",
-		true,
-		"auto restart the app on pb_hooks file change; it has no effect on Windows",
-	)
-
-	var hooksPool int
-	app.RootCmd.PersistentFlags().IntVar(
-		&hooksPool,
-		"hooksPool",
-		15,
-		"the total prewarm goja.Runtime instances for the JS app hooks execution",
-	)
-
 	var migrationsDir string
 	app.RootCmd.PersistentFlags().StringVar(
 		&migrationsDir,
@@ -1303,9 +1279,9 @@ func main() {
 	// load jsvm (pb_hooks and pb_migrations)
 	jsvm.MustRegister(app, jsvm.Config{
 		MigrationsDir: migrationsDir,
-		HooksDir:      hooksDir,
-		HooksWatch:    hooksWatch,
-		HooksPoolSize: hooksPool,
+		HooksDir:      "",
+		HooksWatch:    true,
+		HooksPoolSize: 15,
 	})
 
 	// migrate command (with js templates)

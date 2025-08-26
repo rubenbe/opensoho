@@ -267,6 +267,7 @@ type Interface struct {
 	Name       string      `json:"name"`
 	Wireless   *Wireless   `json:"wireless,omitempty"`
 	Statistics *Statistics `json:"statistics,omitempty"`
+	Speed      string      `json:"speed,omitempty"`
 }
 
 type Resources struct {
@@ -887,12 +888,36 @@ func generateDeviceConfig(app core.App, record *core.Record) ([]byte, string, er
 	return blob, checksum, err
 }
 
+func findFirstOrNewByFilter(app core.App,
+	collection *core.Collection,
+	filter string,
+	params ...dbx.Params,
+) *core.Record {
+	record, err := app.FindFirstRecordByFilter(collection, filter, params...)
+	if err != nil {
+		record = core.NewRecord(collection)
+	}
+	return record
+}
+
 func findFirstOrNew(app core.App, collection *core.Collection, column string, value string) *core.Record {
 	record, err := app.FindFirstRecordByData(collection, column, value)
 	if err != nil {
 		record = core.NewRecord(collection)
 	}
 	return record
+}
+
+func handleEthernetMonitoring(app core.App, iface Interface, device *core.Record, ethernetcollection *core.Collection) {
+	record := findFirstOrNewByFilter(app, ethernetcollection, "device = {:device} && name = {:name}", dbx.Params{"device": device.Id}, dbx.Params{"name": iface.Name})
+	record.Set("name", iface.Name)
+	record.Set("device", device.Id)
+	record.Set("speed", iface.Speed)
+	if iface.Statistics != nil {
+		record.Set("tx_bytes", iface.Statistics.TxBytes)
+		record.Set("rx_bytes", iface.Statistics.RxBytes)
+	}
+	app.Save(record)
 }
 
 func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, collection *core.Collection) (error, map[int]Radio) {
@@ -909,6 +934,8 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 		fmt.Println(errormsg)
 		return e.BadRequestError(errormsg, ""), radios
 	}
+
+	ethernetcollection, _ := app.FindCollectionByNameOrId("ethernet")
 
 	for _, iface := range payload.Interfaces {
 		if iface.Type == "wireless" && iface.Wireless != nil {
@@ -945,6 +972,9 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 					}
 				}
 			}
+		}
+		if iface.Type == "ethernet" {
+			handleEthernetMonitoring(app, iface, device, ethernetcollection)
 		}
 	}
 

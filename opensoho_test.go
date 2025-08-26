@@ -209,6 +209,78 @@ func TestRegisterEndpoint(t *testing.T) {
 	}
 }
 
+func TestHandleEthernetMonitoring(t *testing.T) {
+	app, _ := tests.NewTestApp()
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	ethernetcollection := setupEthernetCollection(t, app, devicecollection)
+	d1 := core.NewRecord(devicecollection)
+	d1.Id = "somethindevice1"
+	d1.Set("name", "the_device1")
+	d1.Set("health_status", "healthy")
+	d1.Set("ip_address", "8.8.8.8")
+	err := app.Save(d1)
+	assert.Equal(t, nil, err)
+
+	// Initial without statistics
+	iface := Interface{
+		Name:  "blah1",
+		Speed: "10000F",
+	}
+
+	handleEthernetMonitoring(app, iface, d1, ethernetcollection)
+	records, err := app.FindAllRecords("ethernet")
+	assert.Equal(t, nil, err)
+	assert.Equal(t, 1, len(records))
+	assert.Equal(t, "somethindevice1", records[0].GetString("device"))
+	assert.Equal(t, "10000F", records[0].GetString("speed"))
+	assert.Equal(t, 0, records[0].GetInt("tx_bytes"))
+	assert.Equal(t, 0, records[0].GetInt("rx_bytes"))
+
+	// Update with statistics
+	statistics := Statistics{
+		TxBytes: 100 * 1000 * 1000,
+		RxBytes: 200 * 1000 * 1000,
+	}
+	iface = Interface{
+		Name:       "blah1",
+		Speed:      "100F",
+		Statistics: &statistics,
+	}
+
+	handleEthernetMonitoring(app, iface, d1, ethernetcollection)
+	records, err = app.FindAllRecords("ethernet")
+	assert.Equal(t, nil, err)
+	assert.Equal(t, 1, len(records))
+	assert.Equal(t, "somethindevice1", records[0].GetString("device"))
+	assert.Equal(t, "100F", records[0].GetString("speed"))
+	assert.Equal(t, 100*1000*1000, records[0].GetInt("tx_bytes"))
+	assert.Equal(t, 200*1000*1000, records[0].GetInt("rx_bytes"))
+
+	// Add a second interface
+	iface = Interface{
+		Name:       "blah2",
+		Speed:      "1000F",
+		Statistics: &statistics,
+	}
+	handleEthernetMonitoring(app, iface, d1, ethernetcollection)
+	records, err = app.FindAllRecords("ethernet")
+	assert.Equal(t, nil, err)
+	assert.Equal(t, 2, len(records))
+
+	assert.Equal(t, "somethindevice1", records[0].GetString("device"))
+	assert.Equal(t, "100F", records[0].GetString("speed"))
+	assert.Equal(t, 100*1000*1000, records[0].GetInt("tx_bytes"))
+	assert.Equal(t, 200*1000*1000, records[0].GetInt("rx_bytes"))
+
+	assert.Equal(t, "somethindevice1", records[1].GetString("device"))
+	assert.Equal(t, "1000F", records[1].GetString("speed"))
+	assert.Equal(t, 100*1000*1000, records[1].GetInt("tx_bytes"))
+	assert.Equal(t, 200*1000*1000, records[1].GetInt("rx_bytes"))
+
+}
+
 func TestHandleDeviceRegistration(t *testing.T) {
 	app, _ := tests.NewTestApp()
 	vlancollection := setupVlanCollection(t, app)
@@ -1198,6 +1270,36 @@ func setupDeviceCollection(t *testing.T, app core.App, wificollection *core.Coll
 	err := app.Save(devicecollection)
 	assert.Equal(t, err, nil)
 	return devicecollection
+}
+
+func setupEthernetCollection(t *testing.T, app core.App, devicecollection *core.Collection) *core.Collection {
+	ethernetcollection := core.NewBaseCollection("ethernet")
+	ethernetcollection.Fields.Add(&core.RelationField{
+		Name:          "device",
+		Required:      false,
+		MaxSelect:     1,
+		CascadeDelete: false,
+		CollectionId:  devicecollection.Id,
+	})
+	ethernetcollection.Fields.Add(&core.TextField{
+		Name:     "name",
+		Required: false,
+	})
+	ethernetcollection.Fields.Add(&core.TextField{
+		Name:     "speed",
+		Required: false,
+	})
+	ethernetcollection.Fields.Add(&core.NumberField{
+		Name:     "tx_bytes",
+		Required: false,
+	})
+	ethernetcollection.Fields.Add(&core.NumberField{
+		Name:     "rx_bytes",
+		Required: false,
+	})
+	err := app.Save(ethernetcollection)
+	assert.Equal(t, err, nil)
+	return ethernetcollection
 }
 
 func setupWifiCollection(t *testing.T, app core.App, vlancollection *core.Collection) *core.Collection {

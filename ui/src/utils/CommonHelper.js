@@ -1159,6 +1159,15 @@ export default class CommonHelper {
         return dummy;
     }
 
+    // Function to convert bytes into a readable string
+    static formatBytes(size) {
+      if (size === 0) return '0 B';
+      const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+      const i = Math.floor(Math.log(size) / Math.log(1024));
+      return (size / Math.pow(1024, i)).toFixed(2) + ' ' + units[i];
+    }
+
+
     /**
      * Returns a collection type icon.
      *

@@ -43,7 +43,11 @@
 {:else if field.type === "bool"}
     <span class="label" class:label-success={!!rawValue}>{rawValue ? "True" : "False"}</span>
 {:else if field.type === "number"}
-    <span class="txt data--{field.name}--{rawValue}">{rawValue}</span>
+    {#if field.name === "tx_bytes" || field.name === "rx_bytes"}
+        <span class="txt data--{field.name}--{rawValue}" use:tooltip title="{rawValue} bytes">{CommonHelper.formatBytes(rawValue)}</span>
+    {:else}
+        <span class="txt data--{field.name}--{rawValue}">{rawValue}</span>
+    {/if}
 {:else if field.type === "url"}
     <a
         class="txt-ellipsis"

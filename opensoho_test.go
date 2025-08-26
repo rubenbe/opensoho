@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+/*
 const testDataDir = "./test_pb_data"
 
 func generateToken(collectionNameOrId string, email string) (string, error) {
@@ -34,7 +35,7 @@ func generateToken(collectionNameOrId string, email string) (string, error) {
 	}
 
 	return record.NewAuthToken()
-}
+}*/
 
 func TestReportStatusEndpoint(t *testing.T) {
 	app, _ := tests.NewTestApp()
@@ -126,7 +127,7 @@ func TestReportStatusEndpoint(t *testing.T) {
 func TestRegisterEndpoint(t *testing.T) {
 	// setup the test ApiScenario app instance
 	setupTestApp := func(t testing.TB) *tests.TestApp {
-		testApp, err := tests.NewTestApp(testDataDir)
+		testApp, err := tests.NewTestApp()
 		if err != nil {
 			t.Fatal(err)
 		}

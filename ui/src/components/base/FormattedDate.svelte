@@ -12,15 +12,15 @@
         // generate the tooltip text as getter to speed up the initial load
         // in case the component is used with large number of items
         get text() {
-            return CommonHelper.formatToLocalDate(date) + " Local";
+            //return CommonHelper.formatToLocalDate(date) + " Local";
+	    return dateOnly + " " + timeOnly + " UTC"
         },
     };
 </script>
 
 {#if date}
     <div class="datetime" use:tooltip={tooltipData}>
-        <div class="date">{dateOnly}</div>
-        <div class="time">{timeOnly} UTC</div>
+        {CommonHelper.formatToLocalDate(date)}
     </div>
 {:else}
     <span class="txt txt-hint">N/A</span>

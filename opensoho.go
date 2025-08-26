@@ -1202,36 +1202,12 @@ func main() {
 	// Optional plugin flags:
 	// ---------------------------------------------------------------
 
-	var migrationsDir string
-	app.RootCmd.PersistentFlags().StringVar(
-		&migrationsDir,
-		"migrationsDir",
-		"",
-		"the directory with the user defined migrations",
-	)
-
 	var automigrate bool
 	app.RootCmd.PersistentFlags().BoolVar(
 		&automigrate,
 		"automigrate",
 		true,
 		"enable/disable auto migrations",
-	)
-
-	var publicDir string
-	app.RootCmd.PersistentFlags().StringVar(
-		&publicDir,
-		"publicDir",
-		defaultPublicDir(),
-		"the directory to serve static files",
-	)
-
-	var indexFallback bool
-	app.RootCmd.PersistentFlags().BoolVar(
-		&indexFallback,
-		"indexFallback",
-		true,
-		"fallback the request to index.html on missing static path, e.g. when pretty urls are used with SPA",
 	)
 
 	var doFileExtraction bool
@@ -1278,7 +1254,7 @@ func main() {
 
 	// load jsvm (pb_hooks and pb_migrations)
 	jsvm.MustRegister(app, jsvm.Config{
-		MigrationsDir: migrationsDir,
+		MigrationsDir: "",
 		HooksDir:      "",
 		HooksWatch:    true,
 		HooksPoolSize: 15,
@@ -1288,7 +1264,7 @@ func main() {
 	migratecmd.MustRegister(app, app.RootCmd, migratecmd.Config{
 		TemplateLang: migratecmd.TemplateLangJS,
 		Automigrate:  automigrate,
-		Dir:          migrationsDir,
+		Dir:          "",
 	})
 
 	// GitHub selfupdate

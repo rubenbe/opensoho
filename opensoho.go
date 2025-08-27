@@ -1222,7 +1222,7 @@ func main() {
 	}
 	os.Unsetenv("OPENSOHO_SHARED_SECRET")
 
-	app := pocketbase.New(false)
+	app := pocketbase.New()
 
 	enableNewDevices := false
 	bindAppHooks(app, shared_secret, enableNewDevices)
@@ -1255,19 +1255,11 @@ func main() {
 		"Enable newly discovered devices, set to false for \"monitoring mode\"",
 	)
 
-	var developerMode bool
-	app.RootCmd.PersistentFlags().BoolVar(
-		&developerMode,
-		"developerMode",
-		strings.HasPrefix(os.Args[0], os.TempDir()),
-		"Run in developer Mode (shows extra controls to modify collections)",
-	)
-
 	app.RootCmd.ParseFlags(os.Args[1:])
 
 	app.OnSettingsListRequest().BindFunc(func(e *core.SettingsListRequestEvent) error {
 		e.Settings.Meta.AppName = "OpenSOHO"
-		e.Settings.Meta.HideControls = !developerMode
+		e.Settings.Meta.HideControls = !app.IsDeveloperMode()
 
 		return e.Next()
 	})

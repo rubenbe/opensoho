@@ -5,7 +5,7 @@ go 1.23.6
 require (
 	github.com/google/uuid v1.6.0
 	github.com/pocketbase/dbx v1.11.0
-	github.com/rubenbe/pocketbase v0.29.3-0.20250810164251-72e4e2706f22
+	github.com/rubenbe/pocketbase v0.29.3-0.20250826184117-c1f8602e0133
 	github.com/stretchr/testify v1.4.0
 )
 

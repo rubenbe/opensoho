@@ -1222,7 +1222,7 @@ func main() {
 	}
 	os.Unsetenv("OPENSOHO_SHARED_SECRET")
 
-	app := pocketbase.New()
+	app := pocketbase.New(false)
 
 	enableNewDevices := false
 	bindAppHooks(app, shared_secret, enableNewDevices)

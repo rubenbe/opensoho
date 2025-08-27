@@ -1188,15 +1188,58 @@ export default class CommonHelper {
     static isCollectionReadOnly(name){
         switch (name?.toLowerCase()){
             case "clients":
-	    case "devices":
-	    case "dhcp_leases":
-	    case "ethernet":
-	    case "interfaces":
-	    case "radios":
-		return true;
+        case "devices":
+        case "dhcp_leases":
+        case "ethernet":
+        case "interfaces":
+        case "radios":
+        return true;
             default:
                 return false;
-	}
+        }
+    }
+
+    static getCollectionFieldReadOnly(collectionname, fieldname){
+        switch (collectionname?.toLowerCase()){
+        // Full Read-only
+        case "dhcp_leases":
+        case "ethernet":
+        case "interfaces":
+        return true;
+        // Partial read_write
+        case "clients":
+            switch (fieldname.toLowerCase()){
+            case "alias":
+                return false;
+                    default:
+                            return true;
+        }
+        case "devices":
+            switch (fieldname.toLowerCase()){
+            case "ip_address":
+            case "os":
+            case "mac_address":
+            case "uuid":
+            case "system":
+            case "key":
+            case "backend":
+            case "error_reason":
+            case "health_status":
+            case "config":
+            case "model":
+            case "hardware_id":
+            case "last_seen":
+            case "config_status":
+            case "tags":
+                return true
+                    default:
+                    return false;
+        }
+
+        // Full Read-write
+            default:
+            return false;
+        }
     }
 
     static getCollectionIcon(type, name){

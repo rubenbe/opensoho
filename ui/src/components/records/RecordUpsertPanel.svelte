@@ -25,6 +25,7 @@
     import UrlField from "@/components/records/fields/UrlField.svelte";
     import GeoPointField from "@/components/records/fields/GeoPointField.svelte";
     import ImpersonatePopup from "@/components/records/ImpersonatePopup.svelte";
+    import FieldLabel from "@/components/records/fields/FieldLabel.svelte";
     import { confirm } from "@/stores/confirmation";
     import { setErrors } from "@/stores/errors";
     import { addErrorToast, addInfoToast, addSuccessToast } from "@/stores/toasts";
@@ -700,6 +701,19 @@
             {/if}
 
             {#each regularFields as field (field.name)}
+            {#if CommonHelper.getCollectionFieldReadOnly(collection.name, field.name)}
+            <Field class="form-field" name={field.name} let:uniqueId>
+                <FieldLabel {uniqueId} {field} />
+                <input
+                    type="text"
+                    id={uniqueId}
+                    minlength={idField?.min || null}
+                    maxlength={idField?.max || null}
+                    readonly=true
+                    bind:value={record[field.name]}
+                />
+            </Field>
+            {:else}
                 {#if field.type === "text"}
                     <TextField {field} {original} {record} bind:value={record[field.name]} />
                 {:else if field.type === "number"}
@@ -733,6 +747,7 @@
                     <PasswordField {field} {original} {record} bind:value={record[field.name]} />
                 {:else if field.type === "geoPoint"}
                     <GeoPointField {field} {original} {record} bind:value={record[field.name]} />
+                {/if}
                 {/if}
             {/each}
         </form>

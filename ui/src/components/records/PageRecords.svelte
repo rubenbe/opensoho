@@ -234,7 +234,7 @@
                     <span class="txt">API Preview</span>
                 </button>
 
-                {#if $activeCollection.type !== "view"}
+                {#if $activeCollection.type !== "view" && (!hideControls || !CommonHelper.isCollectionReadOnly($activeCollection.name))}
                     <button type="button" class="btn btn-expanded" on:click={() => recordUpsertPanel?.show()}>
                         <i class="ri-add-line" />
                         <span class="txt">New record</span>

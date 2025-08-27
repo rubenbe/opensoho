@@ -1185,6 +1185,20 @@ export default class CommonHelper {
         }
     }
 
+    static isCollectionReadOnly(name){
+        switch (name?.toLowerCase()){
+            case "clients":
+	    case "devices":
+	    case "dhcp_leases":
+	    case "ethernet":
+	    case "interfaces":
+	    case "radios":
+		return true;
+            default:
+                return false;
+	}
+    }
+
     static getCollectionIcon(type, name){
         switch (name?.toLowerCase()){
             case "clients":

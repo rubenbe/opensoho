@@ -435,7 +435,7 @@
                                 >
                                     <span class="txt">Clear filters</span>
                                 </button>
-                            {:else if !isView}
+                            {:else if !isView && !CommonHelper.isCollectionReadOnly(collection?.name)}
                                 <button
                                     type="button"
                                     class="btn btn-secondary btn-expanded m-t-sm"

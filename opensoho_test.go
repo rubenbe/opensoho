@@ -1040,6 +1040,27 @@ func TestFrequencyToChannel(t *testing.T) {
 	}
 }
 
+func TestGenerateHostnameConfig(t *testing.T) {
+	app, _ := tests.NewTestApp()
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+
+	// Add a device
+	d1 := core.NewRecord(devicecollection)
+	d1.Id = "a3qnbxklglw121g"
+	d1.Set("name", "the_device1")
+	d1.Set("health_status", "healthy")
+	d1.Set("config_status", "healthy")
+	d1.Set("key", "aaaabbbbccccddddaaaabbbbccccdddd")
+	err := app.Save(d1)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, `
+config system 'system'
+        option hostname 'the_device1'
+`, generateHostnameConfig(d1))
+}
+
 func TestGenerateOpenWispConfig(t *testing.T) {
 	assert.Equal(t, generateOpenWispConfig(), `
 config controller 'http'

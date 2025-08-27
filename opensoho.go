@@ -538,6 +538,15 @@ func createConfigTar(files map[string]string) ([]byte, string, error) {
 	return tarGzData, md5Hex, nil
 }
 
+func generateHostnameConfig(device *core.Record) string {
+	output := fmt.Sprintf(`
+config system 'system'
+        option hostname '%[1]s'
+`, device.GetString("name"))
+
+	return output
+}
+
 func generateLedConfigs(leds []*core.Record) string {
 	output := ""
 	for _, led := range leds {
@@ -828,9 +837,10 @@ func generateDeviceConfig(app core.App, record *core.Record) ([]byte, string, er
 	if err != nil {
 		return nil, "", err
 	}
-	ledconfigs := generateLedConfigs(ledrecords)
-	if len(ledconfigs) > 0 {
-		configfiles["etc/config/system"] = ledconfigs
+	systemconfig := generateHostnameConfig(record)
+	systemconfig += generateLedConfigs(ledrecords)
+	if len(systemconfig) > 0 {
+		configfiles["etc/config/system"] = systemconfig
 	}
 	fmt.Println("wifis")
 	fmt.Println(record.Get("wifis"))

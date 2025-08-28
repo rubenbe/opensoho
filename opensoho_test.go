@@ -1345,6 +1345,10 @@ func setupWifiCollection(t *testing.T, app core.App, vlancollection *core.Collec
 		Name:     "ieee80211r",
 		Required: true,
 	})
+	wificollection.Fields.Add(&core.NumberField{
+		Name:     "ieee80211r_reassoc_deadline",
+		Required: false,
+	})
 	wificollection.Fields.Add(&core.BoolField{
 		Name:     "ieee80211v",
 		Required: false,
@@ -1515,6 +1519,7 @@ func TestGenerateWifiConfig(t *testing.T) {
 	w.Set("ssid", "the_ssid")
 	w.Set("key", "the_key")
 	w.Set("ieee80211r", true)
+	w.Set("ieee80211r_reassoc_deadline", 5000)
 	w.Set("encryption", "the_encryption")
 	err = app.Save(w)
 	assert.Equal(t, nil, err)
@@ -1553,6 +1558,7 @@ config wifi-iface 'wifi_3_radio4'
         option encryption 'the_encryption'
         option key 'the_key'
         option ieee80211r '1'
+        option reassociation_deadline '5000'
         option ieee80211v '0'
         option bss_transition '0'
         option ft_over_ds '0'
@@ -1560,6 +1566,7 @@ config wifi-iface 'wifi_3_radio4'
 `)
 	// Generate a config with 80211r disabled
 	w.Set("ieee80211r", false)
+	w.Set("ieee80211r_reassoc_deadline", 0)
 	// and with 80211v enabled
 	w.Set("ieee80211v", true)
 	err = app.Save(w)
@@ -1578,6 +1585,7 @@ config wifi-iface 'wifi_3_radio4'
         option encryption 'psk2+ccmp'
         option key 'the_key'
         option ieee80211r '0'
+        option reassociation_deadline '1000'
         option ieee80211v '1'
         option bss_transition '1'
         option ft_over_ds '0'
@@ -1600,6 +1608,7 @@ config wifi-iface 'wifi_3_radio4'
         option encryption 'psk2+ccmp'
         option key 'the_key'
         option ieee80211r '0'
+        option reassociation_deadline '1000'
         option ieee80211v '1'
         option bss_transition '1'
         option ft_over_ds '0'
@@ -1627,6 +1636,7 @@ config wifi-iface 'wifi_3_radio4'
         option encryption 'psk2+ccmp'
         option key 'the_key'
         option ieee80211r '0'
+        option reassociation_deadline '1000'
         option ieee80211v '1'
         option bss_transition '1'
         option ft_over_ds '0'

@@ -1,15 +1,15 @@
 # Home Assistant
 
-The home assistant integration is currently limited, but can be used to notify when an OpenWRT device is no longer checking in with OpenSOHO (the router/AP becomes *unhealthy*)
+The Home Assistant integration is currently limited, but can be used to notify when an OpenWRT device is no longer checking in with OpenSOHO (the router/AP becomes *unhealthy*)
 
-First add a normal user to OpenSOHO using the admin interface. This is safer than using your admin account.
-Pocketbase uses access tokens which are valid for one month. This means we need to update it reguraly.
+First add an API user to OpenSOHO using the admin interface. This is safer than using your admin account.
+OpenSOHO uses access tokens which are valid for 3 years. This means we need to update it reguraly.
 
 
 ## Generating an initial token
 We need to generate an authentication token using the username and password that Home Assistant can use.
 ```
-curl -X POST http://192.168.1.1:8090/api/collections/users/auth-with-password -H "Content-type:application/json" -d '{"identity":"EMAIL", "password":"PASSWORD"}'
+curl -X POST http://192.168.1.1:8090/api/collections/api_users/auth-with-password -H "Content-type:application/json" -d '{"identity":"name", "password":"PASSWORD"}'
 ```
 
 This will return a JSON, but we're only interested in the `token` value, which needs to be used in the Home Assistant yaml configuration.
@@ -26,7 +26,7 @@ The `DEVICE_ID` is the id found for the record in the `devices` collection.
 ```
   - platform: rest
     name: "OpenWrt-Router via OpenSOHO"
-    resource: "http://192.168.1.1:8090/api/hass/v1/devicestatus/DEVICE_ID"
+    resource: "http://192.168.1.1:8090/api/v1/devicestatus/DEVICE_MAC"
     headers:
       Authorization: "{{states.input_text.opensoho_access_token.state}}"
     device_class: connectivity
@@ -36,17 +36,12 @@ Reload the Home Assistant config after each config file modification. The sensor
 
 To test/debug the token, you can run:
 ```
-curl -H "Authorization: TOKEN" http://192.168.1.1:8090/api/hass/v1/devicestatus/DEVICE_ID
+curl -H "Authorization: TOKEN" http://192.168.1.1:8090/api/v1/devicestatus/00:11:22:33:44:55
 ```
 
-## Automatically updating the access token
-Since the access token needs to be rotated monthly it's best to set up an automation:
-
-
-*TODO* add more details
-
-Tokens can be refreshed via an API call:
+## Updating the access token
+In case a token is about to exprie, you can request a new one via an API call:
 
 ```
-curl -X POST -H "Authorization: OLDTOKEN" http://192.168.1.1:8090/api/collections/users/auth-refresh
+curl -X POST -H "Authorization: OLDTOKEN" http://192.168.1.1:8090/api/collections/api_users/auth-refresh
 ```

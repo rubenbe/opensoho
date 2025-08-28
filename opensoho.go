@@ -1388,7 +1388,7 @@ table.table > thead > tr > th > div.col-header-content > span.txt
 				return e.String(200, ``)
 			})
 
-			e.Router.GET("/api/hass/v1/devicestatus/{device_id}", apiGenerateDeviceStatus).Bind(apis.RequireAuth())
+			e.Router.GET("/api/v1/devicestatus/{mac_address}", apiGenerateDeviceStatus).Bind(apis.RequireAuth())
 
 			return e.Next()
 		},
@@ -1436,9 +1436,10 @@ func defaultPublicDir() string {
 }
 
 func apiGenerateDeviceStatus(e *core.RequestEvent) error {
-	device_id := e.Request.PathValue("device_id")
-	record, err := e.App.FindRecordById("devices", device_id)
+	mac_address := strings.ToUpper(e.Request.PathValue("mac_address"))
+	record, err := e.App.FindFirstRecordByData("devices", "mac_address", mac_address)
 	if err != nil {
+		fmt.Println("HASS health status NOT FOUND", mac_address)
 		return e.NotFoundError("Device not found", err)
 	}
 	health_status := record.GetString("health_status")
@@ -1446,7 +1447,7 @@ func apiGenerateDeviceStatus(e *core.RequestEvent) error {
 	if health_status == "healthy" {
 		sensor_status = "on"
 	}
-	fmt.Println("HASS health status", device_id, health_status, sensor_status)
+	fmt.Println("HASS health status", mac_address, health_status, sensor_status)
 
 	return e.String(200, sensor_status)
 }

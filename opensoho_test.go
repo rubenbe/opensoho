@@ -1249,6 +1249,10 @@ func setupDeviceCollection(t *testing.T, app core.App, wificollection *core.Coll
 		Name:     "ip_address",
 		Required: false, // True in the real collection
 	})
+	devicecollection.Fields.Add(&core.TextField{
+		Name:     "mac_address",
+		Required: false, // True in the real collection
+	})
 	devicecollection.Fields.Add(&core.SelectField{
 		Name:      "apply",
 		MaxSelect: 1,
@@ -1972,18 +1976,13 @@ func TestApiGenerateDeviceStatus(t *testing.T) {
 	app, err := tests.NewTestApp()
 	defer app.Cleanup()
 
-	// Create a devices collection, with one device
-	devicecollection := core.NewBaseCollection("devices")
-	devicecollection.Fields.Add(&core.TextField{
-		Name:     "health_status",
-		Required: true,
-	})
-	err = app.Save(devicecollection)
-	assert.Equal(t, err, nil)
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
 
 	event := core.RequestEvent{}
 	event.Request, err = http.NewRequest("GET", "/help", strings.NewReader(""))
-	event.Request.SetPathValue("device_id", "somethingabcdef")
+	event.Request.SetPathValue("mac_address", "AA:Bb:CC:ee:ff:00")
 	event.App = app
 	rec := httptest.NewRecorder()
 	event.Response = rec
@@ -1998,6 +1997,7 @@ func TestApiGenerateDeviceStatus(t *testing.T) {
 	// Add a device record
 	m := core.NewRecord(devicecollection)
 	m.Id = "somethingabcdef"
+	m.Set("mac_address", "AA:BB:CC:EE:FF:00")
 	m.Set("health_status", "healthy")
 	err = app.Save(m)
 	assert.Equal(t, nil, err)
@@ -2005,6 +2005,7 @@ func TestApiGenerateDeviceStatus(t *testing.T) {
 	// Add a device record
 	m = core.NewRecord(devicecollection)
 	m.Id = "somethingabcddd"
+	m.Set("mac_address", "AA:BB:CC:EE:FF:11")
 	m.Set("health_status", "unhealthy")
 	err = app.Save(m)
 	assert.Equal(t, nil, err)
@@ -2023,7 +2024,7 @@ func TestApiGenerateDeviceStatus(t *testing.T) {
 
 		event := core.RequestEvent{}
 		event.Request, err = http.NewRequest("GET", "/help", strings.NewReader(""))
-		event.Request.SetPathValue("device_id", "somethingabcddd")
+		event.Request.SetPathValue("mac_address", "AA:BB:CC:EE:FF:11")
 		event.App = app
 		rec := httptest.NewRecorder()
 		event.Response = rec

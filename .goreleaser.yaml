@@ -39,3 +39,37 @@ checksum:
 
 snapshot:
   version_template: '{{ incpatch .Version }}-next'
+
+kos:
+  -
+    id: opensoho
+
+    # Build ID that should be used to import the build settings.
+    build: build_noncgo
+
+    main: ./cmd/opensoho
+
+    working_dir: .
+
+    base_image: alpine
+
+    repositories:
+      - ghcr.io/opensoho/opensoho
+      - opensoho/opensoho
+    user: "0:0"
+
+    platforms:
+      - linux/amd64
+      - linux/arm64
+      - linux/arm
+
+    tags:
+      - latest
+      - "{{.Tag}}"
+      - "{{if not .Prerelease}}stable{{end}}"
+
+    creation_time: "{{.CommitTimestamp}}"
+
+    ko_data_creation_time: "{{.CommitTimestamp}}"
+
+    sbom: none

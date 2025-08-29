@@ -1353,6 +1353,10 @@ func setupWifiCollection(t *testing.T, app core.App, vlancollection *core.Collec
 		Name:     "ieee80211v",
 		Required: false,
 	})
+	wificollection.Fields.Add(&core.BoolField{
+		Name:     "ieee80211k",
+		Required: false,
+	})
 	wificollection.Fields.Add(&core.RelationField{
 		Name:         "network",
 		MaxSelect:    1,
@@ -1518,6 +1522,7 @@ func TestGenerateWifiConfig(t *testing.T) {
 	w.Id = "somethingabcdef"
 	w.Set("ssid", "the_ssid")
 	w.Set("key", "the_key")
+	w.Set("ieee80211k", false)
 	w.Set("ieee80211r", true)
 	w.Set("ieee80211r_reassoc_deadline", 5000)
 	w.Set("encryption", "the_encryption")
@@ -1557,6 +1562,7 @@ config wifi-iface 'wifi_3_radio4'
         option ssid 'the_ssid'
         option encryption 'the_encryption'
         option key 'the_key'
+        option ieee80211k '0'
         option ieee80211r '1'
         option reassociation_deadline '5000'
         option ieee80211v '0'
@@ -1564,6 +1570,9 @@ config wifi-iface 'wifi_3_radio4'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
 `)
+
+	// Generate a config with 80211k enabled
+	w.Set("ieee80211k", true)
 	// Generate a config with 80211r disabled
 	w.Set("ieee80211r", false)
 	w.Set("ieee80211r_reassoc_deadline", 0)
@@ -1584,6 +1593,7 @@ config wifi-iface 'wifi_3_radio4'
         option ssid 'the_ssid'
         option encryption 'psk2+ccmp'
         option key 'the_key'
+        option ieee80211k '1'
         option ieee80211r '0'
         option reassociation_deadline '1000'
         option ieee80211v '1'
@@ -1607,6 +1617,7 @@ config wifi-iface 'wifi_3_radio4'
         option ssid 'the_ssid'
         option encryption 'psk2+ccmp'
         option key 'the_key'
+        option ieee80211k '1'
         option ieee80211r '0'
         option reassociation_deadline '1000'
         option ieee80211v '1'
@@ -1635,6 +1646,7 @@ config wifi-iface 'wifi_3_radio4'
         option ssid 'the_ssid'
         option encryption 'psk2+ccmp'
         option key 'the_key'
+        option ieee80211k '1'
         option ieee80211r '0'
         option reassociation_deadline '1000'
         option ieee80211v '1'

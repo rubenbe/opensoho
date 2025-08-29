@@ -479,13 +479,14 @@ config wifi-iface 'wifi_%[6]d_radio%[3]d'
         option ssid '%[1]s'
         option encryption '%[5]s'
         option key '%[4]s'
+        option ieee80211k '%[12]d'
         option ieee80211r '%[7]d'
         option reassociation_deadline '%[11]d'
         option ieee80211v '%[10]d'
         option bss_transition '%[10]d'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
-%[9]s`, ssid, wifi.GetString("id"), radio, key, encryption, wifiid, wifi.GetInt("ieee80211r"), getVlan(wifi, app), steeringconfig, wifi.GetInt("ieee80211v"), max(1000, wifi.GetInt("ieee80211r_reassoc_deadline")))
+%[9]s`, ssid, wifi.GetString("id"), radio, key, encryption, wifiid, wifi.GetInt("ieee80211r"), getVlan(wifi, app), steeringconfig, wifi.GetInt("ieee80211v"), max(1000, wifi.GetInt("ieee80211r_reassoc_deadline")), wifi.GetInt("ieee80211k"))
 }
 
 func createConfigTar(files map[string]string) ([]byte, string, error) {

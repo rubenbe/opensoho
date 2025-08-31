@@ -1358,6 +1358,10 @@ func setupWifiCollection(t *testing.T, app core.App, vlancollection *core.Collec
 		Required: false,
 	})
 	wificollection.Fields.Add(&core.BoolField{
+		Name:     "ieee80211v_proxy_arp",
+		Required: false,
+	})
+	wificollection.Fields.Add(&core.BoolField{
 		Name:     "ieee80211k",
 		Required: false,
 	})
@@ -1594,6 +1598,7 @@ config wifi-iface 'wifi_3_radio4'
         option time_zone ''
         option wnm_sleep_mode '0'
         option wnm_sleep_mode_no_keys '0'
+        option proxy_arp '0'
         option bss_transition '0'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
@@ -1628,6 +1633,7 @@ config wifi-iface 'wifi_3_radio4'
         option time_zone ''
         option wnm_sleep_mode '0'
         option wnm_sleep_mode_no_keys '0'
+        option proxy_arp '0'
         option bss_transition '1'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
@@ -1655,6 +1661,7 @@ config wifi-iface 'wifi_3_radio4'
         option time_zone ''
         option wnm_sleep_mode '0'
         option wnm_sleep_mode_no_keys '0'
+        option proxy_arp '0'
         option bss_transition '1'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
@@ -1687,6 +1694,7 @@ config wifi-iface 'wifi_3_radio4'
         option time_zone ''
         option wnm_sleep_mode '0'
         option wnm_sleep_mode_no_keys '0'
+        option proxy_arp '0'
         option bss_transition '1'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
@@ -1715,6 +1723,7 @@ config wifi-iface 'wifi_3_radio4'
         option time_zone ''
         option wnm_sleep_mode '1'
         option wnm_sleep_mode_no_keys '0'
+        option proxy_arp '0'
         option bss_transition '1'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
@@ -1724,6 +1733,8 @@ config wifi-iface 'wifi_3_radio4'
 
 	// Test the timezone
 	w.Set("ieee80211v_time_advertisement", "Europe/Brussels")
+	// Test proxy ARP
+	w.Set("ieee80211v_proxy_arp", true)
 
 	// Generate a config
 	wificonfig = generateWifiConfig(w, 3, 4, app, d)
@@ -1743,6 +1754,7 @@ config wifi-iface 'wifi_3_radio4'
         option time_zone 'CET-1CEST,M3.5.0,M10.5.0/3'
         option wnm_sleep_mode '1'
         option wnm_sleep_mode_no_keys '0'
+        option proxy_arp '1'
         option bss_transition '1'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'

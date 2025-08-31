@@ -1102,6 +1102,7 @@ func TestSshKeyConfig2Empty(t *testing.T) {
 	setupSshKeyCollection(t, app)
 	assert.Equal(t, "", generateSshKeyConfig(app))
 }
+
 func TestGenerateRadioConfig(t *testing.T) {
 	app, _ := tests.NewTestApp()
 	radiocollection := core.NewBaseCollection("radios")
@@ -1115,6 +1116,12 @@ func TestGenerateRadioConfig(t *testing.T) {
 	assert.Equal(t, generateRadioConfig(record), `
 config wifi-device 'radio3'
 	option channel '40'
+`)
+
+	record.Set("auto_frequency", true)
+	assert.Equal(t, generateRadioConfig(record), `
+config wifi-device 'radio3'
+	option channel 'auto'
 `)
 }
 func TestGenerateRadioConfigs(t *testing.T) {
@@ -1224,6 +1231,10 @@ func setupRadioCollection(t *testing.T, app core.App, devicecollection *core.Col
 	})
 	radiocollection.Fields.Add(&core.TextField{
 		Name:     "band",
+		Required: false,
+	})
+	radiocollection.Fields.Add(&core.BoolField{
+		Name:     "auto_frequency",
 		Required: false,
 	})
 	radiocollection.Fields.Add(&core.BoolField{

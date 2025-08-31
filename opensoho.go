@@ -383,10 +383,16 @@ func generateRadioConfig(radio *core.Record) string {
 		fmt.Println("invalid frequency", frequency)
 		return ""
 	}
+
+	frequency_txt := "auto"
+	if radio.GetBool("auto_frequency") != true {
+		frequency_txt = fmt.Sprintf("%d", channel)
+	}
+
 	return fmt.Sprintf(`
-config wifi-device 'radio%d'
-	option channel '%d'
-`, radio.GetInt("radio"), channel)
+config wifi-device 'radio%[1]d'
+	option channel '%[2]s'
+`, radio.GetInt("radio"), frequency_txt)
 }
 func generateRadioConfigs(device *core.Record, app core.App) string {
 	output := ""

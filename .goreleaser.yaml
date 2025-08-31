@@ -47,7 +47,7 @@ kos:
     # Build ID that should be used to import the build settings.
     build: build_noncgo
 
-    main: ./cmd/opensoho
+    main: .
 
     working_dir: .
 

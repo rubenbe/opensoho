@@ -780,6 +780,117 @@ func TestUpdateMonitoring(t *testing.T) {
 	assert.Equal(t, Radio{Frequency: 2462, Channel: 11, HTmode: "HT20", TxPower: 22, MAC: "aa:bb:cc:dd:ee:ff"}, radio)
 }
 
+func TestUpdateInterface(t *testing.T) {
+	app, _ := tests.NewTestApp()
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+
+	// Add a vlan
+	v := core.NewRecord(vlancollection)
+	v.Set("name", "wan")
+	err := app.Save(v)
+	assert.Equal(t, nil, err)
+
+	// Add a wifi
+	{
+		w := core.NewRecord(wificollection)
+		w.Id = "somethingabcdef"
+		w.Set("ssid", "OpenWRT1")
+		w.Set("key", "the_key")
+		w.Set("ieee80211r", true)
+		w.Set("encryption", "the_encryption")
+		err = app.Save(w)
+		assert.Equal(t, nil, err)
+	}
+
+	// Add a second wifi
+	{
+		w := core.NewRecord(wificollection)
+		w.Id = "fffffffffffffff"
+		w.Set("ssid", "OpenWRT2")
+		w.Set("key", "the_key")
+		w.Set("ieee80211r", true)
+		w.Set("encryption", "the_encryption")
+		err = app.Save(w)
+		assert.Equal(t, nil, err)
+	}
+
+	// Send a first record
+	interfacesCollection := setupInterfacesCollection(t, app)
+	w2 := Wireless{SSID: "OpenWRT1", Frequency: 2430}
+	iface := Interface{MAC: "aa:bb:cc:dd:ee", Type: "Wireless", Name: "phy1-ap0", Wireless: &w2}
+	deviceId := "something"
+	err = updateInterface(app, iface, deviceId, interfacesCollection)
+	assert.Equal(t, nil, err)
+
+	// Verify the initial record
+	interfaces, err := app.FindAllRecords("interfaces")
+	assert.Equal(t, nil, err)
+	assert.Equal(t, 1, len(interfaces))
+	assert.Equal(t, "aa:bb:cc:dd:ee", interfaces[0].GetString("mac_address"))
+	assert.Equal(t, "somethingabcdef", interfaces[0].GetString("wifi")) // Make this a reference>
+	assert.Equal(t, "phy1-ap0", interfaces[0].GetString("interface"))
+	assert.Equal(t, "2.4", interfaces[0].GetString("band"))
+	created := interfaces[0].GetString("created")
+	updated := interfaces[0].GetString("updated")
+	assert.Equal(t, created, updated)
+
+	// Send another, identical record
+	err = updateInterface(app, iface, deviceId, interfacesCollection)
+
+	interfaces, err = app.FindAllRecords("interfaces")
+	assert.Equal(t, nil, err)
+	updated = interfaces[0].GetString("updated")
+	assert.Equal(t, created, updated)
+
+	time.Sleep(1 * time.Millisecond)
+	{
+		// Update the frequency, but in the same frequency band
+		w3 := Wireless{SSID: "OpenWRT1", Frequency: 2472}
+		iface3 := Interface{MAC: "aa:bb:cc:dd:ee", Type: "Wireless", Name: "phy1-ap0", Wireless: &w3}
+		err = updateInterface(app, iface3, deviceId, interfacesCollection)
+
+		interfaces, err = app.FindAllRecords("interfaces")
+		assert.Equal(t, nil, err)
+		updated = interfaces[0].GetString("updated")
+		// Record should not be updated
+		assert.Equal(t, created, updated)
+	}
+	time.Sleep(1 * time.Millisecond)
+	{
+		// Update the mac
+		w3 := Wireless{SSID: "OpenWRT1", Frequency: 2472}
+		iface3 := Interface{MAC: "00:bb:cc:dd:ee", Type: "Wireless", Name: "phy1-ap0", Wireless: &w3}
+		err = updateInterface(app, iface3, deviceId, interfacesCollection)
+
+		interfaces, err = app.FindAllRecords("interfaces")
+		assert.Equal(t, nil, err)
+		updated = interfaces[0].GetString("updated")
+		mac := interfaces[0].GetString("mac_address")
+		// Record should be updated
+		assert.NotEqual(t, created, updated)
+		assert.Equal(t, "00:bb:cc:dd:ee", mac)
+	}
+	time.Sleep(1 * time.Millisecond)
+	{
+		// Update the SSID
+		w3 := Wireless{SSID: "OpenWRT2", Frequency: 2472}
+		iface3 := Interface{MAC: "00:bb:cc:dd:ee", Type: "Wireless", Name: "phy1-ap0", Wireless: &w3}
+		err = updateInterface(app, iface3, deviceId, interfacesCollection)
+
+		interfaces, err = app.FindAllRecords("interfaces")
+		assert.Equal(t, nil, err)
+		updated2 := interfaces[0].GetString("updated")
+		mac := interfaces[0].GetString("mac_address")
+		ssid := interfaces[0].GetString("wifi")
+		// Record should be updated
+		assert.NotEqual(t, created, updated2)
+		assert.NotEqual(t, updated, updated2)
+		assert.Equal(t, "00:bb:cc:dd:ee", mac)
+		assert.Equal(t, "fffffffffffffff", ssid)
+	}
+}
+
 func TestUpdateLastSeen(t *testing.T) {
 	app, _ := tests.NewTestApp()
 	collection := core.NewBaseCollection("devices")
@@ -1423,6 +1534,44 @@ func setupClientsCollection(t *testing.T, app core.App) *core.Collection {
 	assert.Equal(t, err, nil)
 	return clientcollection
 
+}
+
+func setupInterfacesCollection(t *testing.T, app core.App) *core.Collection {
+	ifacecollection := core.NewBaseCollection("interfaces")
+	ifacecollection.Fields.Add(&core.TextField{
+		Name:     "device",
+		Required: true,
+	})
+	ifacecollection.Fields.Add(&core.TextField{
+		Name:     "wifi",
+		Required: true,
+	})
+	ifacecollection.Fields.Add(&core.SelectField{
+		Name:      "band",
+		MaxSelect: 1,
+		Required:  true,
+		Values:    []string{"2.4", "5", "6", "60"},
+	})
+	ifacecollection.Fields.Add(&core.TextField{
+		Name:     "mac_address",
+		Required: true,
+	})
+	ifacecollection.Fields.Add(&core.TextField{
+		Name:     "interface",
+		Required: true,
+	})
+	ifacecollection.Fields.Add(&core.AutodateField{
+		Name:     "created",
+		OnCreate: true,
+	})
+	ifacecollection.Fields.Add(&core.AutodateField{
+		Name:     "updated",
+		OnCreate: true,
+		OnUpdate: true,
+	})
+	err := app.Save(ifacecollection)
+	assert.Equal(t, err, nil)
+	return ifacecollection
 }
 
 func setupVlanCollection(t *testing.T, app core.App) *core.Collection {

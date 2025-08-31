@@ -394,10 +394,16 @@ config wifi-device 'radio%[1]d'
 	option channel '%[2]s'
 `, radio.GetInt("radio"), frequency_txt)
 }
-func generateRadioConfigs(device *core.Record, app core.App) string {
-	output := ""
+
+func getRadiosForDevice(device *core.Record, app core.App) ([]*core.Record, error) {
 	records := []*core.Record{}
 	err := app.RecordQuery("radios").AndWhere(dbx.HashExp{"device": device.GetString("id")}).OrderBy("radio ASC").All(&records)
+	return records, err
+}
+
+func generateRadioConfigs(device *core.Record, app core.App) string {
+	output := ""
+	records, err := getRadiosForDevice(device, app)
 	if err != nil {
 		fmt.Println("Error finding Radios", err)
 		return ""
@@ -634,6 +640,10 @@ func getDeviceRecord(app core.App, key string) (*core.Record, error) {
 	}
 
 	return record, nil
+}
+
+func getWifiRecord(app core.App, ssid string) (*core.Record, error) {
+	return app.FindFirstRecordByData("wifi", "ssid", ssid)
 }
 
 // Returns true when:
@@ -956,6 +966,55 @@ func handleEthernetMonitoring(app core.App, iface Interface, device *core.Record
 	app.Save(record)
 }
 
+func updateInterface(app core.App, iface Interface, deviceId string, interfaceCollection *core.Collection) error {
+	band := frequencyToBand(iface.Wireless.Frequency)
+	if band == "unknown" { // Todo add another frequencyToBand function that returns an error
+		err := fmt.Errorf("Uknown Band %d", iface.Wireless.Frequency)
+		fmt.Println(err)
+		return err
+	}
+
+	// Todo verify that only one record exists
+	ifacerecords, err := app.FindRecordsByFilter(
+		"interfaces",
+		"device = {:device} && interface = {:interface}", "", 0, 0,
+		dbx.Params{"device": deviceId, "interface": iface.Name})
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+	wifirecord, err := getWifiRecord(app, iface.Wireless.SSID)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+
+	if len(ifacerecords) == 0 {
+		fmt.Println("NEW IFACE")
+		record := core.NewRecord(interfaceCollection)
+		record.Set("device", deviceId)
+		record.Set("wifi", wifirecord.Id)
+		record.Set("band", band)
+		record.Set("mac_address", iface.MAC)
+		record.Set("interface", iface.Name)
+		app.Save(record)
+	} else {
+		record := ifacerecords[0]
+		if wifirecord.Id != record.Get("wifi") ||
+			band != record.Get("band") ||
+			record.Get("mac_address") != iface.MAC {
+			record.Set("device", deviceId)
+			record.Set("wifi", wifirecord.Id)
+			record.Set("band", band)
+			record.Set("mac_address", iface.MAC)
+			record.Set("interface", iface.Name)
+			app.Save(record)
+			fmt.Println(ifacerecords)
+		}
+	}
+	return nil
+}
+
 func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, collection *core.Collection) (error, map[int]Radio) {
 	e.Response.Header().Set("X-Openwisp-Controller", "true")
 	time := e.Request.URL.Query().Get("time")
@@ -970,11 +1029,19 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 		fmt.Println(errormsg)
 		return e.BadRequestError(errormsg, ""), radios
 	}
+	interfacecollection, _ := app.FindCollectionByNameOrId("interfaces")
+	wificollection, _ := app.FindCollectionByNameOrId("wifi")
 
 	ethernetcollection, _ := app.FindCollectionByNameOrId("ethernet")
 
 	for _, iface := range payload.Interfaces {
 		if iface.Type == "wireless" && iface.Wireless != nil {
+			if interfacecollection != nil && wificollection != nil {
+				err := updateInterface(app, iface, device.Id, interfacecollection)
+				if err != nil {
+					fmt.Println("Failed to add interface")
+				}
+			}
 			radionum, err := extractRadioNumber(iface.Name)
 			if err != nil {
 				fmt.Printf("Found an unknown phy pattern '%s', please report a github issue\n", iface.Name)

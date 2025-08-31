@@ -1185,6 +1185,9 @@ export default class CommonHelper {
         }
     }
 
+    /**
+     * Returns true when the user is not allowed to make new records.
+     */
     static isCollectionReadOnly(name){
         switch (name?.toLowerCase()){
             case "clients":
@@ -1211,9 +1214,19 @@ export default class CommonHelper {
             switch (fieldname.toLowerCase()){
             case "alias":
                 return false;
-                    default:
-                            return true;
+            default:
+                 return true;
         }
+	case "radios":
+            switch (fieldname.toLowerCase()){
+            case "band":
+            case "interface":
+            case "mac_address":
+            case "radio":
+                return true
+            default:
+                return false;
+	    }
         case "devices":
             switch (fieldname.toLowerCase()){
             case "ip_address":
@@ -1232,8 +1245,8 @@ export default class CommonHelper {
             case "config_status":
             case "tags":
                 return true
-                    default:
-                    return false;
+            default:
+                return false;
         }
 
         // Full Read-write
@@ -1252,8 +1265,10 @@ export default class CommonHelper {
 		return "ri-home-wifi-line"
 	    case "dhcp_leases":
 		return "ri-home-office-line"
-	    case "interfaces":
+	    case "ethernet":
 		return "ri-git-fork-line"
+	    case "interfaces":
+		return "ri-base-station-line"
 	    case "radios":
                 return "ri-broadcast-line"
 	    case "leds":

@@ -1,4 +1,4 @@
-package opensoho
+package main
 
 var tzData = map[string]string{
 	"Disabled":                       "",

@@ -1,4 +1,4 @@
-package opensoho
+package main
 
 import (
 	"errors"

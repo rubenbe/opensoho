@@ -1,4 +1,4 @@
-package main
+package opensoho
 
 import (
 	"errors"
@@ -1350,7 +1350,11 @@ func setupWifiCollection(t *testing.T, app core.App, vlancollection *core.Collec
 		Required: false,
 	})
 	wificollection.Fields.Add(&core.BoolField{
-		Name:     "ieee80211v",
+		Name:     "ieee80211v_bss_transition",
+		Required: false,
+	})
+	wificollection.Fields.Add(&core.TextField{
+		Name:     "ieee80211v_time_advertisement",
 		Required: false,
 	})
 	wificollection.Fields.Add(&core.BoolField{
@@ -1501,6 +1505,27 @@ func setupClientSteeringCollection(t *testing.T, app core.App, clientcollection 
 
 }
 
+func TestGetTimeAdvertisementValue(t *testing.T) {
+	flag, tzdata := getTimeAdvertisementValues("")
+	assert.Equal(t, 0, flag)
+	assert.Equal(t, "", tzdata)
+	flag, tzdata = getTimeAdvertisementValues("non-existing")
+	assert.Equal(t, 2, flag)
+	assert.Equal(t, "non-existing", tzdata, "non-existing tz data should be returned without modification")
+	flag, tzdata = getTimeAdvertisementValues("Disabled")
+	assert.Equal(t, 0, flag)
+	assert.Equal(t, "", tzdata)
+	flag, tzdata = getTimeAdvertisementValues("UTC")
+	assert.Equal(t, 2, flag)
+	assert.Equal(t, "", tzdata)
+	flag, tzdata = getTimeAdvertisementValues("Europe/Brussels")
+	assert.Equal(t, 2, flag)
+	assert.Equal(t, "CET-1CEST,M3.5.0,M10.5.0/3", tzdata)
+	flag, tzdata = getTimeAdvertisementValues("America/New York")
+	assert.Equal(t, 2, flag)
+	assert.Equal(t, "EST5EDT,M3.2.0,M11.1.0", tzdata)
+}
+
 func TestGenerateWifiConfig(t *testing.T) {
 	app, err := tests.NewTestApp()
 	defer app.Cleanup()
@@ -1565,7 +1590,8 @@ config wifi-iface 'wifi_3_radio4'
         option ieee80211k '0'
         option ieee80211r '1'
         option reassociation_deadline '5000'
-        option ieee80211v '0'
+        option time_advertisement '0'
+        option time_zone ''
         option wnm_sleep_mode '0'
         option wnm_sleep_mode_no_keys '0'
         option bss_transition '0'
@@ -1579,7 +1605,7 @@ config wifi-iface 'wifi_3_radio4'
 	w.Set("ieee80211r", false)
 	w.Set("ieee80211r_reassoc_deadline", 0)
 	// and with 80211v enabled
-	w.Set("ieee80211v", true)
+	w.Set("ieee80211v_bss_transition", true)
 	err = app.Save(w)
 	// Verify the encryption defaults to WPA2
 	w.Set("encryption", "")
@@ -1598,7 +1624,8 @@ config wifi-iface 'wifi_3_radio4'
         option ieee80211k '1'
         option ieee80211r '0'
         option reassociation_deadline '1000'
-        option ieee80211v '1'
+        option time_advertisement '0'
+        option time_zone ''
         option wnm_sleep_mode '0'
         option wnm_sleep_mode_no_keys '0'
         option bss_transition '1'
@@ -1624,7 +1651,8 @@ config wifi-iface 'wifi_3_radio4'
         option ieee80211k '1'
         option ieee80211r '0'
         option reassociation_deadline '1000'
-        option ieee80211v '1'
+        option time_advertisement '0'
+        option time_zone ''
         option wnm_sleep_mode '0'
         option wnm_sleep_mode_no_keys '0'
         option bss_transition '1'
@@ -1655,7 +1683,8 @@ config wifi-iface 'wifi_3_radio4'
         option ieee80211k '1'
         option ieee80211r '0'
         option reassociation_deadline '1000'
-        option ieee80211v '1'
+        option time_advertisement '0'
+        option time_zone ''
         option wnm_sleep_mode '0'
         option wnm_sleep_mode_no_keys '0'
         option bss_transition '1'
@@ -1666,6 +1695,8 @@ config wifi-iface 'wifi_3_radio4'
 `)
 	// More checks of different settings since we don't want to check too many at once
 	w.Set("ieee80211v_wnm_sleep_mode", true)
+	// Explicitely set the time advertisement to disabled
+	w.Set("ieee80211v_time_advertisement", "Disabled")
 	// Generate a config
 	wificonfig = generateWifiConfig(w, 3, 4, app, d)
 	assert.Equal(t, wificonfig, `
@@ -1680,9 +1711,38 @@ config wifi-iface 'wifi_3_radio4'
         option ieee80211k '1'
         option ieee80211r '0'
         option reassociation_deadline '1000'
-        option ieee80211v '1'
+        option time_advertisement '0'
+        option time_zone ''
         option wnm_sleep_mode '1'
-        option wnm_sleep_mode_no_keys '1'
+        option wnm_sleep_mode_no_keys '0'
+        option bss_transition '1'
+        option ft_over_ds '0'
+        option ft_psk_generate_local '1'
+        option macfilter 'deny'
+        list maclist '11:22:33:44:55:66'
+`)
+
+	// Test the timezone
+	w.Set("ieee80211v_time_advertisement", "Europe/Brussels")
+
+	// Generate a config
+	wificonfig = generateWifiConfig(w, 3, 4, app, d)
+	assert.Equal(t, wificonfig, `
+config wifi-iface 'wifi_3_radio4'
+        option device 'radio4'
+        option network 'wan'
+        option disabled '0'
+        option mode 'ap'
+        option ssid 'the_ssid'
+        option encryption 'psk2+ccmp'
+        option key 'the_key'
+        option ieee80211k '1'
+        option ieee80211r '0'
+        option reassociation_deadline '1000'
+        option time_advertisement '2'
+        option time_zone 'CET-1CEST,M3.5.0,M10.5.0/3'
+        option wnm_sleep_mode '1'
+        option wnm_sleep_mode_no_keys '0'
         option bss_transition '1'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'

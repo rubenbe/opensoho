@@ -1,4 +1,4 @@
-package main
+package opensoho
 
 import (
 	"archive/tar"
@@ -459,6 +459,14 @@ func generateSshKeyConfig(app core.App) string {
 	return JoinLines(output)
 }
 
+func getTimeAdvertisementValues(vta string) (int, string) {
+	vta_flag := 0
+	if len(vta) > 0 && vta != "Disabled" {
+		vta_flag = 2
+	}
+	return vta_flag, GetTzData(vta)
+}
+
 func generateWifiConfig(wifi *core.Record, wifiid int, radio uint, app core.App, device *core.Record) string {
 	ssid := wifi.GetString("ssid")
 	key := wifi.GetString("key")
@@ -470,6 +478,8 @@ func generateWifiConfig(wifi *core.Record, wifiid int, radio uint, app core.App,
 	if len(encryption) == 0 {
 		encryption = "psk2+ccmp"
 	}
+	vta_flag, vta_tz := getTimeAdvertisementValues(wifi.GetString("ieee80211v_time_advertisement"))
+	fmt.Println(vta_tz)
 	return fmt.Sprintf(`
 config wifi-iface 'wifi_%[6]d_radio%[3]d'
         option device 'radio%[3]d'
@@ -482,16 +492,17 @@ config wifi-iface 'wifi_%[6]d_radio%[3]d'
         option ieee80211k '%[12]d'
         option ieee80211r '%[7]d'
         option reassociation_deadline '%[11]d'
-        option ieee80211v '%[10]d'
+        option time_advertisement '%[14]d'
+        option time_zone '%[15]s'
         option wnm_sleep_mode '%[13]d'
-        option wnm_sleep_mode_no_keys '%[13]d'
+        option wnm_sleep_mode_no_keys '0'
         option bss_transition '%[10]d'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
 %[9]s`,
 		ssid, wifi.GetString("id"), radio, key, encryption,
-		wifiid, wifi.GetInt("ieee80211r"), getVlan(wifi, app), steeringconfig, wifi.GetInt("ieee80211v"),
-		max(1000, wifi.GetInt("ieee80211r_reassoc_deadline")), wifi.GetInt("ieee80211k"), wifi.GetInt("ieee80211v_wnm_sleep_mode"))
+		wifiid, wifi.GetInt("ieee80211r"), getVlan(wifi, app), steeringconfig, wifi.GetInt("ieee80211v_bss_transition"),
+		max(1000, wifi.GetInt("ieee80211r_reassoc_deadline")), wifi.GetInt("ieee80211k"), wifi.GetInt("ieee80211v_wnm_sleep_mode"), vta_flag, vta_tz)
 }
 
 func createConfigTar(files map[string]string) ([]byte, string, error) {

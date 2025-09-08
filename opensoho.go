@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"crypto/md5"
+	"database/sql"
 	"embed"
 	"encoding/hex"
 	"errors"
@@ -262,12 +263,13 @@ type Statistics struct {
 }
 
 type Interface struct {
-	MAC        string      `json:"mac"`
-	Type       string      `json:"type"`
-	Name       string      `json:"name"`
-	Wireless   *Wireless   `json:"wireless,omitempty"`
-	Statistics *Statistics `json:"statistics,omitempty"`
-	Speed      string      `json:"speed,omitempty"`
+	MAC           string      `json:"mac"`
+	Type          string      `json:"type"`
+	Name          string      `json:"name"`
+	Wireless      *Wireless   `json:"wireless,omitempty"`
+	Statistics    *Statistics `json:"statistics,omitempty"`
+	Speed         string      `json:"speed,omitempty"`
+	BridgeMembers []string    `json:"bridge_members,omitempty"`
 }
 
 type Resources struct {
@@ -954,6 +956,61 @@ func findFirstOrNew(app core.App, collection *core.Collection, column string, va
 	return record
 }
 
+func handleBridgeMonitoring(app core.App, iface Interface, device *core.Record, bridgescollection *core.Collection, interfacescollection *core.Collection, ethernetcollection *core.Collection) error {
+	record := findFirstOrNewByFilter(app, bridgescollection, "device = {:device} && name = {:name}", dbx.Params{"device": device.Id}, dbx.Params{"name": iface.Name})
+	record.Set("name", iface.Name)
+	record.Set("device", device.Id)
+	if iface.Statistics != nil {
+		record.Set("tx_bytes", iface.Statistics.TxBytes)
+		record.Set("rx_bytes", iface.Statistics.RxBytes)
+	}
+	// This is a bit tricky, since we want to split the wired and wireless members
+	err := (error)(nil)
+	ethernetlist := []string{}
+	wifilist := []string{}
+	for _, membername := range iface.BridgeMembers {
+
+		eth_record, eth_err := app.FindFirstRecordByFilter(ethernetcollection, "device = {:device} && name = {:name}", dbx.Params{"device": device.Id}, dbx.Params{"name": membername})
+		wifi_record, wifi_err := app.FindFirstRecordByFilter(interfacescollection, "device = {:device} && interface = {:name}", dbx.Params{"device": device.Id}, dbx.Params{"name": membername})
+
+		if eth_err != nil && !errors.Is(eth_err, sql.ErrNoRows) {
+			err = eth_err
+			fmt.Println("Ethernet:", eth_err, membername)
+		}
+		if wifi_err != nil && !errors.Is(wifi_err, sql.ErrNoRows) {
+			err = wifi_err
+			fmt.Println("Wifi", wifi_err, membername)
+		}
+		if eth_record != nil && wifi_record != nil {
+			err = fmt.Errorf("Ambigious bridge member %s", membername)
+			fmt.Println(err)
+		}
+		if wifi_record == nil && eth_record == nil {
+			err = fmt.Errorf("Unknown bridge member %s", membername)
+			fmt.Println(err)
+		}
+		if wifi_record != nil {
+			fmt.Println("ADDING WIFI", wifi_record)
+			wifilist = append(wifilist, wifi_record.Id)
+		}
+		if eth_record != nil {
+			fmt.Println("ADDING ETH", eth_record)
+			ethernetlist = append(ethernetlist, eth_record.Id)
+		}
+	}
+	if err != nil {
+		// Delete all interface data since it is inconsitent
+		ethernetlist = []string{}
+		wifilist = []string{}
+	}
+	fmt.Println("SAVING")
+	record.Set("ethernet", ethernetlist)
+	record.Set("wifi", wifilist)
+	x := app.Save(record)
+	fmt.Println("SAVED", x)
+	return err
+}
+
 func handleEthernetMonitoring(app core.App, iface Interface, device *core.Record, ethernetcollection *core.Collection) {
 	record := findFirstOrNewByFilter(app, ethernetcollection, "device = {:device} && name = {:name}", dbx.Params{"device": device.Id}, dbx.Params{"name": iface.Name})
 	record.Set("name", iface.Name)
@@ -1033,6 +1090,7 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 	wificollection, _ := app.FindCollectionByNameOrId("wifi")
 
 	ethernetcollection, _ := app.FindCollectionByNameOrId("ethernet")
+	bridgescollection, _ := app.FindCollectionByNameOrId("bridges")
 
 	for _, iface := range payload.Interfaces {
 		if iface.Type == "wireless" && iface.Wireless != nil {
@@ -1078,6 +1136,13 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 		}
 		if iface.Type == "ethernet" {
 			handleEthernetMonitoring(app, iface, device, ethernetcollection)
+		}
+	}
+
+	// Add the bridges after the other interfaces to ensure all new data is available
+	for _, iface := range payload.Interfaces {
+		if iface.Type == "bridge" {
+			handleBridgeMonitoring(app, iface, device, bridgescollection, interfacecollection, ethernetcollection)
 		}
 	}
 

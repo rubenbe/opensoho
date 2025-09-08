@@ -209,6 +209,106 @@ func TestRegisterEndpoint(t *testing.T) {
 	}
 }
 
+func TestHandleBridgeMonitoring(t *testing.T) {
+	app, _ := tests.NewTestApp()
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	ethernetcollection := setupEthernetCollection(t, app, devicecollection)
+	interfacescollection := setupInterfacesCollection(t, app)
+	bridgescollection := setupBridgesCollection(t, app, devicecollection, interfacescollection, ethernetcollection)
+
+	// Add a device to start with
+	d1 := core.NewRecord(devicecollection)
+	d1.Id = "somethindevice1"
+	d1.Set("name", "the_device1")
+	d1.Set("health_status", "healthy")
+	d1.Set("ip_address", "8.8.8.8")
+	err := app.Save(d1)
+	assert.Equal(t, nil, err)
+
+	statistics := Statistics{
+		TxBytes: 100 * 1000 * 1000,
+		RxBytes: 200 * 1000 * 1000,
+	}
+
+	// Add an interface
+	iface := Interface{
+		Name:       "br-lan123",
+		Speed:      "10000F",
+		Statistics: &statistics,
+		BridgeMembers: []string{
+			"lan2",
+			"phy1-ap0",
+		},
+	}
+
+	err = handleBridgeMonitoring(app, iface, d1, bridgescollection, interfacescollection, ethernetcollection)
+	assert.Equal(t, "Unknown bridge member phy1-ap0", err.Error())
+	records, err := app.FindAllRecords("bridges")
+	assert.Equal(t, nil, err)
+	assert.Equal(t, 1, len(records))
+	assert.Equal(t, "somethindevice1", records[0].GetString("device"))
+	assert.Equal(t, 100*1000*1000, records[0].GetInt("tx_bytes"))
+	assert.Equal(t, 200*1000*1000, records[0].GetInt("rx_bytes"))
+	assert.Equal(t, []string{}, records[0].GetStringSlice("ethernet"))
+	assert.Equal(t, []string{}, records[0].GetStringSlice("wifi"))
+
+	// Now add a Wifi interface only
+	w1 := core.NewRecord(interfacescollection)
+	w1.Id = "wifiwifidevice1"
+	fmt.Println(d1)
+	w1.Set("device", d1.Id)
+	w1.Set("interface", "phy1-ap0")
+	w1.Set("band", "2.4")
+	err = app.Save(w1)
+	assert.Equal(t, nil, err)
+
+	err = handleBridgeMonitoring(app, iface, d1, bridgescollection, interfacescollection, ethernetcollection)
+	assert.Equal(t, "Unknown bridge member lan2", err.Error())
+
+	// Now add an Ethernet interface too
+	e1 := core.NewRecord(ethernetcollection)
+	e1.Id = "ethernetdevice1"
+	e1.Set("device", d1.Id)
+	e1.Set("name", "lan2")
+	err = app.Save(e1)
+	assert.Equal(t, nil, err)
+
+	err = handleBridgeMonitoring(app, iface, d1, bridgescollection, interfacescollection, ethernetcollection)
+	assert.Equal(t, nil, err)
+
+	records, err = app.FindAllRecords("bridges")
+	assert.Equal(t, nil, err)
+	assert.Equal(t, 1, len(records))
+	assert.Equal(t, "somethindevice1", records[0].GetString("device"))
+	assert.Equal(t, 100*1000*1000, records[0].GetInt("tx_bytes"))
+	assert.Equal(t, 200*1000*1000, records[0].GetInt("rx_bytes"))
+	// Everything good!
+	assert.Equal(t, []string{"ethernetdevice1"}, records[0].GetStringSlice("ethernet"))
+	assert.Equal(t, []string{"wifiwifidevice1"}, records[0].GetStringSlice("wifi"))
+	// Now make the lookup ambigious by adding a wifi ap to the ethernet collection
+	e2 := core.NewRecord(ethernetcollection)
+	e2.Id = "ethernetdevice2"
+	e2.Set("device", d1.Id)
+	e2.Set("name", "phy1-ap0")
+	err = app.Save(e2)
+	assert.Equal(t, nil, err)
+
+	err = handleBridgeMonitoring(app, iface, d1, bridgescollection, interfacescollection, ethernetcollection)
+	assert.Equal(t, "Ambigious bridge member phy1-ap0", err.Error())
+
+	records, err = app.FindAllRecords("bridges")
+	assert.Equal(t, nil, err)
+	assert.Equal(t, 1, len(records))
+	assert.Equal(t, "somethindevice1", records[0].GetString("device"))
+	assert.Equal(t, 100*1000*1000, records[0].GetInt("tx_bytes"))
+	assert.Equal(t, 200*1000*1000, records[0].GetInt("rx_bytes"))
+	// Bridge members should be emptied again
+	assert.Equal(t, []string{}, records[0].GetStringSlice("ethernet"))
+	assert.Equal(t, []string{}, records[0].GetStringSlice("wifi"))
+}
+
 func TestHandleEthernetMonitoring(t *testing.T) {
 	app, _ := tests.NewTestApp()
 	vlancollection := setupVlanCollection(t, app)
@@ -1419,6 +1519,46 @@ func setupDeviceCollection(t *testing.T, app core.App, wificollection *core.Coll
 	return devicecollection
 }
 
+func setupBridgesCollection(t *testing.T, app core.App, devicecollection *core.Collection, wificollection *core.Collection, ethernetcollection *core.Collection) *core.Collection {
+	bridgescollection := core.NewBaseCollection("bridges")
+	bridgescollection.Fields.Add(&core.RelationField{
+		Name:          "device",
+		Required:      false,
+		MaxSelect:     1,
+		CascadeDelete: false,
+		CollectionId:  devicecollection.Id,
+	})
+	bridgescollection.Fields.Add(&core.TextField{
+		Name:     "name",
+		Required: false,
+	})
+	bridgescollection.Fields.Add(&core.NumberField{
+		Name:     "tx_bytes",
+		Required: false,
+	})
+	bridgescollection.Fields.Add(&core.NumberField{
+		Name:     "rx_bytes",
+		Required: false,
+	})
+	bridgescollection.Fields.Add(&core.RelationField{
+		Name:          "ethernet",
+		Required:      false,
+		MaxSelect:     99,
+		CascadeDelete: false,
+		CollectionId:  ethernetcollection.Id,
+	})
+	bridgescollection.Fields.Add(&core.RelationField{
+		Name:          "wifi",
+		Required:      false,
+		MaxSelect:     99,
+		CascadeDelete: false,
+		CollectionId:  wificollection.Id,
+	})
+	err := app.Save(bridgescollection)
+	assert.Equal(t, err, nil)
+	return bridgescollection
+}
+
 func setupEthernetCollection(t *testing.T, app core.App, devicecollection *core.Collection) *core.Collection {
 	ethernetcollection := core.NewBaseCollection("ethernet")
 	ethernetcollection.Fields.Add(&core.RelationField{
@@ -1544,7 +1684,7 @@ func setupInterfacesCollection(t *testing.T, app core.App) *core.Collection {
 	})
 	ifacecollection.Fields.Add(&core.TextField{
 		Name:     "wifi",
-		Required: true,
+		Required: false,
 	})
 	ifacecollection.Fields.Add(&core.SelectField{
 		Name:      "band",
@@ -1554,7 +1694,7 @@ func setupInterfacesCollection(t *testing.T, app core.App) *core.Collection {
 	})
 	ifacecollection.Fields.Add(&core.TextField{
 		Name:     "mac_address",
-		Required: true,
+		Required: false,
 	})
 	ifacecollection.Fields.Add(&core.TextField{
 		Name:     "interface",

@@ -1,0 +1,15 @@
+apiVersion: v2
+name: opensoho
+description: A Helm chart for OpenSoho - OpenWrt management platform
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - opensoho
+  - openwrt
+  - management
+  - pocketbase
+home: https://github.com/rubenbe/opensoho
+sources:
+  - https://github.com/rubenbe/opensoho
+

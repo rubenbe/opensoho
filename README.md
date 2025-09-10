@@ -4,6 +4,7 @@
 <a href="https://www.buymeacoffee.com/rubenbe" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/default-orange.png" alt="Buy Me A Coffee" height="41" width="174"></a>
 
 * [Frequently asked questions](doc/faq.md)
+* [Containerized Deployments (Docker, Podman, Kubernetes)](doc/containers.md)
 
 OpenSOHO is built to manage a small number OpenWRT based network devices. Hence the name SOHO from Small Office Home Office (SOHO) Networks.
 Only OpenWRT 24.10.x is tested.

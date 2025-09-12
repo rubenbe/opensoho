@@ -798,6 +798,26 @@ config interface '%[1]s'
 	return output
 }
 
+func clientHasWhiteListingDisabled(app core.App, client *core.Record) bool {
+	whitelisted_devices := client.GetStringSlice("whitelist")
+	fmt.Println(whitelisted_devices)
+
+	// These lines could be cached, but for the abstraction, we don't care
+	unhealthy_devices, _ /*err*/ := app.FindRecordsByFilter("devices", `health_status!="healthy"`, "", 0, 0, map[string]any{})
+	unhealthy_device_ids := make(map[string]struct{}, len(unhealthy_devices))
+	for _, device := range unhealthy_devices {
+		unhealthy_device_ids[device.Id] = struct{}{}
+	}
+
+	// Check whether sufficient whitelisted devices are online
+	disable_whitelisting := false
+	whitelisting_mode := client.GetString("enable")
+	if whitelisting_mode != "Always" {
+		disable_whitelisting = isUnHealthyQuorumReached(unhealthy_device_ids, whitelisted_devices, whitelisting_mode == "If all healthy")
+	}
+	return disable_whitelisting
+}
+
 func generateMacClientSteeringConfig(app core.App, wifi *core.Record, device *core.Record) (string, error) {
 	expandedclients, err := generateClientSteeringConfigInt(app, wifi, device, "mac blacklist")
 	if err != nil {
@@ -834,24 +854,9 @@ func generateClientSteeringConfigInt(app core.App, wifi *core.Record, device *co
 		return expandedclients, nil
 	}
 
-	unhealthy_devices, err := app.FindRecordsByFilter("devices", `health_status!="healthy"`, "", 0, 0, map[string]any{})
-	unhealthy_device_ids := make(map[string]struct{}, len(unhealthy_devices))
-	for _, device := range unhealthy_devices {
-		unhealthy_device_ids[device.Id] = struct{}{}
-	}
-	fmt.Println("Full list", unhealthy_device_ids)
 	for _, client := range client_steering_for_wifi {
-
-		whitelisted_devices := client.GetStringSlice("whitelist")
-		fmt.Println(whitelisted_devices)
-
 		// Check whether sufficient whitelisted devices are online
-		disable_whitelisting := false
-		whitelisting_mode := client.GetString("enable")
-		if whitelisting_mode != "Always" {
-			disable_whitelisting = isUnHealthyQuorumReached(unhealthy_device_ids, whitelisted_devices, whitelisting_mode == "If all healthy")
-		}
-		if disable_whitelisting == true {
+		if clientHasWhiteListingDisabled(app, client) {
 			fmt.Println("Disabling whitelisting")
 			continue
 		}

@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -796,6 +797,56 @@ config interface '%[1]s'
 	}
 
 	return output
+}
+
+// The SSID client steering is simple, it is basically a roaming SSID
+func generateSsidClientSteeringConfig(app core.App, device *core.Record) ([]*core.Record, error) {
+	// Get all the SSID client steering configurations
+	//expanded_ssid := []string{}
+	expanded_ssid := []*core.Record{}
+	ssid_client_steering, err := app.FindRecordsByFilter("client_steering",
+		`method ~{:method}`,
+		"", // TODO add sort
+		0, 0,
+		map[string]any{
+			"method": "ssid",
+		})
+	if err != nil {
+		fmt.Println("ERROR", err)
+		return expanded_ssid, err
+	}
+
+	// No Wifi Client steering configurations found
+	if len(ssid_client_steering) == 0 {
+		fmt.Println("NOTHING INTERESTING FOUND", err)
+		return expanded_ssid, nil
+	}
+	//expandedclients, err := generateClientSteeringConfigInt(app, wifi, device, "ssid", true)
+	//fmt.Println(wifi)
+	fmt.Println(device)
+	fmt.Println(err)
+	//for _, expandedclient := range expandedclients {
+	for _, entry := range ssid_client_steering {
+		fmt.Println(entry)
+		//
+		// Check if we're in the whitelist or the whitelisting is currently disabled
+		if slices.Contains(entry.GetStringSlice("whitelist"), device.Id) || clientHasWhiteListingDisabled(app, entry) {
+			fmt.Println("SHOULD ADD", entry.GetStringSlice("wifi"))
+			// Expand the SSID
+			errs := app.ExpandRecord(entry, []string{"wifi"}, nil)
+			if len(errs) > 0 {
+				return []*core.Record{}, fmt.Errorf("failed to expand: %v", errs)
+			}
+			expanded_ssid = append(expanded_ssid, entry.ExpandedAll("wifi")...)
+			//expanded_ssid = append(expanded_ssid, entry.GetStringSlice("wifi")...)
+			fmt.Println("SHOULD ADD 2", expanded_ssid)
+
+		}
+	}
+	for _, x := range expanded_ssid {
+		fmt.Println("SHOULD ADD 3", x.Id)
+	}
+	return expanded_ssid, nil
 }
 
 func clientHasWhiteListingDisabled(app core.App, client *core.Record) bool {

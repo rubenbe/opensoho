@@ -1801,7 +1801,7 @@ func setupClientSteeringCollection(t *testing.T, app core.App, clientcollection 
 		Name:      "method",
 		MaxSelect: 1,
 		Required:  true,
-		Values:    []string{"mac blacklist", "bss request (ieee80211v)"},
+		Values:    []string{"mac blacklist", "bss request (ieee80211v)", "ssid"},
 	})
 	err := app.Save(cscollection)
 	assert.Equal(t, err, nil)
@@ -2186,7 +2186,219 @@ func TestDhcpClientUpdate(t *testing.T) {
 	assert.Equal(t, 2, len(records))
 }
 
-func TestClientSteering(t *testing.T) {
+func TestSsidClientSteering(t *testing.T) {
+	app, err := tests.NewTestApp()
+	defer app.Cleanup()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	clientcollection := setupClientsCollection(t, app)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	clientsteeringcollection := setupClientSteeringCollection(t, app, clientcollection, devicecollection, wificollection)
+
+	// Add a wifi record
+	w1 := core.NewRecord(wificollection)
+	w1.Id = "somethingabcdef"
+	w1.Set("ssid", "the_ssid")
+	w1.Set("key", "the_key")
+	w1.Set("ieee80211r", true)
+	w1.Set("encryption", "the_encryption")
+	err = app.Save(w1)
+	assert.Equal(t, nil, err)
+
+	// Add a wifi record
+	w2 := core.NewRecord(wificollection)
+	w2.Id = "somethingabctwo"
+	w2.Set("ssid", "the_ssid")
+	w2.Set("key", "the_key")
+	w2.Set("ieee80211r", true)
+	w2.Set("encryption", "the_encryption")
+	err = app.Save(w2)
+	assert.Equal(t, nil, err)
+
+	// Add a client
+	c := core.NewRecord(clientcollection)
+	c.Id = "somethingclient"
+	c.Set("mac_address", "00:11:22:33:44:55")
+	err = app.Save(c)
+	assert.Equal(t, nil, err)
+
+	// Add a device
+	d1 := core.NewRecord(devicecollection)
+	d1.Id = "somethindevice1"
+	d1.Set("name", "the_device1")
+	d1.Set("health_status", "healthy")
+	d1.Set("wifis", w1.Id)
+	err = app.Save(d1)
+	assert.Equal(t, nil, err)
+
+	// Add a device (unhealthy)
+	d2 := core.NewRecord(devicecollection)
+	d2.Id = "somethindevice2"
+	d2.Set("name", "the_device2")
+	d2.Set("health_status", "unhealthy")
+	d2.Set("wifis", w1.Id)
+	err = app.Save(d2)
+	assert.Equal(t, nil, err)
+
+	// Add a device (with 2 wifi)
+	d3 := core.NewRecord(devicecollection)
+	d3.Id = "somethindevice3"
+	d3.Set("name", "the_device3")
+	d3.Set("health_status", "healthy")
+	d3.Set("wifis", []string{w1.Id, w2.Id})
+	err = app.Save(d3)
+	assert.Equal(t, nil, err)
+
+	// Whitelist client on wifi 1 @ device 1
+	cs := core.NewRecord(clientsteeringcollection)
+	cs.Id = "clientsteering1"
+	cs.Set("client", c.Id)
+	cs.Set("whitelist", []string{d1.Id})
+	cs.Set("wifi", w1.Id)
+	cs.Set("enable", "Always")
+	cs.Set("method", "ssid")
+	err = app.Save(cs)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, []string{d1.Id}, cs.GetStringSlice("whitelist"))
+
+	// Whitelist client on wifi 2
+	cs2 := core.NewRecord(clientsteeringcollection)
+	cs2.Id = "clientsteering2"
+	cs2.Set("client", c.Id)
+	cs2.Set("whitelist", []string{d2.Id, d3.Id})
+	cs2.Set("wifi", w2.Id)
+	cs2.Set("enable", "Always")
+	cs2.Set("method", "ssid")
+	err = app.Save(cs2)
+	assert.Equal(t, nil, err)
+
+	{
+		// D1 is whitelisted, add SSID1
+		csconfig, err := generateSsidClientSteeringConfig(app, d1)
+		assert.Equal(t, err, nil)
+		assert.Equal(t, 1, len(csconfig))
+		assert.Equal(t, "somethingabcdef", csconfig[0].Id)
+
+		// D2 is whitelisted, add SSID2
+		csconfig, err = generateSsidClientSteeringConfig(app, d2)
+		assert.Equal(t, err, nil)
+		assert.Equal(t, 1, len(csconfig))
+		assert.Equal(t, "somethingabctwo", csconfig[0].Id)
+
+		// D3 is whitelisted, add SSID2
+		csconfig, err = generateSsidClientSteeringConfig(app, d3)
+		assert.Equal(t, err, nil)
+		assert.Equal(t, 1, len(csconfig))
+		assert.Equal(t, "somethingabctwo", csconfig[0].Id)
+	}
+
+	// Whitelist a second device
+	{
+		cs.Set("whitelist", []string{d1.Id, d2.Id})
+		err = app.Save(cs)
+		assert.Equal(t, nil, err)
+		assert.Equal(t, []string{d1.Id, d2.Id}, cs.GetStringSlice("whitelist"))
+
+		// D1 is whitelisted, add SSID1
+		csconfig, err := generateSsidClientSteeringConfig(app, d1)
+		assert.Equal(t, err, nil)
+		assert.Equal(t, 1, len(csconfig))
+		assert.Equal(t, "somethingabcdef", csconfig[0].Id)
+
+		// D2 is whitelisted, add SSID2 and SSID1
+		csconfig, err = generateSsidClientSteeringConfig(app, d2)
+		assert.Equal(t, err, nil)
+		assert.Equal(t, 2, len(csconfig))
+		assert.Equal(t, "somethingabcdef", csconfig[0].Id)
+		assert.Equal(t, "somethingabctwo", csconfig[1].Id)
+
+		// D3 is whitelisted, add SSID2
+		csconfig, err = generateSsidClientSteeringConfig(app, d3)
+		assert.Equal(t, err, nil)
+		assert.Equal(t, 1, len(csconfig))
+		assert.Equal(t, "somethingabctwo", csconfig[0].Id)
+	}
+
+	// Device 2 is unhealthy
+	// Steering should be lifted for wifi1, apply on all APs
+	{
+		cs.Set("enable", "If all healthy")
+		err = app.Save(cs)
+		assert.Equal(t, nil, err)
+		assert.Equal(t, []string{d1.Id, d2.Id}, cs.GetStringSlice("whitelist"))
+
+		// Add only the unhealthy SSID
+		csconfig, err := generateSsidClientSteeringConfig(app, d1)
+		assert.Equal(t, err, nil)
+		assert.Equal(t, 1, len(csconfig))
+		assert.Equal(t, "somethingabcdef", csconfig[0].Id)
+
+		// Add both SSID
+		csconfig, err = generateSsidClientSteeringConfig(app, d2)
+		assert.Equal(t, err, nil)
+		assert.Equal(t, 2, len(csconfig))
+		assert.Equal(t, "somethingabcdef", csconfig[0].Id)
+		assert.Equal(t, "somethingabctwo", csconfig[1].Id)
+
+		// Add both SSID
+		csconfig, err = generateSsidClientSteeringConfig(app, d3)
+		assert.Equal(t, err, nil)
+		assert.Equal(t, 2, len(csconfig))
+		assert.Equal(t, "somethingabcdef", csconfig[0].Id)
+		assert.Equal(t, "somethingabctwo", csconfig[1].Id)
+	}
+
+	// Device 2 is unhealthy, device 1 is healthy, steering should be reinstated
+	{
+		cs.Set("enable", "If any healthy")
+		err = app.Save(cs)
+		assert.Equal(t, nil, err)
+		assert.Equal(t, []string{d1.Id, d2.Id}, cs.GetStringSlice("whitelist"))
+
+		// Whitelisted, don't block
+		csconfig, err := generateSsidClientSteeringConfig(app, d1)
+		assert.Equal(t, err, nil)
+		assert.Equal(t, 1, len(csconfig))
+		assert.Equal(t, "somethingabcdef", csconfig[0].Id)
+
+		// Whitelisted, don't block
+		csconfig, err = generateSsidClientSteeringConfig(app, d2)
+		assert.Equal(t, err, nil)
+		assert.Equal(t, 2, len(csconfig))
+		assert.Equal(t, "somethingabcdef", csconfig[0].Id)
+		assert.Equal(t, "somethingabctwo", csconfig[1].Id)
+
+		// Add only the healthy SSID
+		csconfig, err = generateSsidClientSteeringConfig(app, d3)
+		assert.Equal(t, err, nil)
+		assert.Equal(t, 1, len(csconfig))
+		assert.Equal(t, "somethingabctwo", csconfig[0].Id)
+	}
+	// Device 2 is unhealthy, device 1 is healthy, steering should remain enabled
+	{
+		// Whitelisted, don't block
+		csconfig, err := generateSsidClientSteeringConfig(app, d1)
+		assert.Equal(t, err, nil)
+		assert.Equal(t, 1, len(csconfig))
+		assert.Equal(t, "somethingabcdef", csconfig[0].Id)
+
+		// Whitelisted, don't block
+		csconfig, err = generateSsidClientSteeringConfig(app, d2)
+		assert.Equal(t, err, nil)
+		assert.Equal(t, 2, len(csconfig))
+		assert.Equal(t, "somethingabcdef", csconfig[0].Id)
+		assert.Equal(t, "somethingabctwo", csconfig[1].Id)
+
+		// Add only the healthy SSID
+		csconfig, err = generateSsidClientSteeringConfig(app, d3)
+		assert.Equal(t, err, nil)
+		assert.Equal(t, 1, len(csconfig))
+		assert.Equal(t, "somethingabctwo", csconfig[0].Id)
+	}
+}
+
+func TestMacClientSteering(t *testing.T) {
 	app, err := tests.NewTestApp()
 	defer app.Cleanup()
 

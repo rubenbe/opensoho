@@ -1633,6 +1633,10 @@ func setupWifiCollection(t *testing.T, app core.App, vlancollection *core.Collec
 		Required:     false,
 		CollectionId: vlancollection.Id,
 	})
+	wificollection.Fields.Add(&core.AutodateField{
+		Name:     "created",
+		OnCreate: true,
+	})
 
 	err := app.Save(wificollection)
 	assert.Equal(t, err, nil)
@@ -1803,6 +1807,10 @@ func setupClientSteeringCollection(t *testing.T, app core.App, clientcollection 
 		Required:  true,
 		Values:    []string{"mac blacklist", "bss request (ieee80211v)", "ssid"},
 	})
+	cscollection.Fields.Add(&core.AutodateField{
+		Name:     "created",
+		OnCreate: true,
+	})
 	err := app.Save(cscollection)
 	assert.Equal(t, err, nil)
 	return cscollection
@@ -1830,6 +1838,138 @@ func TestGetTimeAdvertisementValue(t *testing.T) {
 	assert.Equal(t, "EST5EDT,M3.2.0,M11.1.0", tzdata)
 }
 
+// Test for both steered and static SSID configs
+func TestGenerateWifiRecordList(t *testing.T) {
+	app, err := tests.NewTestApp()
+	defer app.Cleanup()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	clientcollection := setupClientsCollection(t, app)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	clientsteeringcollection := setupClientSteeringCollection(t, app, clientcollection, devicecollection, wificollection)
+
+	// Add a vlan
+	v := core.NewRecord(vlancollection)
+	v.Set("name", "wan")
+	err = app.Save(v)
+	assert.Equal(t, nil, err)
+
+	// Add a wifi record
+	w1 := core.NewRecord(wificollection)
+	w1.Id = "somethingabcdef"
+	w1.Set("ssid", "the_ssid")
+	w1.Set("key", "the_key")
+	w1.Set("ieee80211k", false)
+	w1.Set("ieee80211r", true)
+	w1.Set("ieee80211r_reassoc_deadline", 5000)
+	w1.Set("encryption", "the_encryption")
+	err = app.Save(w1)
+	assert.Equal(t, nil, err)
+
+	// Add a dirty delay to ensure stable sorting
+	time.Sleep(1 * time.Millisecond)
+
+	// Ensure this wifi record is alphabetically before the w1
+	w2 := core.NewRecord(wificollection)
+	w2.Id = "bbbbthingabcdef"
+	w2.Set("ssid", "bbb_the_ssid")
+	w2.Set("key", "bbb_the_key")
+	w2.Set("ieee80211k", false)
+	w2.Set("ieee80211r", true)
+	w2.Set("ieee80211r_reassoc_deadline", 5000)
+	w2.Set("encryption", "the_encryption")
+	err = app.Save(w2)
+	assert.Equal(t, nil, err)
+
+	// Add a dirty delay to ensure stable sorting
+	time.Sleep(1 * time.Millisecond)
+
+	// Ensure this wifi record is alphabetically before the w1 and w2
+	w3 := core.NewRecord(wificollection)
+	w3.Id = "aaaathingabcdef"
+	w3.Set("ssid", "aaa_the_ssid")
+	w3.Set("key", "aaa_the_key")
+	w3.Set("ieee80211k", false)
+	w3.Set("ieee80211r", true)
+	w3.Set("ieee80211r_reassoc_deadline", 5000)
+	w3.Set("encryption", "the_encryption")
+	err = app.Save(w3)
+	assert.Equal(t, nil, err)
+
+	// Add a client
+	c := core.NewRecord(clientcollection)
+	c.Set("mac_address", "11:22:33:44:55:66")
+	err = app.Save(c)
+	assert.Equal(t, nil, err)
+
+	// Add a device
+	d1 := core.NewRecord(devicecollection)
+	d1.Set("name", "the_device1")
+	d1.Set("health_status", "healthy")
+	// Configure the wifis in the "wrong" order too
+	d1.Set("wifis", []string{w2.Id, w1.Id})
+	err = app.Save(d1)
+	assert.Equal(t, nil, err)
+
+	// Add a device
+	d2 := core.NewRecord(devicecollection)
+	d2.Set("name", "the_device2")
+	d2.Set("health_status", "healthy")
+	// Only add wifi 2 here, to test w1 is added after w2 for client steering
+	d2.Set("wifis", []string{w2.Id})
+	err = app.Save(d2)
+	assert.Equal(t, nil, err)
+
+	wifilist1, err := generateWifiRecordList(app, d1)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, 2, len(wifilist1))
+	assert.Equal(t, "somethingabcdef", wifilist1[0].Id)
+	assert.Equal(t, "bbbbthingabcdef", wifilist1[1].Id)
+
+	wifilist2, err := generateWifiRecordList(app, d2)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, 1, len(wifilist2))
+	assert.Equal(t, "bbbbthingabcdef", wifilist2[0].Id)
+
+	// On device 2 add a steering config
+	cs1 := core.NewRecord(clientsteeringcollection)
+	cs1.Set("client", c.Id)
+	cs1.Set("whitelist", d2.Id)
+	cs1.Set("wifi", w1.Id)
+	cs1.Set("enable", "Always")
+	cs1.Set("method", "ssid")
+	err = app.Save(cs1)
+	assert.Equal(t, nil, err)
+
+	// Add a dirty delay to ensure stable sorting
+	time.Sleep(1 * time.Millisecond)
+
+	// On device 2 add a steering config
+	cs2 := core.NewRecord(clientsteeringcollection)
+	cs2.Set("client", c.Id)
+	cs2.Set("whitelist", d2.Id)
+	cs2.Set("wifi", w3.Id)
+	cs2.Set("enable", "Always")
+	cs2.Set("method", "ssid")
+	err = app.Save(cs2)
+	assert.Equal(t, nil, err)
+
+	wifilist1, err = generateWifiRecordList(app, d1)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, 2, len(wifilist1))
+	assert.Equal(t, "somethingabcdef", wifilist1[0].Id)
+	assert.Equal(t, "bbbbthingabcdef", wifilist1[1].Id)
+
+	wifilist2, err = generateWifiRecordList(app, d2)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, 3, len(wifilist2))
+	assert.Equal(t, "bbbbthingabcdef", wifilist2[0].Id)
+	assert.Equal(t, "somethingabcdef", wifilist2[1].Id)
+	assert.Equal(t, "aaaathingabcdef", wifilist2[2].Id)
+}
+
+// Test the different Wifi configs
 func TestGenerateWifiConfig(t *testing.T) {
 	app, err := tests.NewTestApp()
 	defer app.Cleanup()

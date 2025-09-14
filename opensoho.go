@@ -812,26 +812,17 @@ func generateSsidClientSteeringConfig(app core.App, device *core.Record) ([]*cor
 			"method": "ssid",
 		})
 	if err != nil {
-		fmt.Println("ERROR", err)
 		return expanded_ssid, err
 	}
 
 	// No Wifi Client steering configurations found
 	if len(ssid_client_steering) == 0 {
-		fmt.Println("NOTHING INTERESTING FOUND", err)
 		return expanded_ssid, nil
 	}
-	//expandedclients, err := generateClientSteeringConfigInt(app, wifi, device, "ssid", true)
-	//fmt.Println(wifi)
-	fmt.Println(device)
-	fmt.Println(err)
-	//for _, expandedclient := range expandedclients {
 	for _, entry := range ssid_client_steering {
-		fmt.Println(entry)
 		//
 		// Check if we're in the whitelist or the whitelisting is currently disabled
 		if slices.Contains(entry.GetStringSlice("whitelist"), device.Id) || clientHasWhiteListingDisabled(app, entry) {
-			fmt.Println("SHOULD ADD", entry.GetStringSlice("wifi"))
 			// Expand the SSID
 			errs := app.ExpandRecord(entry, []string{"wifi"}, nil)
 			if len(errs) > 0 {
@@ -839,19 +830,13 @@ func generateSsidClientSteeringConfig(app core.App, device *core.Record) ([]*cor
 			}
 			expanded_ssid = append(expanded_ssid, entry.ExpandedAll("wifi")...)
 			//expanded_ssid = append(expanded_ssid, entry.GetStringSlice("wifi")...)
-			fmt.Println("SHOULD ADD 2", expanded_ssid)
-
 		}
-	}
-	for _, x := range expanded_ssid {
-		fmt.Println("SHOULD ADD 3", x.Id)
 	}
 	return expanded_ssid, nil
 }
 
 func clientHasWhiteListingDisabled(app core.App, client *core.Record) bool {
 	whitelisted_devices := client.GetStringSlice("whitelist")
-	fmt.Println(whitelisted_devices)
 
 	// These lines could be cached, but for the abstraction, we don't care
 	unhealthy_devices, _ /*err*/ := app.FindRecordsByFilter("devices", `health_status!="healthy"`, "", 0, 0, map[string]any{})
@@ -923,6 +908,35 @@ func generateClientSteeringConfigInt(app core.App, wifi *core.Record, device *co
 	return expandedclients, nil
 }
 
+func generateWifiRecordList(app core.App, device *core.Record) ([]*core.Record, error) {
+	wifis := device.GetStringSlice("wifis")
+	// Get the static Wifi configurations
+	wifirecords, err := app.FindRecordsByIds("wifi", wifis)
+	if err != nil {
+		return []*core.Record{}, err
+	}
+
+	// Sort the static records
+	sort.Slice(wifirecords, func(i, j int) bool {
+		return wifirecords[i].GetDateTime("created").Before(wifirecords[j].GetDateTime("created"))
+	})
+
+	// Add the steering records
+	wifisteeringrecords, err := generateSsidClientSteeringConfig(app, device)
+
+	if err != nil {
+		return []*core.Record{}, err
+	}
+
+	// Sort the steering separately
+	sort.Slice(wifisteeringrecords, func(i, j int) bool {
+		return wifisteeringrecords[i].GetDateTime("created").Before(wifisteeringrecords[j].GetDateTime("created"))
+	})
+
+	// Add the dynamic wifi configuration after the static configuration
+	return append(wifirecords, wifisteeringrecords...), err
+}
+
 func generateDeviceConfig(app core.App, record *core.Record) ([]byte, string, error) {
 	configfiles := map[string]string{}
 	leds := record.Get("leds").([]string)
@@ -940,14 +954,23 @@ func generateDeviceConfig(app core.App, record *core.Record) ([]byte, string, er
 	fmt.Println(record.Get("wifis"))
 	numradios := uint(record.GetInt("numradios"))
 	fmt.Printf("numradios %d\n", numradios)
-	if wifis := record.Get("wifis"); wifis != nil {
-		wifirecords, err := app.FindRecordsByIds("wifi", wifis.([]string))
+	{
+		wifirecords, err := generateWifiRecordList(app, record)
 		if err != nil {
 			return nil, "", err
 		}
-		sort.Slice(wifirecords, func(i, j int) bool {
-			return wifirecords[i].GetDateTime("created").Before(wifirecords[j].GetDateTime("created"))
-		})
+		// Add the steered Wifi configurations
+		//wifisteeringrecords, err := generateSsidClientSteeringConfig(app, record)
+		//fmt.Println("SSID STEERING", err)
+		//fmt.Println(wifisteeringrecords)
+		////if err != nil {
+		////	return nil, "", err
+		////}
+		////wifirecords = append(wifirecords, wifisteeringrecords...)
+
+		//sort.Slice(wifirecords, func(i, j int) bool {
+		//	return wifirecords[i].GetDateTime("created").Before(wifirecords[j].GetDateTime("created"))
+		//})
 		wificonfigs := generateWifiConfigs(wifirecords, numradios, app, record)
 		fmt.Println(wificonfigs)
 		if len(wificonfigs) > 0 {

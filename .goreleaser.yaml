@@ -72,3 +72,5 @@ kos:
     ko_data_creation_time: "{{.CommitTimestamp}}"
 
     sbom: none
+    base_import_paths: true
+    bare: true

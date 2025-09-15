@@ -54,7 +54,7 @@ kos:
     base_image: alpine
 
     repositories:
-      - ghcr.io/opensoho/opensoho
+      - ghcr.io/opensoho
     user: "0:0"
 
     platforms:

@@ -1205,6 +1205,7 @@ export default class CommonHelper {
     static getCollectionFieldReadOnly(collectionname, fieldname){
         switch (collectionname?.toLowerCase()){
         // Full Read-only
+        case "bridges":
         case "dhcp_leases":
         case "ethernet":
         case "interfaces":

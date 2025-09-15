@@ -55,7 +55,6 @@ kos:
 
     repositories:
       - ghcr.io/opensoho/opensoho
-      - opensoho/opensoho
     user: "0:0"
 
     platforms:

@@ -1669,16 +1669,6 @@ func updateAndStoreDeviceConfig(app core.App, record *core.Record) error {
 	return nil
 }
 
-// the default pb_public dir location is relative to the executable
-func defaultPublicDir() string {
-	if strings.HasPrefix(os.Args[0], os.TempDir()) {
-		// most likely ran with go run
-		return "./pb_public"
-	}
-
-	return filepath.Join(os.Args[0], "../pb_public")
-}
-
 func apiGenerateDeviceStatus(e *core.RequestEvent) error {
 	mac_address := strings.ToUpper(e.Request.PathValue("mac_address"))
 	record, err := e.App.FindFirstRecordByData("devices", "mac_address", mac_address)

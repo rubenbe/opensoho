@@ -1468,8 +1468,15 @@ func main() {
 		return
 	}
 	os.Unsetenv("OPENSOHO_SHARED_SECRET")
+	var c pocketbase.Config
+	cwdPath, err := os.Getwd()
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+	c.DefaultDataDir = filepath.Join(cwdPath, "pb_data")
 
-	app := pocketbase.New()
+	app := pocketbase.NewWithConfig(pocketbase.Config{DefaultDataDir: filepath.Join(cwdPath, "pb_data")})
 
 	enableNewDevices := false
 	bindAppHooks(app, shared_secret, enableNewDevices)
@@ -1516,14 +1523,14 @@ func main() {
 	// ---------------------------------------------------------------
 
 	if doFileExtraction {
-		if err := copyEmbedDirToDisk(embeddedFiles, ""); err != nil {
+		if err := copyEmbedDirToDisk(embeddedFiles, cwdPath); err != nil {
 			log.Fatal(err)
 		}
 	}
 
 	// load jsvm (pb_hooks and pb_migrations)
 	jsvm.MustRegister(app, jsvm.Config{
-		MigrationsDir: "",
+		MigrationsDir: filepath.Join(cwdPath, "pb_migrations"),
 		HooksDir:      "",
 		HooksWatch:    true,
 		HooksPoolSize: 15,
@@ -1533,7 +1540,7 @@ func main() {
 	migratecmd.MustRegister(app, app.RootCmd, migratecmd.Config{
 		TemplateLang: migratecmd.TemplateLangJS,
 		Automigrate:  automigrate,
-		Dir:          "",
+		Dir:          filepath.Join(cwdPath, "pb_migrations"),
 	})
 
 	// GitHub selfupdate

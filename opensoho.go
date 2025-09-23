@@ -712,6 +712,18 @@ func IsFeatureApplied(record *core.Record, target string) bool {
 	return false
 }
 
+// Currently all of them are the same mode
+func generatePortTaggingConfig(app core.App, ports []*core.Record, mode string) string {
+	portslist := ""
+	sort.Slice(ports, func(i, j int) bool {
+		return ports[i].GetString("name") < ports[j].GetString("name")
+	})
+	for _, port := range ports {
+		portslist += fmt.Sprintf("list ports '%s:%s'\n", port.GetString("name"), mode)
+	}
+	return portslist
+}
+
 func generateInterfacesConfig(app core.App, device *core.Record) string {
 	if false == IsFeatureApplied(device, "vlan") {
 		return `

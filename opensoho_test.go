@@ -556,6 +556,39 @@ config interface 'lan'
 `, generateInterfacesConfig(app, d1))
 }
 
+func TestPortTaggingConfig(t *testing.T) {
+	app, _ := tests.NewTestApp()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	ethernetcollection := setupEthernetCollection(t, app, devicecollection)
+
+	//bridgecollection := setupBridgesCollection(t, app, devicecollection, wificollection, ethernetcollection)
+
+	//Test empty
+	assert.Equal(t, "", generatePortTaggingConfig(app, []*core.Record{}, "u*"))
+
+	e1 := core.NewRecord(ethernetcollection)
+	e1.Id = "somethindevice1"
+	e1.Set("name", "lan1")
+	e1.Set("speec", "1000F")
+	err := app.Save(e1) // Saving is not really required
+	assert.Equal(t, nil, err)
+
+	assert.Equal(t, "list ports 'lan1:u*'\n", generatePortTaggingConfig(app, []*core.Record{e1}, "u*"))
+
+	e2 := core.NewRecord(ethernetcollection)
+	e2.Id = "somethindevice2"
+	e2.Set("name", "lan2")
+	e2.Set("speec", "1000F")
+	err = app.Save(e2) // Saving is not really required
+	assert.Equal(t, nil, err)
+
+	// Expect sorting to maintain a clean config
+	assert.Equal(t, "list ports 'lan1:t'\nlist ports 'lan2:t'\n", generatePortTaggingConfig(app, []*core.Record{e2, e1}, "t"))
+}
+
 // Test that the default VLAN is present
 func TestInterfacesConfigDefaultVLAN(t *testing.T) {
 	app, _ := tests.NewTestApp()

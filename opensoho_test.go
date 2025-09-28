@@ -550,13 +550,15 @@ func TestInterfacesConfigDefaultNoVLAN(t *testing.T) {
 	d1.Set("ip_address", "8.8.8.8")
 	err := app.Save(d1)
 	assert.Equal(t, nil, err)
-	assert.Equal(t, `
-config interface 'lan'
-        option device 'br-lan'
-`, generateInterfacesConfig(app, d1))
+	// VLAN config does not always properly revert, so leave it in place even when disabled
+	//	assert.Equal(t, `
+	//config interface 'lan'
+	//        option device 'br-lan'
+	//`, generateInterfacesConfig(app, d1))
+	assert.Equal(t, ``, generateInterfacesConfig(app, d1))
 }
 
-func TestPortTaggingConfig(t *testing.T) {
+func TestGeneratePortTaggingConfig(t *testing.T) {
 	app, _ := tests.NewTestApp()
 
 	vlancollection := setupVlanCollection(t, app)
@@ -564,29 +566,102 @@ func TestPortTaggingConfig(t *testing.T) {
 	devicecollection := setupDeviceCollection(t, app, wificollection)
 	ethernetcollection := setupEthernetCollection(t, app, devicecollection)
 
-	//bridgecollection := setupBridgesCollection(t, app, devicecollection, wificollection, ethernetcollection)
-
 	//Test empty
 	assert.Equal(t, "", generatePortTaggingConfig(app, []*core.Record{}, "u*"))
 
 	e1 := core.NewRecord(ethernetcollection)
 	e1.Id = "somethindevice1"
 	e1.Set("name", "lan1")
-	e1.Set("speec", "1000F")
+	e1.Set("speed", "1000F")
 	err := app.Save(e1) // Saving is not really required
 	assert.Equal(t, nil, err)
 
-	assert.Equal(t, "list ports 'lan1:u*'\n", generatePortTaggingConfig(app, []*core.Record{e1}, "u*"))
+	assert.Equal(t, "        list ports 'lan1:u*'\n", generatePortTaggingConfig(app, []*core.Record{e1}, "u*"))
 
 	e2 := core.NewRecord(ethernetcollection)
 	e2.Id = "somethindevice2"
 	e2.Set("name", "lan2")
-	e2.Set("speec", "1000F")
+	e2.Set("speed", "1000F")
 	err = app.Save(e2) // Saving is not really required
 	assert.Equal(t, nil, err)
 
 	// Expect sorting to maintain a clean config
-	assert.Equal(t, "list ports 'lan1:t'\nlist ports 'lan2:t'\n", generatePortTaggingConfig(app, []*core.Record{e2, e1}, "t"))
+	assert.Equal(t, "        list ports 'lan1:t'\n        list ports 'lan2:t'\n", generatePortTaggingConfig(app, []*core.Record{e2, e1}, "t"))
+}
+
+func TestGenerateInterfaceVlanConfigInt(t *testing.T) {
+	app, _ := tests.NewTestApp()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	ethernetcollection := setupEthernetCollection(t, app, devicecollection)
+	bridgecollection := setupBridgesCollection(t, app, devicecollection, wificollection, ethernetcollection)
+
+	e1 := core.NewRecord(ethernetcollection)
+	e1.Id = "somethindevice1"
+	e1.Set("name", "lan1")
+	e1.Set("speed", "1000F")
+	err := app.Save(e1) // Saving is not really required
+	assert.Equal(t, nil, err)
+
+	e2 := core.NewRecord(ethernetcollection)
+	e2.Id = "somethindevice2"
+	e2.Set("name", "lan2")
+	e2.Set("speed", "1000F")
+	err = app.Save(e2) // Saving is not really required
+	assert.Equal(t, nil, err)
+
+	b1 := core.NewRecord(bridgecollection)
+	err = app.Save(b1) // Saving is not really required
+	assert.Equal(t, nil, err)
+
+	// Test empty (maybe don't configure it in this case?)
+	assert.Equal(t, `
+config interface 'iot'
+        option device 'br-lan.123'
+
+config bridge-vlan 'bridge_vlan_123'
+        option device 'br-lan'
+        option vlan '123'
+`, generateInterfaceVlanConfigInt(app, b1, "iot", 123))
+
+	// Common config with two ethernet ports on this bridge
+	b1.Set("ethernet", []string{e1.Id, e2.Id})
+	err = app.Save(b1)
+	assert.Equal(t, nil, err)
+
+	assert.Equal(t, `
+config interface 'iot'
+        option device 'br-lan.456'
+
+config bridge-vlan 'bridge_vlan_456'
+        option device 'br-lan'
+        option vlan '456'
+        list ports 'lan1:t'
+        list ports 'lan2:t'
+`, generateInterfaceVlanConfigInt(app, b1, "iot", 456))
+
+	// lan should be untagged
+	assert.Equal(t, `
+config interface 'lan'
+        option device 'br-lan.4000'
+
+config bridge-vlan 'bridge_vlan_4000'
+        option device 'br-lan'
+        option vlan '4000'
+        list ports 'lan1:u*'
+        list ports 'lan2:u*'
+`, generateInterfaceVlanConfigInt(app, b1, "lan", 4000))
+
+	// Don't generate configs with invalid vlan ids
+	assert.Equal(t, "", generateInterfaceVlanConfigInt(app, b1, "iot", -1))
+	assert.Equal(t, "", generateInterfaceVlanConfigInt(app, b1, "iot", 0))
+	assert.Equal(t, "", generateInterfaceVlanConfigInt(app, b1, "iot", 4095))
+	assert.Equal(t, "", generateInterfaceVlanConfigInt(app, b1, "iot", 100000))
+
+	// Don't generate configs with empty vlan name
+	assert.Equal(t, "", generateInterfaceVlanConfigInt(app, b1, "", 100))
 }
 
 // Test that the default VLAN is present
@@ -596,6 +671,22 @@ func TestInterfacesConfigDefaultVLAN(t *testing.T) {
 	vlancollection := setupVlanCollection(t, app)
 	wificollection := setupWifiCollection(t, app, vlancollection)
 	devicecollection := setupDeviceCollection(t, app, wificollection)
+	ethernetcollection := setupEthernetCollection(t, app, devicecollection)
+	bridgecollection := setupBridgesCollection(t, app, devicecollection, wificollection, ethernetcollection)
+
+	e1 := core.NewRecord(ethernetcollection)
+	e1.Id = "somethindevice1"
+	e1.Set("name", "lan1")
+	e1.Set("speed", "1000F")
+	err := app.Save(e1) // Saving is not really required
+	assert.Equal(t, nil, err)
+
+	e2 := core.NewRecord(ethernetcollection)
+	e2.Id = "somethindevice2"
+	e2.Set("name", "lan2")
+	e2.Set("speed", "1000F")
+	err = app.Save(e2) // Saving is not really required
+	assert.Equal(t, nil, err)
 
 	// Add a device
 	d1 := core.NewRecord(devicecollection)
@@ -604,32 +695,32 @@ func TestInterfacesConfigDefaultVLAN(t *testing.T) {
 	d1.Set("health_status", "healthy")
 	d1.Set("apply", []string{"vlan"})
 	d1.Set("ip_address", "8.8.8.8")
-	err := app.Save(d1)
+	err = app.Save(d1)
 	assert.Equal(t, nil, err)
+
+	lan := core.NewRecord(vlancollection)
+	lan.Set("name", "lan")
+	lan.Set("number", "100")
+	err = app.Save(lan)
+	assert.Equal(t, nil, err)
+
+	// Configure a bridge for this device
+	b1 := core.NewRecord(bridgecollection)
+	b1.Set("device", d1.Id)
+	b1.Set("name", "br-lan")
+	b1.Set("ethernet", []string{e1.Id, e2.Id})
+	err = app.Save(b1) // Saving is not really required
+	assert.Equal(t, nil, err)
+
 	assert.Equal(t, `
 config interface 'lan'
-        option device 'br-lan.1'
+        option device 'br-lan.100'
 
-config bridge-vlan 'bridge_vlan_1'
-	option device 'br-lan'
-	option vlan '1'
-        list ports 'eth0:u*'
+config bridge-vlan 'bridge_vlan_100'
+        option device 'br-lan'
+        option vlan '100'
         list ports 'lan1:u*'
         list ports 'lan2:u*'
-        list ports 'lan3:u*'
-        list ports 'lan4:u*'
-        list ports 'lan5:u*'
-        list ports 'lan6:u*'
-        list ports 'lan7:u*'
-        list ports 'lan8:u*'
-        list ports 'lan9:u*'
-        list ports 'lan10:u*'
-        list ports 'lan11:u*'
-        list ports 'lan12:u*'
-        list ports 'lan13:u*'
-        list ports 'lan14:u*'
-        list ports 'lan15:u*'
-        list ports 'lan16:u*'
 `, generateInterfacesConfig(app, d1))
 }
 
@@ -639,6 +730,9 @@ func TestInterfacesConfig(t *testing.T) {
 	vlancollection := setupVlanCollection(t, app)
 	wificollection := setupWifiCollection(t, app, vlancollection)
 	devicecollection := setupDeviceCollection(t, app, wificollection)
+	interfacescollection := setupInterfacesCollection(t, app)
+	ethernetcollection := setupEthernetCollection(t, app, devicecollection)
+	bridgecollection := setupBridgesCollection(t, app, devicecollection, interfacescollection, ethernetcollection)
 
 	// Add a device
 	d1 := core.NewRecord(devicecollection)
@@ -656,12 +750,13 @@ func TestInterfacesConfig(t *testing.T) {
 
 	lan := core.NewRecord(vlancollection)
 	lan.Set("name", "lan")
+	lan.Set("number", "1000")
 	err = app.Save(lan)
 	assert.Equal(t, nil, err)
 
 	guest := core.NewRecord(vlancollection)
 	guest.Set("name", "guest")
-	guest.Set("vlan_id", "7")
+	guest.Set("number", "7")
 	guest.Set("subnet", "10.11.12.13")
 	guest.Set("netmask", "255.255.128.0")
 	err = app.Save(guest)
@@ -669,17 +764,39 @@ func TestInterfacesConfig(t *testing.T) {
 
 	iot := core.NewRecord(vlancollection)
 	iot.Set("name", "iot")
-	iot.Set("vlan_id", "123")
+	iot.Set("number", "123")
 	iot.Set("subnet", "192.168.1.1")
 	iot.Set("netmask", "255.255.255.00")
 	err = app.Save(iot)
 	assert.Equal(t, nil, err)
 
+	e1 := core.NewRecord(ethernetcollection)
+	e1.Id = "somethindevice1"
+	e1.Set("name", "lan1")
+	e1.Set("speed", "1000F")
+	err = app.Save(e1) // Saving is not really required
+	assert.Equal(t, nil, err)
+
+	e2 := core.NewRecord(ethernetcollection)
+	e2.Id = "somethindevice2"
+	e2.Set("name", "lan2")
+	e2.Set("speed", "1000F")
+	err = app.Save(e2) // Saving is not really required
+	assert.Equal(t, nil, err)
+
+	// Configure a bridge for this device
+	b1 := core.NewRecord(bridgecollection)
+	b1.Set("device", d1.Id)
+	b1.Set("name", "br-lan")
+	b1.Set("ethernet", []string{e1.Id, e2.Id})
+	err = app.Save(b1) // Saving is not really required
+	assert.Equal(t, nil, err)
+
 	// VLANs not enabled
-	assert.Equal(t, `
-config interface 'lan'
-        option device 'br-lan'
-`, generateInterfacesConfig(app, d1))
+	assert.Equal(t, /*`
+		config interface 'lan'
+		        option device 'br-lan'
+		`*/"", generateInterfacesConfig(app, d1))
 
 	// VLANs enabled
 	d1.Set("apply", []string{"vlan"})
@@ -688,82 +805,31 @@ config interface 'lan'
 
 	assert.Equal(t, `
 config interface 'lan'
-        option device 'br-lan.1'
+        option device 'br-lan.1000'
 
-config bridge-vlan 'bridge_vlan_1'
-	option device 'br-lan'
-	option vlan '1'
-        list ports 'eth0:u*'
+config bridge-vlan 'bridge_vlan_1000'
+        option device 'br-lan'
+        option vlan '1000'
         list ports 'lan1:u*'
         list ports 'lan2:u*'
-        list ports 'lan3:u*'
-        list ports 'lan4:u*'
-        list ports 'lan5:u*'
-        list ports 'lan6:u*'
-        list ports 'lan7:u*'
-        list ports 'lan8:u*'
-        list ports 'lan9:u*'
-        list ports 'lan10:u*'
-        list ports 'lan11:u*'
-        list ports 'lan12:u*'
-        list ports 'lan13:u*'
-        list ports 'lan14:u*'
-        list ports 'lan15:u*'
-        list ports 'lan16:u*'
+
+config interface 'guest'
+        option device 'br-lan.7'
 
 config bridge-vlan 'bridge_vlan_7'
         option device 'br-lan'
         option vlan '7'
-        list ports 'eth0:t'
         list ports 'lan1:t'
         list ports 'lan2:t'
-        list ports 'lan3:t'
-        list ports 'lan4:t'
-        list ports 'lan5:t'
-        list ports 'lan6:t'
-        list ports 'lan7:t'
-        list ports 'lan8:t'
-        list ports 'lan9:t'
-        list ports 'lan10:t'
-        list ports 'lan11:t'
-        list ports 'lan12:t'
-        list ports 'lan13:t'
-        list ports 'lan14:t'
-        list ports 'lan15:t'
-        list ports 'lan16:t'
 
-config interface 'guest'
-        option device 'br-lan.7'
-        option proto 'static'
-        option ipaddr '10.11.12.8'
-        option netmask '255.255.128.0'
+config interface 'iot'
+        option device 'br-lan.123'
 
 config bridge-vlan 'bridge_vlan_123'
         option device 'br-lan'
         option vlan '123'
-        list ports 'eth0:t'
         list ports 'lan1:t'
         list ports 'lan2:t'
-        list ports 'lan3:t'
-        list ports 'lan4:t'
-        list ports 'lan5:t'
-        list ports 'lan6:t'
-        list ports 'lan7:t'
-        list ports 'lan8:t'
-        list ports 'lan9:t'
-        list ports 'lan10:t'
-        list ports 'lan11:t'
-        list ports 'lan12:t'
-        list ports 'lan13:t'
-        list ports 'lan14:t'
-        list ports 'lan15:t'
-        list ports 'lan16:t'
-
-config interface 'iot'
-        option device 'br-lan.123'
-        option proto 'static'
-        option ipaddr '192.168.1.8'
-        option netmask '255.255.255.00'
 `, generateInterfacesConfig(app, d1))
 }
 
@@ -1760,7 +1826,7 @@ func setupVlanCollection(t *testing.T, app core.App) *core.Collection {
 	x := 1.0
 	y := 4096.0
 	vlancollection.Fields.Add(&core.NumberField{
-		Name:     "vlan_id",
+		Name:     "number",
 		Required: false,
 		Min:      &x,
 		Max:      &y,

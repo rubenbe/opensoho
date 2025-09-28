@@ -763,7 +763,8 @@ func generateInterfacesConfig(app core.App, device *core.Record) string {
 		        option device 'br-lan'
 		`*/
 	}
-	bridgeConfig, err := app.FindFirstRecordByData("bridges", "device", device.Id)
+	bridgeConfig, err := app.FindFirstRecordByFilter("bridges",
+		"name = 'br-lan' && device = {:device}", dbx.Params{"device": device.Id})
 	if err != nil {
 		fmt.Println("INTERFACES ERROR", err)
 		return ""

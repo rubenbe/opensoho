@@ -13,7 +13,7 @@ builds:
     main: .
     binary: 
     ldflags:
-      - -s -w
+      - -s -w -X github.com/pocketbase/pocketbase.Version={{ .Version }}
     env:
       - CGO_ENABLED=0
     goos:

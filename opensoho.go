@@ -740,21 +740,22 @@ func generateInterfaceVlanConfigInt(app core.App, bridgeConfig *core.Record, vla
 		return ""
 	}
 	mode := "t"
+	intfmode := "\n        option proto 'none'"
 	if vlanname == "lan" {
 		mode = "u*"
+		intfmode = ""
 	}
 
 	// TODO add ip address?
 	return fmt.Sprintf(`
 config interface '%[1]s'
-        option device 'br-lan.%[2]d'
+        option device 'br-lan.%[2]d'%[4]s
 
 config bridge-vlan 'bridge_vlan_%[2]d'
         option device 'br-lan'
         option vlan '%[2]d'
-%[3]s`, vlanname, vlanid, generatePortTaggingConfig(app, bridgeConfig.ExpandedAll("ethernet"), mode))
+%[3]s`, vlanname, vlanid, generatePortTaggingConfig(app, bridgeConfig.ExpandedAll("ethernet"), mode), intfmode)
 }
-
 func generateInterfacesConfig(app core.App, device *core.Record) string {
 	if false == IsFeatureApplied(device, "vlan") {
 		return ""
@@ -1040,9 +1041,9 @@ func generateDeviceConfig(app core.App, record *core.Record) ([]byte, string, er
 	{
 		interfacesconfigs := generateInterfacesConfig(app, record)
 		fmt.Println(interfacesconfigs)
-		//if len(interfacesconfigs) > 0 {
-		//	configfiles["etc/config/network"] = interfacesconfigs
-		//}
+		if len(interfacesconfigs) > 0 {
+			configfiles["etc/config/network"] = interfacesconfigs
+		}
 	}
 
 	blob, checksum, err := createConfigTar(configfiles)

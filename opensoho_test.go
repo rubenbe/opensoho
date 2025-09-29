@@ -620,6 +620,7 @@ func TestGenerateInterfaceVlanConfigInt(t *testing.T) {
 	assert.Equal(t, `
 config interface 'iot'
         option device 'br-lan.123'
+        option proto 'none'
 
 config bridge-vlan 'bridge_vlan_123'
         option device 'br-lan'
@@ -634,6 +635,7 @@ config bridge-vlan 'bridge_vlan_123'
 	assert.Equal(t, `
 config interface 'iot'
         option device 'br-lan.456'
+        option proto 'none'
 
 config bridge-vlan 'bridge_vlan_456'
         option device 'br-lan'
@@ -815,6 +817,7 @@ config bridge-vlan 'bridge_vlan_1000'
 
 config interface 'guest'
         option device 'br-lan.7'
+        option proto 'none'
 
 config bridge-vlan 'bridge_vlan_7'
         option device 'br-lan'
@@ -824,6 +827,7 @@ config bridge-vlan 'bridge_vlan_7'
 
 config interface 'iot'
         option device 'br-lan.123'
+        option proto 'none'
 
 config bridge-vlan 'bridge_vlan_123'
         option device 'br-lan'

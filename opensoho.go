@@ -1461,6 +1461,17 @@ func saveDeviceConfig(app core.App, record *core.Record, data []byte, checksum s
 	return nil
 }
 
+func GetDataDirPath() (string, error) {
+	if ko_data_path := os.Getenv("KO_DATA_PATH"); ko_data_path == "/var/run/ko" {
+		return "/ko-app", nil
+	}
+	cwdPath, err := os.Getwd()
+	if err != nil {
+		return cwdPath, err
+	}
+	return cwdPath, nil
+}
+
 func main() {
 	shared_secret := os.Getenv("OPENSOHO_SHARED_SECRET")
 	if shared_secret == "" {
@@ -1469,7 +1480,7 @@ func main() {
 	}
 	os.Unsetenv("OPENSOHO_SHARED_SECRET")
 	var c pocketbase.Config
-	cwdPath, err := os.Getwd()
+	cwdPath, err := GetDataDirPath()
 	if err != nil {
 		fmt.Println("Error:", err)
 		return

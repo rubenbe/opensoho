@@ -1386,7 +1386,6 @@ func handleDeviceRegistration(e *core.RequestEvent, shared_secret string, enable
 		record.Set("hardware_id", data.HardwareId)
 		record.Set("mac_address", data.MacAddress)
 		record.Set("uuid", device_uuid)
-		record.Set("tags", data.Tags)
 		record.Set("model", data.Model)
 		record.Set("os", data.Os)
 		record.Set("system", data.System)

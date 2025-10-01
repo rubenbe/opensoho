@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
 	"testing"
@@ -36,6 +37,32 @@ func generateToken(collectionNameOrId string, email string) (string, error) {
 
 	return record.NewAuthToken()
 }*/
+
+func TestGetDataDirPath(t *testing.T) {
+	path, err := GetDataDirPath()
+	assert.Equal(t, nil, err)
+	cwdpath, err := os.Getwd()
+	assert.Equal(t, nil, err)
+	assert.Equal(t, cwdpath, path, "verify the working directory defaults to the current directory")
+
+	// Pretend to run in a container
+	os.Setenv("KO_DATA_PATH", "/var/run/ko")
+	path, err = GetDataDirPath()
+	// Unset it before any asserts
+	os.Unsetenv("KO_DATA_PATH")
+
+	assert.Equal(t, nil, err)
+	assert.Equal(t, "/ko-app", path, "verify the working directory has changed in the container")
+
+	// Pretend to run in a container
+	os.Setenv("KO_DATA_PATH", "/something")
+	path, err = GetDataDirPath()
+	// Unset it before any asserts
+	os.Unsetenv("KO_DATA_PATH")
+
+	assert.Equal(t, nil, err)
+	assert.Equal(t, cwdpath, path, "verify the working directory only changes with a specific ko data path")
+}
 
 func TestReportStatusEndpoint(t *testing.T) {
 	app, _ := tests.NewTestApp()

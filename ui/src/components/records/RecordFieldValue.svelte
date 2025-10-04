@@ -128,9 +128,22 @@
 {:else if field.type === "geoPoint"}
     <div class="label"><GeoPointValue value={rawValue} /></div>
 {:else if short}
+    {#if field.name === "ip_address"}
+    <a
+        class="txt-ellipsis"
+        href="http://{rawValue}"
+        target="_blank"
+        rel="noopener noreferrer"
+        use:tooltip={"Open in new tab"}
+        on:click|stopPropagation
+    >
+        {CommonHelper.truncate(rawValue)}
+    </a>
+    {:else}
     <span class="txt txt-ellipsis" title={CommonHelper.truncate(rawValue)}>
         {CommonHelper.truncate(rawValue)}
     </span>
+    {/if}
 {:else}
     <div class="block txt-break fallback-block">{rawValue}</div>
 {/if}

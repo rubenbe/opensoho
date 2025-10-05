@@ -900,6 +900,89 @@ config bridge-vlan 'bridge_vlan_100'
 `, generateInterfacesConfig(app, d1))
 }
 
+func TestGenerateDhcpConfigForDevice(t *testing.T) {
+	app, err := tests.NewTestApp()
+	assert.Equal(t, nil, err)
+	defer app.Cleanup()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	ethernetcollection := setupEthernetCollection(t, app, devicecollection)
+	bridgecollection := setupBridgesCollection(t, app, devicecollection, wificollection, ethernetcollection)
+	expandVlanCollection(t, app, vlancollection, devicecollection)
+
+	b1 := core.NewRecord(bridgecollection)
+	err = app.Save(b1) // Saving is not really required
+	assert.Equal(t, nil, err)
+
+	// Add two devices
+	d1 := core.NewRecord(devicecollection)
+	d1.Id = "somethindevice1"
+	d1.Set("name", "the_device1")
+	d1.Set("health_status", "healthy")
+	d1.Set("apply", []string{"vlan"})
+	d1.Set("ip_address", "8.8.8.8")
+	err = app.Save(d1)
+	assert.Equal(t, nil, err)
+
+	// Add two devices
+	d2 := core.NewRecord(devicecollection)
+	d2.Id = "somethindevice2"
+	d2.Set("name", "the_device2")
+	d2.Set("health_status", "healthy")
+	d2.Set("apply", []string{"vlan"})
+	d2.Set("ip_address", "8.8.8.9")
+	err = app.Save(d2)
+	assert.Equal(t, nil, err)
+
+	// Add an IOT vlan with device 2 as gateway
+	iot_vlan := core.NewRecord(vlancollection)
+	iot_vlan.Set("name", "guest")
+	iot_vlan.Set("number", "300")
+	iot_vlan.Set("cidr", "172.16.0.1/17")
+	iot_vlan.Set("gateway", "somethindevice2")
+	err = app.Save(iot_vlan)
+	assert.Equal(t, nil, err)
+
+	// Add an LAN vlan with device 2 as gateway, should be ignored
+	lan_vlan := core.NewRecord(vlancollection)
+	lan_vlan.Set("name", "lan")
+	lan_vlan.Set("number", "200")
+	lan_vlan.Set("cidr", "192.168.1.1/24")
+	lan_vlan.Set("gateway", "somethindevice2")
+	err = app.Save(lan_vlan)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, ``, generateDhcpConfig(app, d1), "No DHCP config on a non-gateway device")
+	assert.Equal(t, `
+config dhcp 'guest'
+        option interface 'guest'
+        option start '100'
+        option limit '150'
+        option leasetime '12h'
+`, generateDhcpConfig(app, d2))
+	// Test some corner case with the internal function
+	assert.Equal(t, ``, generateDhcpConfigForDeviceVLAN("", 24))
+	assert.Equal(t, ``, generateDhcpConfigForDeviceVLAN("lan", 24))
+	assert.Equal(t, ``, generateDhcpConfigForDeviceVLAN("wan", 24))
+	assert.Equal(t, `
+config dhcp 'dmz'
+        option interface 'dmz'
+        option start '100'
+        option limit '150'
+        option leasetime '12h'
+`, generateDhcpConfigForDeviceVLAN("dmz", 24))
+	// Test non-"/24" subnets
+	assert.Equal(t, `
+config dhcp 'guest'
+        option interface 'guest'
+        option start '100'
+        option limit '150'
+        option leasetime '12h'
+`, generateDhcpConfigForDeviceVLAN("guest", 23))
+	assert.Equal(t, ``, generateDhcpConfigForDeviceVLAN("guest", 25))
+}
+
 func TestInterfacesConfig(t *testing.T) {
 	app, _ := tests.NewTestApp()
 

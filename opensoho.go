@@ -726,6 +726,66 @@ func IsFeatureApplied(record *core.Record, target string) bool {
 	return false
 }
 
+func generateDhcpConfigForDeviceVLAN(vlanname string, masksize int) string {
+	// Should not occur, but extra safety
+	if vlanname == "" || vlanname == "lan" || vlanname == "wan" {
+		fmt.Println("Not a configurable vlan")
+		return ""
+	}
+	if masksize > 24 {
+		fmt.Println("Subnet too small for the DHCP config")
+		return ""
+	}
+	return fmt.Sprintf(`
+config dhcp '%[1]s'
+        option interface '%[1]s'
+        option start '100'
+        option limit '150'
+        option leasetime '12h'
+`, vlanname)
+}
+
+func generateDhcpConfigForDevice(app core.App, device *core.Record, vlan *core.Record) string {
+	vlangateway := vlan.GetString("gateway")
+	if vlangateway == "" || vlangateway != device.Id {
+		fmt.Println("Not a gateway")
+		return ""
+	}
+	vlanname := vlan.GetString("name")
+	vlancidr := vlan.GetString("cidr")
+	if vlancidr == "" {
+		return ""
+	}
+	_, ipNet, err := net.ParseCIDR(vlancidr)
+	if err != nil {
+		fmt.Println("Invalid CIDR")
+		return ""
+	}
+	prefixsize, _ := ipNet.Mask.Size()
+	return generateDhcpConfigForDeviceVLAN(vlanname, prefixsize)
+}
+
+func generateDhcpConfig(app core.App, device *core.Record) string {
+	vlans, err := app.FindRecordsByFilter(
+		"vlan",                           // collection
+		"name != 'wan' && name != 'lan'", // filter
+		"created",                        // sorting by creation time is the most stable
+		0,                                // limit
+		0,                                // offset
+	)
+
+	if err != nil {
+		fmt.Println(err)
+		return ""
+	}
+
+	output := ""
+	for _, vlan := range vlans {
+		output += generateDhcpConfigForDevice(app, device, vlan)
+	}
+	return output
+}
+
 // Currently all of them are the same mode
 func generatePortTaggingConfig(app core.App, ports []*core.Record, mode string) string {
 	portslist := ""
@@ -1080,6 +1140,14 @@ func generateDeviceConfig(app core.App, record *core.Record) ([]byte, string, er
 		fmt.Println(interfacesconfigs)
 		if len(interfacesconfigs) > 0 {
 			configfiles["etc/config/network"] = interfacesconfigs
+		}
+	}
+
+	{
+		dhcpconfigs := generateDhcpConfig(app, record)
+		fmt.Println(dhcpconfigs)
+		if len(dhcpconfigs) > 0 {
+			configfiles["etc/config/dhcp"] = dhcpconfigs
 		}
 	}
 

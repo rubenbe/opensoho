@@ -668,6 +668,20 @@ func isUnHealthyQuorumReached(unhealthyfullset map[string]struct{}, subset []str
 	}
 	return false
 }
+
+func CIDRToMask(prefix int) (string, error) {
+	if prefix < 0 {
+		prefix = 0
+	}
+	if prefix > 32 {
+		prefix = 32
+	}
+
+	mask := net.CIDRMask(prefix, 32)
+	ip := net.IP(mask)
+	return ip.String(), nil
+}
+
 func lastOctet(ipStr string) (byte, error) {
 	ip := net.ParseIP(ipStr)
 	if ip == nil {

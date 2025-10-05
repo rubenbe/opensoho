@@ -2362,6 +2362,37 @@ func TestIsUnHealthyQuorumReached(t *testing.T) {
 	}
 }
 
+func TestCIDRToMask(t *testing.T) {
+	// Test the classics
+	mask, err := CIDRToMask(32)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, "255.255.255.255", mask)
+	mask, err = CIDRToMask(24)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, "255.255.255.0", mask)
+	mask, err = CIDRToMask(16)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, "255.255.0.0", mask)
+	mask, err = CIDRToMask(8)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, "255.0.0.0", mask)
+	mask, err = CIDRToMask(0)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, "0.0.0.0", mask)
+	// Test a funky one too
+	mask, err = CIDRToMask(17)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, "255.255.128.0", mask)
+	// Test the outliers
+	mask, err = CIDRToMask(33)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, "255.255.255.255", mask)
+	// Test the outliers
+	mask, err = CIDRToMask(-1)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, "0.0.0.0", mask)
+}
+
 func TestDhcpClientUpdate(t *testing.T) {
 	app, err := tests.NewTestApp()
 	assert.Equal(t, nil, err)

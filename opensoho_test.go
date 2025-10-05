@@ -747,6 +747,98 @@ config bridge-vlan 'bridge_vlan_100'
 `, generateInterfaceVlanConfigInt(app, b1, "lan", 100, "10.11.12.13/17"), "lan network should never be reconfigured")
 }
 
+func TestGenerateInterfaceVlanConfigForGateway(t *testing.T) {
+	app, _ := tests.NewTestApp()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	ethernetcollection := setupEthernetCollection(t, app, devicecollection)
+	bridgecollection := setupBridgesCollection(t, app, devicecollection, wificollection, ethernetcollection)
+	expandVlanCollection(t, app, vlancollection, devicecollection)
+
+	b1 := core.NewRecord(bridgecollection)
+	err := app.Save(b1) // Saving is not really required
+	assert.Equal(t, nil, err)
+
+	// Add two devices
+	d1 := core.NewRecord(devicecollection)
+	d1.Id = "somethindevice1"
+	d1.Set("name", "the_device1")
+	d1.Set("health_status", "healthy")
+	d1.Set("apply", []string{"vlan"})
+	d1.Set("ip_address", "8.8.8.8")
+	err = app.Save(d1)
+	assert.Equal(t, nil, err)
+
+	// Add two devices
+	d2 := core.NewRecord(devicecollection)
+	d2.Id = "somethindevice2"
+	d2.Set("name", "the_device2")
+	d2.Set("health_status", "healthy")
+	d2.Set("apply", []string{"vlan"})
+	d2.Set("ip_address", "8.8.8.9")
+	err = app.Save(d2)
+	assert.Equal(t, nil, err)
+
+	// Add an IOT vlan with device 2 as gateway
+	iot_vlan := core.NewRecord(vlancollection)
+	iot_vlan.Set("name", "iot")
+	iot_vlan.Set("number", "300")
+	iot_vlan.Set("cidr", "172.16.0.1/17")
+	iot_vlan.Set("gateway", "somethindevice2")
+	err = app.Save(iot_vlan)
+	assert.Equal(t, nil, err)
+
+	// Add an LAN vlan with device 2 as gateway
+	lan_vlan := core.NewRecord(vlancollection)
+	lan_vlan.Set("name", "lan")
+	lan_vlan.Set("number", "200")
+	lan_vlan.Set("cidr", "192.168.1.1/24")     //Should be ignored
+	lan_vlan.Set("gateway", "somethindevice2") // Should be ignored
+	err = app.Save(lan_vlan)
+	assert.Equal(t, nil, err)
+
+	assert.Equal(t, `
+config interface 'iot'
+        option device 'br-lan.300'
+        option proto 'none'
+
+config bridge-vlan 'bridge_vlan_300'
+        option device 'br-lan'
+        option vlan '300'
+`, generateInterfaceVlanConfig(app, d1, b1, iot_vlan), "device1 should have proto=none")
+	assert.Equal(t, `
+config interface 'iot'
+        option device 'br-lan.300'
+        option proto 'static'
+        option ipaddr '172.16.0.1'
+        option netmask '255.255.128.0'
+
+config bridge-vlan 'bridge_vlan_300'
+        option device 'br-lan'
+        option vlan '300'
+`, generateInterfaceVlanConfig(app, d2, b1, iot_vlan), "device2 should have proto=static")
+
+	assert.Equal(t, `
+config interface 'lan'
+        option device 'br-lan.200'
+
+config bridge-vlan 'bridge_vlan_200'
+        option device 'br-lan'
+        option vlan '200'
+`, generateInterfaceVlanConfig(app, d1, b1, lan_vlan), "device1 should have no proto on lan")
+	assert.Equal(t, `
+config interface 'lan'
+        option device 'br-lan.200'
+
+config bridge-vlan 'bridge_vlan_200'
+        option device 'br-lan'
+        option vlan '200'
+`, generateInterfaceVlanConfig(app, d2, b1, lan_vlan), "device2 should have no proto on lan")
+
+}
+
 // Test that the default VLAN is present
 func TestInterfacesConfigDefaultVLAN(t *testing.T) {
 	app, _ := tests.NewTestApp()
@@ -1960,7 +2052,7 @@ func setupVlanCollection(t *testing.T, app core.App) *core.Collection {
 	})
 	vlancollection.Fields.Add(&core.TextField{
 		Name:     "cidr",
-		Pattern:  "^([0-9]{1,3}.){3}[0-9]{1,3}($|/(16|24))$",
+		Pattern:  "^([0-9]{1,3}.){3}[0-9]{1,3}/[0-9]{1,2}$",
 		Required: false,
 	})
 	vlancollection.Fields.Add(&core.AutodateField{

@@ -738,11 +738,17 @@ func generatePortTaggingConfig(app core.App, ports []*core.Record, mode string) 
 	return portslist
 }
 
-func generateInterfaceVlanConfig(app core.App, bridgeConfig *core.Record, vlanConfig *core.Record) string {
+func generateInterfaceVlanConfig(app core.App, device *core.Record, bridgeConfig *core.Record, vlanConfig *core.Record) string {
 	vlanname := vlanConfig.GetString("name")
 	vlanid := vlanConfig.GetInt("number")
-	//cidr := vlanConfig.GetString("cidr")
-	return generateInterfaceVlanConfigInt(app, bridgeConfig, vlanname, vlanid, "" /*cidr*/)
+	gatewayid := vlanConfig.GetString("gateway")
+	cidr := ""
+
+	if len(gatewayid) > 0 && gatewayid == device.Id {
+		cidr = vlanConfig.GetString("cidr")
+	}
+
+	return generateInterfaceVlanConfigInt(app, bridgeConfig, vlanname, vlanid, cidr)
 }
 
 func generateInterfaceVlanConfigInt(app core.App, bridgeConfig *core.Record, vlanname string, vlanid int, cidr string) string {
@@ -827,7 +833,7 @@ func generateInterfacesConfig(app core.App, device *core.Record) string {
 	fmt.Printf("LOOPING %v\n", vlans)
 	output := ""
 	for _, vlan := range vlans {
-		output += generateInterfaceVlanConfig(app, bridgeConfig, vlan)
+		output += generateInterfaceVlanConfig(app, device, bridgeConfig, vlan)
 		/*new_ip, err := replaceLastOctet(vlan.GetString("subnet"), device.GetString("ip_address"))
 				if err != nil {
 					fmt.Println(err)

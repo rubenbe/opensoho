@@ -1208,6 +1208,10 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 	time := e.Request.URL.Query().Get("time")
 	radios := make(map[int]Radio)
 	var payload MonitoringData
+	if e.Request.Header.Get("Content-Length") == "0" {
+		app.Logger().Info("Ignored empty monitoring request 1", "userIP", e.RealIP())
+		return e.Blob(200, "text/plain", []byte("")), radios
+	}
 	if err := e.BindBody(&payload); err != nil {
 		fmt.Println(err)
 		return e.BadRequestError("Failed to parse json", err), radios

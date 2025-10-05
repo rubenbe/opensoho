@@ -1005,6 +1005,46 @@ func TestUpdateMonitoring(t *testing.T) {
 	assert.Equal(t, Radio{Frequency: 2462, Channel: 11, HTmode: "HT20", TxPower: 22, MAC: "aa:bb:cc:dd:ee:ff"}, radio)
 }
 
+// Verify an empty monitoring request is correctly ignored
+func TestUpdateMonitoringEmptyBody(t *testing.T) {
+	var err error
+	app, _ := tests.NewTestApp()
+	event := core.RequestEvent{}
+	event.Request, err = http.NewRequest("POST", "/api/v1/monitoring/device/", strings.NewReader(""))
+	assert.Equal(t, err, nil)
+	event.Request.SetPathValue("key", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	event.Request.Header.Set("content-type", "application/json")
+	// Write this in lower case to verify the case insensitivity
+	event.Request.Header.Set("content-length", "0")
+	event.App = app
+	rec := httptest.NewRecorder()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	clientcollection := setupClientsCollection(t, app)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+
+	// Add a device
+	d := core.NewRecord(devicecollection)
+	d.Set("name", "the_device1")
+	d.Set("health_status", "healthy")
+	err = app.Save(d)
+	assert.Equal(t, nil, err)
+
+	event.Response = rec
+
+	// Verify the valid, but empty response
+	response, radios := handleMonitoring(&event, app, d, clientcollection)
+	assert.Equal(t, response, nil)
+	assert.NotEqual(t, radios, nil)
+	httpResponse := rec.Result()
+	defer httpResponse.Body.Close()
+	body, err := io.ReadAll(httpResponse.Body)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, 200, httpResponse.StatusCode)
+	assert.Equal(t, "", string(body))
+}
+
 func TestUpdateInterface(t *testing.T) {
 	app, _ := tests.NewTestApp()
 	vlancollection := setupVlanCollection(t, app)

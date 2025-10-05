@@ -741,10 +741,11 @@ func generatePortTaggingConfig(app core.App, ports []*core.Record, mode string) 
 func generateInterfaceVlanConfig(app core.App, bridgeConfig *core.Record, vlanConfig *core.Record) string {
 	vlanname := vlanConfig.GetString("name")
 	vlanid := vlanConfig.GetInt("number")
-	return generateInterfaceVlanConfigInt(app, bridgeConfig, vlanname, vlanid)
+	//cidr := vlanConfig.GetString("cidr")
+	return generateInterfaceVlanConfigInt(app, bridgeConfig, vlanname, vlanid, "" /*cidr*/)
 }
 
-func generateInterfaceVlanConfigInt(app core.App, bridgeConfig *core.Record, vlanname string, vlanid int) string {
+func generateInterfaceVlanConfigInt(app core.App, bridgeConfig *core.Record, vlanname string, vlanid int, cidr string) string {
 	if vlanid < 1 || vlanid > 4094 || len(vlanname) == 0 {
 		return ""
 	}
@@ -755,6 +756,22 @@ func generateInterfaceVlanConfigInt(app core.App, bridgeConfig *core.Record, vla
 	}
 	mode := "t"
 	intfmode := "\n        option proto 'none'"
+
+	// Avoid overwriting the default LAN configuration
+	if len(cidr) > 0 && vlanname != "lan" {
+		ipAddr, ipNet, err := net.ParseCIDR(cidr)
+		if err == nil {
+			prefixsize, _ := ipNet.Mask.Size()
+			prefixmask, _ := CIDRToMask(prefixsize)
+			intfmode = fmt.Sprintf(`
+        option proto 'static'
+        option ipaddr '%[1]s'
+        option netmask '%[2]s'`, ipAddr, prefixmask)
+		} else {
+			app.Logger().Warn("Invalid CIDR", "cidr", cidr)
+		}
+	}
+
 	if vlanname == "lan" {
 		mode = "u*"
 		intfmode = ""

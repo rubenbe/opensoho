@@ -1409,6 +1409,37 @@ func storeDHCPLeases(app core.App, leaseslist []DHCPLease, expirytime types.Date
 	//return leasesmap
 }
 
+func handleDeviceInfoUpdate(e *core.RequestEvent) error {
+	e.Response.Header().Set("X-Openwisp-Controller", "true")
+	data := struct {
+		// unexported to prevent binding
+		somethingPrivate string
+
+		Key    string `form:"key"`
+		Model  string `form:"model"`
+		Os     string `form:"os"`
+		System string `form:"system"`
+	}{}
+	if err := e.BindBody(&data); err != nil {
+		return e.BadRequestError("Missing fields", err)
+	}
+	record, err := getDeviceRecord(e.App, data.Key)
+	if err != nil {
+		fmt.Println(err)
+		return e.ForbiddenError("Not allowed", err)
+	}
+	record.Set("model", data.Model)
+	record.Set("os", data.Os)
+	record.Set("system", data.System)
+	err = e.App.Save(record)
+	if err != nil {
+		return e.InternalServerError("Info update failed", err)
+	}
+	response := fmt.Sprintf("update-info: success\n")
+
+	return e.Blob(200, "text/plain", []byte(response))
+}
+
 func handleDeviceStatusUpdate(e *core.RequestEvent) error {
 	e.Response.Header().Set("X-Openwisp-Controller", "true")
 	data := struct {
@@ -1523,6 +1554,7 @@ func bindAppHooks(app core.App, shared_secret string, enableNewDevices bool) {
 			return handleDeviceRegistration(e, shared_secret, enableNewDevices)
 		})
 		se.Router.POST("/controller/report-status/{device_uuid}/", handleDeviceStatusUpdate)
+		se.Router.POST("/controller/update-info/{device_uuid}/", handleDeviceInfoUpdate)
 
 		se.Router.GET("/controller/checksum/{device_uuid}/", func(e *core.RequestEvent) error {
 			e.Response.Header().Set("X-Openwisp-Controller", "true")

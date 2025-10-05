@@ -5,7 +5,7 @@
 replicaCount: 1
 
 image:
-  repository: opensoho
+  repository: ghcr.io/opensoho/opensoho
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
   tag: ""
@@ -32,7 +32,7 @@ securityContext:
   capabilities:
     drop:
     - ALL
-  readOnlyRootFilesystem: false
+  readOnlyRootFilesystem: true
   runAsNonRoot: true
   runAsUser: 1001
 
@@ -90,7 +90,7 @@ persistence:
   accessMode: ReadWriteOnce
   size: 10Gi
   # Mount path for persistent data
-  mountPath: /app/pb_data
+  mountPath: /ko-app/pb_data
 
 # Health checks
 healthCheck:

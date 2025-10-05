@@ -736,6 +736,15 @@ config bridge-vlan 'bridge_vlan_100'
         option device 'br-lan'
         option vlan '100'
 `, generateInterfaceVlanConfigInt(app, b1, "iot", 100, "10.11.12.13/17"))
+
+	assert.Equal(t, `
+config interface 'lan'
+        option device 'br-lan.100'
+
+config bridge-vlan 'bridge_vlan_100'
+        option device 'br-lan'
+        option vlan '100'
+`, generateInterfaceVlanConfigInt(app, b1, "lan", 100, "10.11.12.13/17"), "lan network should never be reconfigured")
 }
 
 // Test that the default VLAN is present

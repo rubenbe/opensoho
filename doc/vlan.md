@@ -1,7 +1,6 @@
 # VLAN
 
 ## Important information (read first!)
-
 * VLAN configuration is tricky to get right, so OpenSOHO tries to applies its configuration in a way that limits possible connection loss.
 * VLAN tagging is only applied when on a device "apply" contains `VLAN`. Removing `vlan` will *NOT* undo the configuration.
 * LAN remains untagged on all ports (it is planned feature to override this for individual ports).
@@ -17,19 +16,17 @@
 
 ## Getting started
 1. Under `Vlans`, ensure a `Vlan` named `lan` exists.
-   Give it a number e.g. 100, this will be your `lan` VLAN id.
+   Give it a number e.g. 100, this will be your `lan` VLAN id. Avoid VLAN IDs 1 and 2.
 2. Under `Devices`, add `vlan` as `apply` value for each device that requires VLAN support.
    Do this *GRADUALLY* as there is no easy way back (using OpenSOHO).
    A good strategy is to slowly work your way up from the least important APs towards my main router.
 3. When all (required) devices ave `vlan` applied, your network should be ready for additional VLANs.
 
 ## Configuring extra VLANs
-1. Add an extra configuration entry under `Vlans`, at the minimum give it a `name` and a `number`.
+1. Add an extra configuration entry under `Vlans`. At the minimum give it a `name` and a `number`. e.g. `guest` and `200`
    OpenSOHO will ensure this VLAN is available tagged on all interfaces on all devices (with the `vlan` setting applied)
-2. You probably also want to add a CIDR to define the subnet e.g. `192.168.1.1/24`. The IP will be used for the subnet if you configure a gateway in the next step.
-   The `/24` subnet size is best tested.
-3. Configure a gateway, this is probably the same one as your gateway for your `lan`.
-4. Optionally enable `DHCP`. The DHCP config is very simple, but sufficient for most `/24` networks. A 12h lease for addresses from `100` until `249` (the OpenWRT default).
-   * Subnets smaller than `/24` will not get a DHCP at this moment, since the `100->249` range is probably not a valid one. Use Luci instead.
-   * Subnets bigger than `/24` will get the same DHCP config. This is probably not what you want. Use Luci instead.
-5. Wifi interfaces can also be added, via the `Wifi` config.
+2. Configure a gateway, this is probably the same one as your gateway for your `lan`.
+3. Add a CIDR to define the subnet e.g. `192.168.1.1/24`. The IP will be used for the subnet if you configure a gateway in the next step.
+   The `/24` subnet size is best tested. OpenSOHO will add this IP address on the gateway device only, the other devices will not get an IP address.
+4. Wifi interfaces can be added, via the `Wifi` config.
+5. OpenSOHO does not configure DHCP or your firewall yet. Use Luci on the gateway device for that.

@@ -319,14 +319,14 @@ func updateRadios(device *core.Record, app core.App, newradios map[int]Radio) {
 				oldradio.Set("enabled", true)
 				err := app.Save(oldradio)
 				if err != nil {
-					fmt.Println("Fialed to mark radio as enabled:", err)
+					fmt.Println("Failed to mark radio as enabled:", err)
 				}
 			}
 			if len(oldradio.GetString("mac_address")) == 0 {
 				oldradio.Set("mac_address", newradio.MAC)
 				err = app.Save(oldradio)
 				if err != nil {
-					fmt.Println("Fialed to update radio with mac", err)
+					fmt.Println("Failed to update radio with mac", err)
 				}
 			}
 			delete(newradios, oldradionum)
@@ -337,7 +337,7 @@ func updateRadios(device *core.Record, app core.App, newradios map[int]Radio) {
 				oldradio.Set("enabled", false)
 				err := app.Save(oldradio)
 				if err != nil {
-					fmt.Println("Fialed to mark radio as disabled:", err)
+					fmt.Println("Failed to mark radio as disabled:", err)
 				}
 			}
 

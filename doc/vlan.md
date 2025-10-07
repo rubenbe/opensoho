@@ -29,4 +29,4 @@
 3. Add a CIDR to define the subnet e.g. `192.168.1.1/24`. The IP will be used for the subnet if you configure a gateway in the next step.
    The `/24` subnet size is best tested. OpenSOHO will add this IP address on the gateway device only, the other devices will not get an IP address.
 4. Wifi interfaces can be added, via the `Wifi` config.
-5. OpenSOHO does not configure DHCP or your firewall yet. Use Luci on the gateway device for that.
+5. OpenSOHO does not configure DHCP or your firewall yet (this is planned). Use Luci on the gateway device for that.

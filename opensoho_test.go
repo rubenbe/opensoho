@@ -405,6 +405,67 @@ func TestHandleEthernetMonitoring(t *testing.T) {
 	assert.Equal(t, 200*1000*1000, records[1].GetInt("rx_bytes"))
 
 }
+func TestHandleDeviceInfoUpdate(t *testing.T) {
+	app, err := tests.NewTestApp()
+	assert.Equal(t, nil, err)
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	id, err := hexToPocketBaseID("0123456789abcdef0123456789abcdef")
+	assert.Equal(t, nil, err)
+	assert.Equal(t, "2fapl4n1azs5kkw", id)
+
+	{
+		d1 := core.NewRecord(devicecollection)
+		d1.Id = id
+		d1.Set("name", "the_device1")
+		d1.Set("health_status", "healthy")
+		d1.Set("ip_address", "8.8.8.8")
+		d1.Set("key", "0123456789abcdef0123456789abcdef")
+		d1.Set("model", "old router model")
+		d1.Set("os", "old openwrt")
+		d1.Set("system", "old system")
+		d1.Set("uuid", "44ee4fee-1a20-470e-9044-ad9df88a0889")
+		err = app.Save(d1)
+		assert.Equal(t, nil, err)
+	}
+
+	reqbody := strings.NewReader(url.Values{
+		"key":    {"0123456789abcdef0123456789abcdef"},
+		"model":  {"router-ng"},
+		"os":     {"shiny new openwrt"},
+		"system": {"system-ng"},
+	}.Encode())
+
+	event := core.RequestEvent{}
+	event.Request, err = http.NewRequest("POST", "/controller/update-info/44ee4fee-1a20-470e-9044-ad9df88a0889", reqbody)
+	event.Request.Header.Set("content-type", "application/x-www-form-urlencoded")
+	event.App = app
+	rec := httptest.NewRecorder()
+	event.Response = rec
+
+	// Test the update
+	err = handleDeviceInfoUpdate(&event)
+	assert.Equal(t, nil, err)
+
+	// Check the response
+	httpResponse := rec.Result()
+
+	defer httpResponse.Body.Close()
+	body, err := io.ReadAll(httpResponse.Body)
+	assert.Equal(t, nil, err)
+	bodystring := string(body)
+	assert.Equal(t, "update-info: success\n", bodystring)
+
+	// Verify the updated record
+	record, err := app.FindRecordById("devices", id)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, "router-ng", record.GetString("model"))
+	assert.Equal(t, "shiny new openwrt", record.GetString("os"))
+	assert.Equal(t, "system-ng", record.GetString("system"))
+	assert.Equal(t, "44ee4fee-1a20-470e-9044-ad9df88a0889", record.GetString("uuid"))
+}
 
 func TestHandleDeviceRegistration(t *testing.T) {
 	app, _ := tests.NewTestApp()
@@ -1912,6 +1973,18 @@ func setupDeviceCollection(t *testing.T, app core.App, wificollection *core.Coll
 	})
 	devicecollection.Fields.Add(&core.BoolField{
 		Name:     "enabled",
+		Required: false,
+	})
+	devicecollection.Fields.Add(&core.TextField{
+		Name:     "os",
+		Required: false,
+	})
+	devicecollection.Fields.Add(&core.TextField{
+		Name:     "model",
+		Required: false,
+	})
+	devicecollection.Fields.Add(&core.TextField{
+		Name:     "system",
 		Required: false,
 	})
 	err := app.Save(devicecollection)

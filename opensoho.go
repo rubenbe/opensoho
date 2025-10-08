@@ -782,14 +782,28 @@ func generateDhcpConfig(app core.App, device *core.Record) string {
 	return output
 }
 
-// Currently all of them are the same mode
-func generatePortTaggingConfig(app core.App, ports []*core.Record, mode string) string {
-	portslist := ""
+type PortTaggingConfig struct {
+	Port string
+	Mode string
+}
+
+func generateTaggingMap(app core.App, ports []*core.Record, defaultmode string) []PortTaggingConfig {
 	sort.Slice(ports, func(i, j int) bool {
 		return ports[i].GetString("name") < ports[j].GetString("name")
 	})
-	for _, port := range ports {
-		portslist += fmt.Sprintf("        list ports '%s:%s'\n", port.GetString("name"), mode)
+	config := make([]PortTaggingConfig, len(ports))
+	for i, port := range ports {
+		config[i] = PortTaggingConfig{Port: port.GetString("name"), Mode: defaultmode}
+	}
+	return config
+}
+
+// Currently all of them are the same mode
+func generatePortTaggingConfig(app core.App, ports []*core.Record, mode string) string {
+	portsconfig := generateTaggingMap(app, ports, mode)
+	portslist := ""
+	for _, portconfig := range portsconfig {
+		portslist += fmt.Sprintf("        list ports '%s:%s'\n", portconfig.Port, portconfig.Mode)
 	}
 	return portslist
 }

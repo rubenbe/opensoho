@@ -1258,6 +1258,8 @@ export default class CommonHelper {
 
     static getCollectionIcon(type, name){
         switch (name?.toLowerCase()){
+            case "port_tagging":
+                return "ri-price-tag-line"
             case "bridges":
                 return "ri-exchange-box-line"
             case "clients":

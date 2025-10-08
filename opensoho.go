@@ -420,22 +420,18 @@ func generateRadioConfigs(device *core.Record, app core.App) string {
 
 func getVlan(wifi *core.Record, app core.App) string {
 	errs := app.ExpandRecord(wifi, []string{"network"}, nil)
-	log.Println("NETWORK NAME 0")
 	if len(errs) > 0 {
 		log.Println(errs)
 		return "lan"
 	}
 	networkentry := wifi.ExpandedOne("network")
-	log.Println("NETWORK NAME 1")
 	if networkentry == nil {
 		return "lan"
 	}
-	log.Println("NETWORK NAME 2")
 	networkname := networkentry.GetString("name")
 	if len(networkname) == 0 {
 		return "lan"
 	}
-	log.Println("NETWORK NAME 3")
 	return networkname
 }
 
@@ -872,9 +868,6 @@ func generateInterfacesConfig(app core.App, device *core.Record) string {
 		fmt.Println("FAILED TO EXPAND:", errs)
 		return ""
 	}
-	//fmt.Printf("BRIDGE PORTS: %v", bridgeConfig.ExpandedAll("ethernet"))
-	//portslist := generatePortTaggingConfig(app, bridgeConfig.ExpandedAll("ethernet"), "u*")
-	//fmt.Println(portslist)
 
 	// Select all interfaces that are OpenSOHO maintained
 	// TODO make LAN vlan ID configurable
@@ -894,41 +887,6 @@ func generateInterfacesConfig(app core.App, device *core.Record) string {
 	output := ""
 	for _, vlan := range vlans {
 		output += generateInterfaceVlanConfig(app, device, bridgeConfig, vlan)
-		/*new_ip, err := replaceLastOctet(vlan.GetString("subnet"), device.GetString("ip_address"))
-				if err != nil {
-					fmt.Println(err)
-					//return ""
-					continue
-				}
-				output +=
-				output += fmt.Sprintf(`
-		config bridge-vlan 'bridge_vlan_%[2]d'
-		        option device 'br-lan'
-		        option vlan '%[2]d'
-		        list ports 'eth0:t'
-		        list ports 'lan1:t'
-		        list ports 'lan2:t'
-		        list ports 'lan3:t'
-		        list ports 'lan4:t'
-		        list ports 'lan5:t'
-		        list ports 'lan6:t'
-		        list ports 'lan7:t'
-		        list ports 'lan8:t'
-		        list ports 'lan9:t'
-		        list ports 'lan10:t'
-		        list ports 'lan11:t'
-		        list ports 'lan12:t'
-		        list ports 'lan13:t'
-		        list ports 'lan14:t'
-		        list ports 'lan15:t'
-		        list ports 'lan16:t'
-
-		config interface '%[1]s'
-		        option device 'br-lan.%[2]d'
-			option proto 'static'
-			option ipaddr '%[3]s'
-			option netmask '%[4]s'
-		`, vlan.GetString("name"), vlan.GetInt("vlan_id") , new_ip, vlan.GetString("netmask"))*/
 	}
 
 	return output

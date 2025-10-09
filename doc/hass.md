@@ -3,7 +3,7 @@
 The Home Assistant integration is currently limited, but can be used to notify when an OpenWRT device is no longer checking in with OpenSOHO (the router/AP becomes *unhealthy*)
 
 First add an API user to OpenSOHO using the admin interface. This is safer than using your admin account.
-OpenSOHO uses access tokens which are valid for 3 years. This means we need to update it reguraly.
+OpenSOHO uses access tokens which are valid for 3 years.
 
 
 ## Generating an initial token
@@ -40,7 +40,7 @@ curl -H "Authorization: TOKEN" http://192.168.1.1:8090/api/v1/devicestatus/00:11
 ```
 
 ## Updating the access token
-In case a token is about to exprie, you can request a new one via an API call:
+In case a token is about to expire, you can request a new one via an API call:
 
 ```
 curl -X POST -H "Authorization: OLDTOKEN" http://192.168.1.1:8090/api/collections/api_users/auth-refresh

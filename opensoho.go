@@ -787,20 +787,73 @@ type PortTaggingConfig struct {
 	Mode string
 }
 
-func generateTaggingMap(app core.App, ports []*core.Record, defaultmode string) []PortTaggingConfig {
+func getPortTagConfigForVlan(vlanId string, portConfig *core.Record) string {
+	untagged := portConfig.GetString("untagged")
+	if len(untagged) > 0 && untagged == vlanId {
+		return "u*"
+	}
+	if portConfig.GetBool("trunk") == true {
+		return "t"
+	}
+	tagged := portConfig.GetStringSlice("tagged")
+	if slices.Contains(tagged, vlanId) {
+		return "t"
+	}
+	return ""
+}
+
+// TODO we also need the VLAN list
+// By default lan is untagged, all others are tagged
+func generateFullTaggingMap(app core.App, ports []*core.Record, vlans []*core.Record) map[string][]PortTaggingConfig {
+	for _, port := range ports {
+		errs := app.ExpandRecord(port, []string{"config"}, nil)
+		if len(errs) > 0 {
+			fmt.Println(errs)
+		}
+	}
+	fullmap := make(map[string][]PortTaggingConfig)
+	// First populate the full matrix
+	for _, vlan := range vlans {
+		vlanname := vlan.GetString("name")
+		defaultmode := "t"
+		if vlanname == "lan" {
+			defaultmode = "u*"
+		}
+		fullmap[vlanname] = generateTaggingMap(app, ports, defaultmode, vlan.Id)
+	}
+	return fullmap
+}
+
+func generateTaggingMap(app core.App, ports []*core.Record, defaultmode string, vlanConfigId string) []PortTaggingConfig {
 	sort.Slice(ports, func(i, j int) bool {
 		return ports[i].GetString("name") < ports[j].GetString("name")
 	})
 	config := make([]PortTaggingConfig, len(ports))
 	for i, port := range ports {
-		config[i] = PortTaggingConfig{Port: port.GetString("name"), Mode: defaultmode}
+		mode := defaultmode
+		if len(port.GetString("config")) > 0 {
+			errs := app.ExpandRecord(port, []string{"config"}, nil)
+			if len(errs) > 0 {
+				fmt.Println(errs)
+			}
+			mode = getPortTagConfigForVlan(vlanConfigId, port.ExpandedOne("config"))
+		}
+		config[i] = PortTaggingConfig{Port: port.GetString("name"), Mode: mode}
 	}
 	return config
 }
 
 // Currently all of them are the same mode
-func generatePortTaggingConfig(app core.App, ports []*core.Record, mode string) string {
-	portsconfig := generateTaggingMap(app, ports, mode)
+func generatePortTaggingConfig(app core.App, ports []*core.Record, mode string, vlanconfigid string) string {
+
+	// TODO remove this again
+	for _, port := range ports {
+		errs := app.ExpandRecord(port, []string{"config"}, nil)
+		if len(errs) > 0 {
+			fmt.Println(errs)
+		}
+	}
+	portsconfig := generateTaggingMap(app, ports, mode, vlanconfigid)
 	portslist := ""
 	for _, portconfig := range portsconfig {
 		portslist += fmt.Sprintf("        list ports '%s:%s'\n", portconfig.Port, portconfig.Mode)
@@ -818,10 +871,11 @@ func generateInterfaceVlanConfig(app core.App, device *core.Record, bridgeConfig
 		cidr = vlanConfig.GetString("cidr")
 	}
 
-	return generateInterfaceVlanConfigInt(app, bridgeConfig, vlanname, vlanid, cidr)
+	return generateInterfaceVlanConfigInt(app, bridgeConfig, vlanname, vlanid, cidr, vlanConfig.Id)
 }
 
-func generateInterfaceVlanConfigInt(app core.App, bridgeConfig *core.Record, vlanname string, vlanid int, cidr string) string {
+func generateInterfaceVlanConfigInt(app core.App, bridgeConfig *core.Record, vlanname string, vlanid int, cidr string, vlanconfigid string) string {
+	// TODO we might already have the port config map available around here, since we want to pass it to the portTaggingConfig
 	if vlanid < 1 || vlanid > 4094 || len(vlanname) == 0 {
 		return ""
 	}
@@ -861,7 +915,7 @@ config interface '%[1]s'
 config bridge-vlan 'bridge_vlan_%[2]d'
         option device 'br-lan'
         option vlan '%[2]d'
-%[3]s`, vlanname, vlanid, generatePortTaggingConfig(app, bridgeConfig.ExpandedAll("ethernet"), mode), intfmode)
+%[3]s`, vlanname, vlanid, generatePortTaggingConfig(app, bridgeConfig.ExpandedAll("ethernet"), mode, vlanconfigid), intfmode)
 }
 func generateInterfacesConfig(app core.App, device *core.Record) string {
 	if false == IsFeatureApplied(device, "vlan") {

@@ -239,7 +239,8 @@ func TestHandleBridgeMonitoring(t *testing.T) {
 	vlancollection := setupVlanCollection(t, app)
 	wificollection := setupWifiCollection(t, app, vlancollection)
 	devicecollection := setupDeviceCollection(t, app, wificollection)
-	ethernetcollection := setupEthernetCollection(t, app, devicecollection)
+	porttaggingcollection := setupPortTaggingCollection(t, app, vlancollection)
+	ethernetcollection := setupEthernetCollection(t, app, devicecollection, porttaggingcollection)
 	interfacescollection := setupInterfacesCollection(t, app)
 	bridgescollection := setupBridgesCollection(t, app, devicecollection, interfacescollection, ethernetcollection)
 
@@ -339,7 +340,7 @@ func TestHandleEthernetMonitoring(t *testing.T) {
 	vlancollection := setupVlanCollection(t, app)
 	wificollection := setupWifiCollection(t, app, vlancollection)
 	devicecollection := setupDeviceCollection(t, app, wificollection)
-	ethernetcollection := setupEthernetCollection(t, app, devicecollection)
+	ethernetcollection := setupEthernetCollection(t, app, devicecollection, vlancollection)
 	d1 := core.NewRecord(devicecollection)
 	d1.Id = "somethindevice1"
 	d1.Set("name", "the_device1")
@@ -647,10 +648,10 @@ func TestGeneratePortTaggingConfig(t *testing.T) {
 	vlancollection := setupVlanCollection(t, app)
 	wificollection := setupWifiCollection(t, app, vlancollection)
 	devicecollection := setupDeviceCollection(t, app, wificollection)
-	ethernetcollection := setupEthernetCollection(t, app, devicecollection)
+	ethernetcollection := setupEthernetCollection(t, app, devicecollection, vlancollection)
 
 	//Test empty
-	assert.Equal(t, "", generatePortTaggingConfig(app, []*core.Record{}, "u*"))
+	assert.Equal(t, "", generatePortTaggingConfig(app, []*core.Record{}, "u*", "unused"))
 
 	e1 := core.NewRecord(ethernetcollection)
 	e1.Id = "somethindevice1"
@@ -659,7 +660,7 @@ func TestGeneratePortTaggingConfig(t *testing.T) {
 	err := app.Save(e1) // Saving is not really required
 	assert.Equal(t, nil, err)
 
-	assert.Equal(t, "        list ports 'lan1:u*'\n", generatePortTaggingConfig(app, []*core.Record{e1}, "u*"))
+	assert.Equal(t, "        list ports 'lan1:u*'\n", generatePortTaggingConfig(app, []*core.Record{e1}, "u*", "unused"))
 
 	e2 := core.NewRecord(ethernetcollection)
 	e2.Id = "somethindevice2"
@@ -669,7 +670,175 @@ func TestGeneratePortTaggingConfig(t *testing.T) {
 	assert.Equal(t, nil, err)
 
 	// Expect sorting to maintain a clean config
-	assert.Equal(t, "        list ports 'lan1:t'\n        list ports 'lan2:t'\n", generatePortTaggingConfig(app, []*core.Record{e2, e1}, "t"))
+	assert.Equal(t, "        list ports 'lan1:t'\n        list ports 'lan2:t'\n", generatePortTaggingConfig(app, []*core.Record{e2, e1}, "t", "unused"))
+}
+
+func TestGetPortTagConfigForVlan(t *testing.T) {
+	app, err := tests.NewTestApp()
+	assert.Nil(t, err)
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	porttaggingcollection := setupPortTaggingCollection(t, app, vlancollection)
+	ethernetcollection := setupEthernetCollection(t, app, devicecollection, porttaggingcollection)
+	_ = setupBridgesCollection(t, app, devicecollection, wificollection, ethernetcollection)
+	expandVlanCollection(t, app, vlancollection, devicecollection)
+
+	guest_vlan := core.NewRecord(vlancollection)
+	guest_vlan.Set("name", "guest")
+	guest_vlan.Set("number", "400")
+	err = app.Save(guest_vlan)
+	assert.Equal(t, nil, err)
+
+	iot_vlan := core.NewRecord(vlancollection)
+	iot_vlan.Set("name", "iot")
+	iot_vlan.Set("number", "300")
+	err = app.Save(iot_vlan)
+	assert.Equal(t, nil, err)
+
+	// Add an LAN vlan with device 2 as gateway
+	lan_vlan := core.NewRecord(vlancollection)
+	lan_vlan.Set("name", "lan")
+	lan_vlan.Set("number", "200")
+	err = app.Save(lan_vlan)
+	assert.Equal(t, nil, err)
+
+	// Configure a default
+	defaultSettings := core.NewRecord(porttaggingcollection)
+	defaultSettings.Id = "defaultportcfg1"
+	defaultSettings.Set("name", "default")
+	defaultSettings.Set("untagged", lan_vlan.Id)
+	defaultSettings.Set("trunk", true)
+
+	assert.Equal(t, "u*", getPortTagConfigForVlan(lan_vlan.Id, defaultSettings))
+	assert.Equal(t, "t", getPortTagConfigForVlan(guest_vlan.Id, defaultSettings))
+	assert.Equal(t, "t", getPortTagConfigForVlan(iot_vlan.Id, defaultSettings))
+
+	defaultSettings.Set("untagged", nil)
+
+	assert.Equal(t, "t", getPortTagConfigForVlan(lan_vlan.Id, defaultSettings))
+	assert.Equal(t, "t", getPortTagConfigForVlan(guest_vlan.Id, defaultSettings))
+	assert.Equal(t, "t", getPortTagConfigForVlan(iot_vlan.Id, defaultSettings))
+
+	defaultSettings.Set("trunk", false)
+
+	assert.Equal(t, "", getPortTagConfigForVlan(lan_vlan.Id, defaultSettings))
+	assert.Equal(t, "", getPortTagConfigForVlan(guest_vlan.Id, defaultSettings))
+	assert.Equal(t, "", getPortTagConfigForVlan(iot_vlan.Id, defaultSettings))
+
+	defaultSettings.Set("untagged", guest_vlan.Id)
+
+	assert.Equal(t, "", getPortTagConfigForVlan(lan_vlan.Id, defaultSettings))
+	assert.Equal(t, "u*", getPortTagConfigForVlan(guest_vlan.Id, defaultSettings))
+	assert.Equal(t, "", getPortTagConfigForVlan(iot_vlan.Id, defaultSettings))
+
+	// Configuration prefers untagged
+
+	defaultSettings.Set("tagged", []string{guest_vlan.Id, iot_vlan.Id, lan_vlan.Id})
+
+	assert.Equal(t, "t", getPortTagConfigForVlan(lan_vlan.Id, defaultSettings))
+	assert.Equal(t, "u*", getPortTagConfigForVlan(guest_vlan.Id, defaultSettings))
+	assert.Equal(t, "t", getPortTagConfigForVlan(iot_vlan.Id, defaultSettings))
+}
+
+// Test making a full map with the port tagging config
+func TestGenerateFullTaggingMap(t *testing.T) {
+	app, _ := tests.NewTestApp()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	porttaggingcollection := setupPortTaggingCollection(t, app, vlancollection)
+	ethernetcollection := setupEthernetCollection(t, app, devicecollection, porttaggingcollection)
+	bridgecollection := setupBridgesCollection(t, app, devicecollection, wificollection, ethernetcollection)
+	expandVlanCollection(t, app, vlancollection, devicecollection)
+
+	e1 := core.NewRecord(ethernetcollection)
+	e1.Id = "somethindeveth1"
+	e1.Set("name", "lan1")
+	e1.Set("speed", "1000F")
+	err := app.Save(e1) // Saving is not really required
+	assert.Equal(t, nil, err)
+
+	e2 := core.NewRecord(ethernetcollection)
+	e2.Id = "somethindeveth2"
+	e2.Set("name", "lan2")
+	e2.Set("speed", "1000F")
+	err = app.Save(e2) // Saving is not really required
+	assert.Equal(t, nil, err)
+
+	e3 := core.NewRecord(ethernetcollection)
+	e3.Id = "somethindeveth3"
+	e3.Set("name", "lan3")
+	e3.Set("speed", "1000F")
+	err = app.Save(e3) // Saving is not really required
+	assert.Equal(t, nil, err)
+
+	iot_vlan := core.NewRecord(vlancollection)
+	iot_vlan.Id = "somethinvlan300"
+	iot_vlan.Set("name", "iot")
+	iot_vlan.Set("number", "300")
+	err = app.Save(iot_vlan)
+	assert.Equal(t, nil, err)
+
+	// Add an LAN vlan with device 2 as gateway
+	lan_vlan := core.NewRecord(vlancollection)
+	lan_vlan.Id = "somethinvlan200"
+	lan_vlan.Set("name", "lan")
+	lan_vlan.Set("number", "200")
+	err = app.Save(lan_vlan)
+	assert.Equal(t, nil, err)
+
+	b1 := core.NewRecord(bridgecollection)
+	err = app.Save(b1) // Saving is not really required
+	assert.Equal(t, nil, err)
+
+	{ // No custom config
+		tagmap := generateFullTaggingMap(app, []*core.Record{e1, e2, e3}, []*core.Record{iot_vlan, lan_vlan})
+		expected := map[string][]PortTaggingConfig{
+			"lan": {
+				{Port: "lan1", Mode: "u*"},
+				{Port: "lan2", Mode: "u*"},
+				{Port: "lan3", Mode: "u*"},
+			},
+			"iot": {
+				{Port: "lan1", Mode: "t"},
+				{Port: "lan2", Mode: "t"},
+				{Port: "lan3", Mode: "t"},
+			},
+		}
+		assert.Equal(t, expected, tagmap)
+	}
+
+	// Set lan3 to iot untagged only
+	iot_only_config := core.NewRecord(porttaggingcollection)
+	iot_only_config.Id = "somethinconfig1"
+	iot_only_config.Set("name", "iot_only")
+	iot_only_config.Set("untagged", iot_vlan.Id)
+	err = app.Save(iot_only_config)
+	assert.Equal(t, nil, err)
+
+	e3.Set("config", []string{iot_only_config.Id})
+	err = app.Save(e3)
+	assert.Nil(t, err)
+
+	{ // No custom config
+		tagmap := generateFullTaggingMap(app, []*core.Record{e1, e2, e3}, []*core.Record{iot_vlan, lan_vlan})
+		expected := map[string][]PortTaggingConfig{
+			"lan": {
+				{Port: "lan1", Mode: "u*"},
+				{Port: "lan2", Mode: "u*"},
+				{Port: "lan3", Mode: ""},
+			},
+			"iot": {
+				{Port: "lan1", Mode: "t"},
+				{Port: "lan2", Mode: "t"},
+				{Port: "lan3", Mode: "u*"},
+			},
+		}
+		assert.Equal(t, expected, tagmap)
+	}
 }
 
 func TestGenerateInterfaceVlanConfigInt(t *testing.T) {
@@ -678,7 +847,8 @@ func TestGenerateInterfaceVlanConfigInt(t *testing.T) {
 	vlancollection := setupVlanCollection(t, app)
 	wificollection := setupWifiCollection(t, app, vlancollection)
 	devicecollection := setupDeviceCollection(t, app, wificollection)
-	ethernetcollection := setupEthernetCollection(t, app, devicecollection)
+	porttaggingcollection := setupPortTaggingCollection(t, app, vlancollection)
+	ethernetcollection := setupEthernetCollection(t, app, devicecollection, porttaggingcollection)
 	bridgecollection := setupBridgesCollection(t, app, devicecollection, wificollection, ethernetcollection)
 
 	e1 := core.NewRecord(ethernetcollection)
@@ -708,7 +878,7 @@ config interface 'iot'
 config bridge-vlan 'bridge_vlan_123'
         option device 'br-lan'
         option vlan '123'
-`, generateInterfaceVlanConfigInt(app, b1, "iot", 123, ""))
+`, generateInterfaceVlanConfigInt(app, b1, "iot", 123, "", "unused"))
 
 	// Common config with two ethernet ports on this bridge
 	b1.Set("ethernet", []string{e1.Id, e2.Id})
@@ -725,7 +895,7 @@ config bridge-vlan 'bridge_vlan_456'
         option vlan '456'
         list ports 'lan1:t'
         list ports 'lan2:t'
-`, generateInterfaceVlanConfigInt(app, b1, "iot", 456, ""))
+`, generateInterfaceVlanConfigInt(app, b1, "iot", 456, "", "unused"))
 
 	// lan should be untagged
 	assert.Equal(t, `
@@ -737,16 +907,16 @@ config bridge-vlan 'bridge_vlan_4000'
         option vlan '4000'
         list ports 'lan1:u*'
         list ports 'lan2:u*'
-`, generateInterfaceVlanConfigInt(app, b1, "lan", 4000, ""))
+`, generateInterfaceVlanConfigInt(app, b1, "lan", 4000, "", "unused"))
 
 	// Don't generate configs with invalid vlan ids
-	assert.Equal(t, "", generateInterfaceVlanConfigInt(app, b1, "iot", -1, ""))
-	assert.Equal(t, "", generateInterfaceVlanConfigInt(app, b1, "iot", 0, ""))
-	assert.Equal(t, "", generateInterfaceVlanConfigInt(app, b1, "iot", 4095, ""))
-	assert.Equal(t, "", generateInterfaceVlanConfigInt(app, b1, "iot", 100000, ""))
+	assert.Equal(t, "", generateInterfaceVlanConfigInt(app, b1, "iot", -1, "", "unused"))
+	assert.Equal(t, "", generateInterfaceVlanConfigInt(app, b1, "iot", 0, "", "unused"))
+	assert.Equal(t, "", generateInterfaceVlanConfigInt(app, b1, "iot", 4095, "", "unused"))
+	assert.Equal(t, "", generateInterfaceVlanConfigInt(app, b1, "iot", 100000, "", "unused"))
 
 	// Don't generate configs with empty vlan name
-	assert.Equal(t, "", generateInterfaceVlanConfigInt(app, b1, "", 100, ""))
+	assert.Equal(t, "", generateInterfaceVlanConfigInt(app, b1, "", 100, "", "unused"))
 }
 
 func TestGenerateInterfaceVlanConfigIntWithCIDR(t *testing.T) {
@@ -755,7 +925,8 @@ func TestGenerateInterfaceVlanConfigIntWithCIDR(t *testing.T) {
 	vlancollection := setupVlanCollection(t, app)
 	wificollection := setupWifiCollection(t, app, vlancollection)
 	devicecollection := setupDeviceCollection(t, app, wificollection)
-	ethernetcollection := setupEthernetCollection(t, app, devicecollection)
+	porttaggingcollection := setupPortTaggingCollection(t, app, vlancollection)
+	ethernetcollection := setupEthernetCollection(t, app, devicecollection, porttaggingcollection)
 	bridgecollection := setupBridgesCollection(t, app, devicecollection, wificollection, ethernetcollection)
 
 	e1 := core.NewRecord(ethernetcollection)
@@ -785,7 +956,7 @@ config interface 'guest'
 config bridge-vlan 'bridge_vlan_100'
         option device 'br-lan'
         option vlan '100'
-`, generateInterfaceVlanConfigInt(app, b1, "guest", 100, "192.168.1.1/24"))
+`, generateInterfaceVlanConfigInt(app, b1, "guest", 100, "192.168.1.1/24", "unused"))
 	assert.Equal(t, `
 config interface 'iot'
         option device 'br-lan.100'
@@ -796,7 +967,7 @@ config interface 'iot'
 config bridge-vlan 'bridge_vlan_100'
         option device 'br-lan'
         option vlan '100'
-`, generateInterfaceVlanConfigInt(app, b1, "iot", 100, "10.11.12.13/17"))
+`, generateInterfaceVlanConfigInt(app, b1, "iot", 100, "10.11.12.13/17", "unused"))
 
 	assert.Equal(t, `
 config interface 'lan'
@@ -805,7 +976,7 @@ config interface 'lan'
 config bridge-vlan 'bridge_vlan_100'
         option device 'br-lan'
         option vlan '100'
-`, generateInterfaceVlanConfigInt(app, b1, "lan", 100, "10.11.12.13/17"), "lan network should never be reconfigured")
+`, generateInterfaceVlanConfigInt(app, b1, "lan", 100, "10.11.12.13/17", "unused"), "lan network should never be reconfigured")
 }
 
 func TestGenerateInterfaceVlanConfigForGateway(t *testing.T) {
@@ -814,7 +985,8 @@ func TestGenerateInterfaceVlanConfigForGateway(t *testing.T) {
 	vlancollection := setupVlanCollection(t, app)
 	wificollection := setupWifiCollection(t, app, vlancollection)
 	devicecollection := setupDeviceCollection(t, app, wificollection)
-	ethernetcollection := setupEthernetCollection(t, app, devicecollection)
+	porttaggingcollection := setupPortTaggingCollection(t, app, vlancollection)
+	ethernetcollection := setupEthernetCollection(t, app, devicecollection, porttaggingcollection)
 	bridgecollection := setupBridgesCollection(t, app, devicecollection, wificollection, ethernetcollection)
 	expandVlanCollection(t, app, vlancollection, devicecollection)
 
@@ -907,7 +1079,8 @@ func TestInterfacesConfigDefaultVLAN(t *testing.T) {
 	vlancollection := setupVlanCollection(t, app)
 	wificollection := setupWifiCollection(t, app, vlancollection)
 	devicecollection := setupDeviceCollection(t, app, wificollection)
-	ethernetcollection := setupEthernetCollection(t, app, devicecollection)
+	porttaggingcollection := setupPortTaggingCollection(t, app, vlancollection)
+	ethernetcollection := setupEthernetCollection(t, app, devicecollection, porttaggingcollection)
 	bridgecollection := setupBridgesCollection(t, app, devicecollection, wificollection, ethernetcollection)
 	expandVlanCollection(t, app, vlancollection, devicecollection)
 
@@ -969,7 +1142,8 @@ func TestGenerateDhcpConfigForDevice(t *testing.T) {
 	vlancollection := setupVlanCollection(t, app)
 	wificollection := setupWifiCollection(t, app, vlancollection)
 	devicecollection := setupDeviceCollection(t, app, wificollection)
-	ethernetcollection := setupEthernetCollection(t, app, devicecollection)
+	porttaggingcollection := setupPortTaggingCollection(t, app, vlancollection)
+	ethernetcollection := setupEthernetCollection(t, app, devicecollection, porttaggingcollection)
 	bridgecollection := setupBridgesCollection(t, app, devicecollection, wificollection, ethernetcollection)
 	expandVlanCollection(t, app, vlancollection, devicecollection)
 
@@ -1051,7 +1225,8 @@ func TestInterfacesConfig(t *testing.T) {
 	wificollection := setupWifiCollection(t, app, vlancollection)
 	devicecollection := setupDeviceCollection(t, app, wificollection)
 	interfacescollection := setupInterfacesCollection(t, app)
-	ethernetcollection := setupEthernetCollection(t, app, devicecollection)
+	porttaggingcollection := setupPortTaggingCollection(t, app, vlancollection)
+	ethernetcollection := setupEthernetCollection(t, app, devicecollection, porttaggingcollection)
 	bridgecollection := setupBridgesCollection(t, app, devicecollection, interfacescollection, ethernetcollection)
 
 	// Add a device
@@ -2032,7 +2207,7 @@ func setupBridgesCollection(t *testing.T, app core.App, devicecollection *core.C
 	return bridgescollection
 }
 
-func setupEthernetCollection(t *testing.T, app core.App, devicecollection *core.Collection) *core.Collection {
+func setupEthernetCollection(t *testing.T, app core.App, devicecollection *core.Collection, porttaggingCollection *core.Collection) *core.Collection {
 	ethernetcollection := core.NewBaseCollection("ethernet")
 	ethernetcollection.Fields.Add(&core.RelationField{
 		Name:          "device",
@@ -2044,6 +2219,13 @@ func setupEthernetCollection(t *testing.T, app core.App, devicecollection *core.
 	ethernetcollection.Fields.Add(&core.TextField{
 		Name:     "name",
 		Required: false,
+	})
+	ethernetcollection.Fields.Add(&core.RelationField{
+		Name:          "config",
+		Required:      false,
+		MaxSelect:     1,
+		CascadeDelete: false,
+		CollectionId:  porttaggingCollection.Id,
 	})
 	ethernetcollection.Fields.Add(&core.TextField{
 		Name:     "speed",
@@ -2293,7 +2475,33 @@ func setupClientSteeringCollection(t *testing.T, app core.App, clientcollection 
 	err := app.Save(cscollection)
 	assert.Equal(t, err, nil)
 	return cscollection
+}
 
+func setupPortTaggingCollection(t *testing.T, app core.App, vlancollection *core.Collection) *core.Collection {
+	ptcollection := core.NewBaseCollection("port_tagging")
+	ptcollection.Fields.Add(&core.TextField{
+		Name:     "name",
+		Required: true,
+	})
+	ptcollection.Fields.Add(&core.RelationField{
+		Name:         "untagged",
+		MaxSelect:    1,
+		Required:     false,
+		CollectionId: vlancollection.Id,
+	})
+	ptcollection.Fields.Add(&core.BoolField{
+		Name:     "trunk",
+		Required: false,
+	})
+	ptcollection.Fields.Add(&core.RelationField{
+		Name:         "tagged",
+		MaxSelect:    99,
+		Required:     false,
+		CollectionId: vlancollection.Id,
+	})
+	err := app.Save(ptcollection)
+	assert.Equal(t, err, nil)
+	return ptcollection
 }
 
 func TestGetTimeAdvertisementValue(t *testing.T) {

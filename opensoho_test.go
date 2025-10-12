@@ -819,17 +819,37 @@ func TestGenerateFullTaggingMap(t *testing.T) {
 	err = app.Save(iot_only_config)
 	assert.Equal(t, nil, err)
 
-	e3.Set("config", []string{iot_only_config.Id})
+	e3.Set("config", iot_only_config.Id)
 	err = app.Save(e3)
 	assert.Nil(t, err)
 
-	{ // No custom config
+	tagmap := generateFullTaggingMap(app, []*core.Record{e1, e2, e3}, []*core.Record{iot_vlan, lan_vlan})
+	expected := map[string][]PortTaggingConfig{
+		"lan": {
+			{Port: "lan1", Mode: "u*"},
+			{Port: "lan2", Mode: "u*"},
+			{Port: "lan3", Mode: ""},
+		},
+		"iot": {
+			{Port: "lan1", Mode: "t"},
+			{Port: "lan2", Mode: "t"},
+			{Port: "lan3", Mode: "u*"},
+		},
+	}
+	assert.Equal(t, expected, tagmap)
+
+	// Enable trunk
+	iot_only_config.Set("trunk", true)
+	err = app.Save(iot_only_config)
+	assert.Equal(t, nil, err)
+
+	{
 		tagmap := generateFullTaggingMap(app, []*core.Record{e1, e2, e3}, []*core.Record{iot_vlan, lan_vlan})
 		expected := map[string][]PortTaggingConfig{
 			"lan": {
 				{Port: "lan1", Mode: "u*"},
 				{Port: "lan2", Mode: "u*"},
-				{Port: "lan3", Mode: ""},
+				{Port: "lan3", Mode: "t"},
 			},
 			"iot": {
 				{Port: "lan1", Mode: "t"},
@@ -839,6 +859,175 @@ func TestGenerateFullTaggingMap(t *testing.T) {
 		}
 		assert.Equal(t, expected, tagmap)
 	}
+
+	// Add an extra guest VLAN
+	guest_vlan := core.NewRecord(vlancollection)
+	guest_vlan.Id = "somethinvlan400"
+	guest_vlan.Set("name", "guest")
+	guest_vlan.Set("number", "400")
+	err = app.Save(guest_vlan)
+	assert.Equal(t, nil, err)
+	{
+		tagmap := generateFullTaggingMap(app, []*core.Record{e1, e2, e3}, []*core.Record{iot_vlan, lan_vlan, guest_vlan})
+		expected := map[string][]PortTaggingConfig{
+			"lan": {
+				{Port: "lan1", Mode: "u*"},
+				{Port: "lan2", Mode: "u*"},
+				{Port: "lan3", Mode: "t"},
+			},
+			"iot": {
+				{Port: "lan1", Mode: "t"},
+				{Port: "lan2", Mode: "t"},
+				{Port: "lan3", Mode: "u*"},
+			},
+			"guest": {
+				{Port: "lan1", Mode: "t"},
+				{Port: "lan2", Mode: "t"},
+				{Port: "lan3", Mode: "t"},
+			},
+		}
+		assert.Equal(t, expected, tagmap)
+	}
+
+	// Add disabled lan4 port
+
+	disabled_config := core.NewRecord(porttaggingcollection)
+	disabled_config.Id = "somethinconfig2"
+	disabled_config.Set("name", "disabled")
+	err = app.Save(disabled_config)
+	assert.Equal(t, nil, err)
+
+	e4 := core.NewRecord(ethernetcollection)
+	e4.Id = "somethindeveth4"
+	e4.Set("name", "lan4")
+	e4.Set("speed", "1000F")
+	e4.Set("config", disabled_config.Id)
+	err = app.Save(e4)
+	assert.Nil(t, err)
+
+	{
+		tagmap := generateFullTaggingMap(app, []*core.Record{e1, e2, e3, e4}, []*core.Record{iot_vlan, lan_vlan, guest_vlan})
+		expected := map[string][]PortTaggingConfig{
+			"lan": {
+				{Port: "lan1", Mode: "u*"},
+				{Port: "lan2", Mode: "u*"},
+				{Port: "lan3", Mode: "t"},
+				{Port: "lan4", Mode: ""},
+			},
+			"iot": {
+				{Port: "lan1", Mode: "t"},
+				{Port: "lan2", Mode: "t"},
+				{Port: "lan3", Mode: "u*"},
+				{Port: "lan4", Mode: ""},
+			},
+			"guest": {
+				{Port: "lan1", Mode: "t"},
+				{Port: "lan2", Mode: "t"},
+				{Port: "lan3", Mode: "t"},
+				{Port: "lan4", Mode: ""},
+			},
+		}
+		assert.Equal(t, expected, tagmap)
+	}
+
+	// Switch lan4 to the iot config
+	e4.Set("config", iot_only_config.Id)
+	err = app.Save(e4)
+	assert.Nil(t, err)
+
+	{
+		tagmap := generateFullTaggingMap(app, []*core.Record{ /*e1, e2, e3, */ e4}, []*core.Record{iot_vlan, lan_vlan, guest_vlan})
+		expected := map[string][]PortTaggingConfig{
+			"lan": {
+				/*{Port: "lan1", Mode: "u*"},
+				{Port: "lan2", Mode: "u*"},
+				{Port: "lan3", Mode: "t"},*/
+				{Port: "lan4", Mode: "t"},
+			},
+			"iot": {
+				/*{Port: "lan1", Mode: "t"},
+				{Port: "lan2", Mode: "t"},
+				{Port: "lan3", Mode: "u*"},*/
+				{Port: "lan4", Mode: "u*"},
+			},
+			"guest": {
+				/*{Port: "lan1", Mode: "t"},
+				{Port: "lan2", Mode: "t"},
+				{Port: "lan3", Mode: "t"},*/
+				{Port: "lan4", Mode: "t"},
+			},
+		}
+		assert.Equal(t, expected, tagmap)
+	}
+
+	// Verify that the tagging prioritizes untagged
+	guest_untagged_config := core.NewRecord(porttaggingcollection)
+	guest_untagged_config.Id = "somethinconfig3"
+	guest_untagged_config.Set("name", "untagged_guest")
+	guest_untagged_config.Set("untagged", guest_vlan.Id)
+	guest_untagged_config.Set("tagged", []string{guest_vlan.Id})
+	err = app.Save(guest_untagged_config)
+	assert.Equal(t, nil, err)
+
+	// Switch lan4 to the iot config
+	e4.Set("config", guest_untagged_config.Id)
+	err = app.Save(e4)
+	assert.Nil(t, err)
+
+	{
+		tagmap := generateFullTaggingMap(app, []*core.Record{ /*e1, e2, e3, */ e4}, []*core.Record{iot_vlan, lan_vlan, guest_vlan})
+		expected := map[string][]PortTaggingConfig{
+			"lan": {
+				/*{Port: "lan1", Mode: "u*"},
+				{Port: "lan2", Mode: "u*"},
+				{Port: "lan3", Mode: "t"},*/
+				{Port: "lan4", Mode: ""},
+			},
+			"iot": {
+				/*{Port: "lan1", Mode: "t"},
+				{Port: "lan2", Mode: "t"},
+				{Port: "lan3", Mode: "u*"},*/
+				{Port: "lan4", Mode: ""},
+			},
+			"guest": {
+				/*{Port: "lan1", Mode: "t"},
+				{Port: "lan2", Mode: "t"},
+				{Port: "lan3", Mode: "t"},*/
+				{Port: "lan4", Mode: "u*"},
+			},
+		}
+		assert.Equal(t, expected, tagmap)
+	}
+
+	guest_untagged_config.Set("+tagged", []string{iot_vlan.Id, lan_vlan.Id})
+	err = app.Save(guest_untagged_config)
+	assert.Equal(t, nil, err)
+
+	{
+		tagmap := generateFullTaggingMap(app, []*core.Record{ /*e1, e2, e3, */ e4}, []*core.Record{iot_vlan, lan_vlan, guest_vlan})
+		expected := map[string][]PortTaggingConfig{
+			"lan": {
+				/*{Port: "lan1", Mode: "u*"},
+				{Port: "lan2", Mode: "u*"},
+				{Port: "lan3", Mode: "t"},*/
+				{Port: "lan4", Mode: "t"},
+			},
+			"iot": {
+				/*{Port: "lan1", Mode: "t"},
+				{Port: "lan2", Mode: "t"},
+				{Port: "lan3", Mode: "u*"},*/
+				{Port: "lan4", Mode: "t"},
+			},
+			"guest": {
+				/*{Port: "lan1", Mode: "t"},
+				{Port: "lan2", Mode: "t"},
+				{Port: "lan3", Mode: "t"},*/
+				{Port: "lan4", Mode: "u*"},
+			},
+		}
+		assert.Equal(t, expected, tagmap)
+	}
+
 }
 
 func TestGenerateInterfaceVlanConfigInt(t *testing.T) {

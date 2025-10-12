@@ -776,7 +776,7 @@ func TestGenerateFullTaggingMap(t *testing.T) {
 	assert.Equal(t, nil, err)
 
 	iot_vlan := core.NewRecord(vlancollection)
-	iot_vlan.Id = "somethinvlan300"
+	iot_vlan.Id = "zzzzziotvlan300"
 	iot_vlan.Set("name", "iot")
 	iot_vlan.Set("number", "300")
 	err = app.Save(iot_vlan)
@@ -784,7 +784,7 @@ func TestGenerateFullTaggingMap(t *testing.T) {
 
 	// Add an LAN vlan with device 2 as gateway
 	lan_vlan := core.NewRecord(vlancollection)
-	lan_vlan.Id = "somethinvlan200"
+	lan_vlan.Id = "zzzzzlanvlan200"
 	lan_vlan.Set("name", "lan")
 	lan_vlan.Set("number", "200")
 	err = app.Save(lan_vlan)
@@ -797,12 +797,12 @@ func TestGenerateFullTaggingMap(t *testing.T) {
 	{ // No custom config
 		tagmap := generateFullTaggingMap(app, []*core.Record{e1, e2, e3}, []*core.Record{iot_vlan, lan_vlan})
 		expected := map[string][]PortTaggingConfig{
-			"lan": {
+			"zzzzzlanvlan200": {
 				{Port: "lan1", Mode: "u*"},
 				{Port: "lan2", Mode: "u*"},
 				{Port: "lan3", Mode: "u*"},
 			},
-			"iot": {
+			"zzzzziotvlan300": {
 				{Port: "lan1", Mode: "t"},
 				{Port: "lan2", Mode: "t"},
 				{Port: "lan3", Mode: "t"},
@@ -825,12 +825,12 @@ func TestGenerateFullTaggingMap(t *testing.T) {
 
 	tagmap := generateFullTaggingMap(app, []*core.Record{e1, e2, e3}, []*core.Record{iot_vlan, lan_vlan})
 	expected := map[string][]PortTaggingConfig{
-		"lan": {
+		"zzzzzlanvlan200": {
 			{Port: "lan1", Mode: "u*"},
 			{Port: "lan2", Mode: "u*"},
 			{Port: "lan3", Mode: ""},
 		},
-		"iot": {
+		"zzzzziotvlan300": {
 			{Port: "lan1", Mode: "t"},
 			{Port: "lan2", Mode: "t"},
 			{Port: "lan3", Mode: "u*"},
@@ -846,12 +846,12 @@ func TestGenerateFullTaggingMap(t *testing.T) {
 	{
 		tagmap := generateFullTaggingMap(app, []*core.Record{e1, e2, e3}, []*core.Record{iot_vlan, lan_vlan})
 		expected := map[string][]PortTaggingConfig{
-			"lan": {
+			"zzzzzlanvlan200": {
 				{Port: "lan1", Mode: "u*"},
 				{Port: "lan2", Mode: "u*"},
 				{Port: "lan3", Mode: "t"},
 			},
-			"iot": {
+			"zzzzziotvlan300": {
 				{Port: "lan1", Mode: "t"},
 				{Port: "lan2", Mode: "t"},
 				{Port: "lan3", Mode: "u*"},
@@ -862,7 +862,7 @@ func TestGenerateFullTaggingMap(t *testing.T) {
 
 	// Add an extra guest VLAN
 	guest_vlan := core.NewRecord(vlancollection)
-	guest_vlan.Id = "somethinvlan400"
+	guest_vlan.Id = "zzzguestvlan400"
 	guest_vlan.Set("name", "guest")
 	guest_vlan.Set("number", "400")
 	err = app.Save(guest_vlan)
@@ -870,17 +870,17 @@ func TestGenerateFullTaggingMap(t *testing.T) {
 	{
 		tagmap := generateFullTaggingMap(app, []*core.Record{e1, e2, e3}, []*core.Record{iot_vlan, lan_vlan, guest_vlan})
 		expected := map[string][]PortTaggingConfig{
-			"lan": {
+			"zzzzzlanvlan200": {
 				{Port: "lan1", Mode: "u*"},
 				{Port: "lan2", Mode: "u*"},
 				{Port: "lan3", Mode: "t"},
 			},
-			"iot": {
+			"zzzzziotvlan300": {
 				{Port: "lan1", Mode: "t"},
 				{Port: "lan2", Mode: "t"},
 				{Port: "lan3", Mode: "u*"},
 			},
-			"guest": {
+			"zzzguestvlan400": {
 				{Port: "lan1", Mode: "t"},
 				{Port: "lan2", Mode: "t"},
 				{Port: "lan3", Mode: "t"},
@@ -908,19 +908,19 @@ func TestGenerateFullTaggingMap(t *testing.T) {
 	{
 		tagmap := generateFullTaggingMap(app, []*core.Record{e1, e2, e3, e4}, []*core.Record{iot_vlan, lan_vlan, guest_vlan})
 		expected := map[string][]PortTaggingConfig{
-			"lan": {
+			"zzzzzlanvlan200": {
 				{Port: "lan1", Mode: "u*"},
 				{Port: "lan2", Mode: "u*"},
 				{Port: "lan3", Mode: "t"},
 				{Port: "lan4", Mode: ""},
 			},
-			"iot": {
+			"zzzzziotvlan300": {
 				{Port: "lan1", Mode: "t"},
 				{Port: "lan2", Mode: "t"},
 				{Port: "lan3", Mode: "u*"},
 				{Port: "lan4", Mode: ""},
 			},
-			"guest": {
+			"zzzguestvlan400": {
 				{Port: "lan1", Mode: "t"},
 				{Port: "lan2", Mode: "t"},
 				{Port: "lan3", Mode: "t"},
@@ -938,19 +938,19 @@ func TestGenerateFullTaggingMap(t *testing.T) {
 	{
 		tagmap := generateFullTaggingMap(app, []*core.Record{ /*e1, e2, e3, */ e4}, []*core.Record{iot_vlan, lan_vlan, guest_vlan})
 		expected := map[string][]PortTaggingConfig{
-			"lan": {
+			"zzzzzlanvlan200": {
 				/*{Port: "lan1", Mode: "u*"},
 				{Port: "lan2", Mode: "u*"},
 				{Port: "lan3", Mode: "t"},*/
 				{Port: "lan4", Mode: "t"},
 			},
-			"iot": {
+			"zzzzziotvlan300": {
 				/*{Port: "lan1", Mode: "t"},
 				{Port: "lan2", Mode: "t"},
 				{Port: "lan3", Mode: "u*"},*/
 				{Port: "lan4", Mode: "u*"},
 			},
-			"guest": {
+			"zzzguestvlan400": {
 				/*{Port: "lan1", Mode: "t"},
 				{Port: "lan2", Mode: "t"},
 				{Port: "lan3", Mode: "t"},*/
@@ -977,19 +977,19 @@ func TestGenerateFullTaggingMap(t *testing.T) {
 	{
 		tagmap := generateFullTaggingMap(app, []*core.Record{ /*e1, e2, e3, */ e4}, []*core.Record{iot_vlan, lan_vlan, guest_vlan})
 		expected := map[string][]PortTaggingConfig{
-			"lan": {
+			"zzzzzlanvlan200": {
 				/*{Port: "lan1", Mode: "u*"},
 				{Port: "lan2", Mode: "u*"},
 				{Port: "lan3", Mode: "t"},*/
 				{Port: "lan4", Mode: ""},
 			},
-			"iot": {
+			"zzzzziotvlan300": {
 				/*{Port: "lan1", Mode: "t"},
 				{Port: "lan2", Mode: "t"},
 				{Port: "lan3", Mode: "u*"},*/
 				{Port: "lan4", Mode: ""},
 			},
-			"guest": {
+			"zzzguestvlan400": {
 				/*{Port: "lan1", Mode: "t"},
 				{Port: "lan2", Mode: "t"},
 				{Port: "lan3", Mode: "t"},*/
@@ -1006,19 +1006,19 @@ func TestGenerateFullTaggingMap(t *testing.T) {
 	{
 		tagmap := generateFullTaggingMap(app, []*core.Record{ /*e1, e2, e3, */ e4}, []*core.Record{iot_vlan, lan_vlan, guest_vlan})
 		expected := map[string][]PortTaggingConfig{
-			"lan": {
+			"zzzzzlanvlan200": {
 				/*{Port: "lan1", Mode: "u*"},
 				{Port: "lan2", Mode: "u*"},
 				{Port: "lan3", Mode: "t"},*/
 				{Port: "lan4", Mode: "t"},
 			},
-			"iot": {
+			"zzzzziotvlan300": {
 				/*{Port: "lan1", Mode: "t"},
 				{Port: "lan2", Mode: "t"},
 				{Port: "lan3", Mode: "u*"},*/
 				{Port: "lan4", Mode: "t"},
 			},
-			"guest": {
+			"zzzguestvlan400": {
 				/*{Port: "lan1", Mode: "t"},
 				{Port: "lan2", Mode: "t"},
 				{Port: "lan3", Mode: "t"},*/

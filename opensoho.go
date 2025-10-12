@@ -802,7 +802,6 @@ func getPortTagConfigForVlan(vlanId string, portConfig *core.Record) string {
 	return ""
 }
 
-// TODO we also need the VLAN list
 // By default lan is untagged, all others are tagged
 func generateFullTaggingMap(app core.App, ports []*core.Record, vlans []*core.Record) map[string][]PortTaggingConfig {
 	for _, port := range ports {
@@ -819,7 +818,7 @@ func generateFullTaggingMap(app core.App, ports []*core.Record, vlans []*core.Re
 		if vlanname == "lan" {
 			defaultmode = "u*"
 		}
-		fullmap[vlanname] = generateTaggingMap(app, ports, defaultmode, vlan.Id)
+		fullmap[vlan.Id] = generateTaggingMap(app, ports, defaultmode, vlan.Id)
 	}
 	return fullmap
 }
@@ -854,6 +853,7 @@ func generatePortTaggingConfig(app core.App, ports []*core.Record, mode string, 
 		}
 	}
 	portsconfig := generateTaggingMap(app, ports, mode, vlanconfigid)
+	// TODO add the full map here
 	portslist := ""
 	for _, portconfig := range portsconfig {
 		portslist += fmt.Sprintf("        list ports '%s:%s'\n", portconfig.Port, portconfig.Mode)

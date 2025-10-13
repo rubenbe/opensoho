@@ -1058,6 +1058,8 @@ func TestGenerateInterfaceVlanConfigInt(t *testing.T) {
 	err = app.Save(b1) // Saving is not really required
 	assert.Equal(t, nil, err)
 
+	emptyMap := make([]PortTaggingConfig, 0)
+
 	// Test empty (maybe don't configure it in this case?)
 	assert.Equal(t, `
 config interface 'iot'
@@ -1067,7 +1069,7 @@ config interface 'iot'
 config bridge-vlan 'bridge_vlan_123'
         option device 'br-lan'
         option vlan '123'
-`, generateInterfaceVlanConfigInt(app, b1, "iot", 123, "", "unused"))
+`, generateInterfaceVlanConfigInt(app, b1, "iot", 123, "", "unused", emptyMap))
 
 	// Common config with two ethernet ports on this bridge
 	b1.Set("ethernet", []string{e1.Id, e2.Id})
@@ -1084,7 +1086,7 @@ config bridge-vlan 'bridge_vlan_456'
         option vlan '456'
         list ports 'lan1:t'
         list ports 'lan2:t'
-`, generateInterfaceVlanConfigInt(app, b1, "iot", 456, "", "unused"))
+`, generateInterfaceVlanConfigInt(app, b1, "iot", 456, "", "unused", emptyMap)) // Will fail
 
 	// lan should be untagged
 	assert.Equal(t, `
@@ -1096,16 +1098,16 @@ config bridge-vlan 'bridge_vlan_4000'
         option vlan '4000'
         list ports 'lan1:u*'
         list ports 'lan2:u*'
-`, generateInterfaceVlanConfigInt(app, b1, "lan", 4000, "", "unused"))
+`, generateInterfaceVlanConfigInt(app, b1, "lan", 4000, "", "unused", emptyMap)) // Will fail
 
 	// Don't generate configs with invalid vlan ids
-	assert.Equal(t, "", generateInterfaceVlanConfigInt(app, b1, "iot", -1, "", "unused"))
-	assert.Equal(t, "", generateInterfaceVlanConfigInt(app, b1, "iot", 0, "", "unused"))
-	assert.Equal(t, "", generateInterfaceVlanConfigInt(app, b1, "iot", 4095, "", "unused"))
-	assert.Equal(t, "", generateInterfaceVlanConfigInt(app, b1, "iot", 100000, "", "unused"))
+	assert.Equal(t, "", generateInterfaceVlanConfigInt(app, b1, "iot", -1, "", "unused", emptyMap))
+	assert.Equal(t, "", generateInterfaceVlanConfigInt(app, b1, "iot", 0, "", "unused", emptyMap))
+	assert.Equal(t, "", generateInterfaceVlanConfigInt(app, b1, "iot", 4095, "", "unused", emptyMap))
+	assert.Equal(t, "", generateInterfaceVlanConfigInt(app, b1, "iot", 100000, "", "unused", emptyMap))
 
 	// Don't generate configs with empty vlan name
-	assert.Equal(t, "", generateInterfaceVlanConfigInt(app, b1, "", 100, "", "unused"))
+	assert.Equal(t, "", generateInterfaceVlanConfigInt(app, b1, "", 100, "", "unused", emptyMap))
 }
 
 func TestGenerateInterfaceVlanConfigIntWithCIDR(t *testing.T) {
@@ -1117,6 +1119,8 @@ func TestGenerateInterfaceVlanConfigIntWithCIDR(t *testing.T) {
 	porttaggingcollection := setupPortTaggingCollection(t, app, vlancollection)
 	ethernetcollection := setupEthernetCollection(t, app, devicecollection, porttaggingcollection)
 	bridgecollection := setupBridgesCollection(t, app, devicecollection, wificollection, ethernetcollection)
+
+	emptyMap := make([]PortTaggingConfig, 0)
 
 	e1 := core.NewRecord(ethernetcollection)
 	e1.Id = "somethindevice1"
@@ -1145,7 +1149,7 @@ config interface 'guest'
 config bridge-vlan 'bridge_vlan_100'
         option device 'br-lan'
         option vlan '100'
-`, generateInterfaceVlanConfigInt(app, b1, "guest", 100, "192.168.1.1/24", "unused"))
+`, generateInterfaceVlanConfigInt(app, b1, "guest", 100, "192.168.1.1/24", "unused", emptyMap))
 	assert.Equal(t, `
 config interface 'iot'
         option device 'br-lan.100'
@@ -1156,7 +1160,7 @@ config interface 'iot'
 config bridge-vlan 'bridge_vlan_100'
         option device 'br-lan'
         option vlan '100'
-`, generateInterfaceVlanConfigInt(app, b1, "iot", 100, "10.11.12.13/17", "unused"))
+`, generateInterfaceVlanConfigInt(app, b1, "iot", 100, "10.11.12.13/17", "unused", emptyMap))
 
 	assert.Equal(t, `
 config interface 'lan'
@@ -1165,7 +1169,7 @@ config interface 'lan'
 config bridge-vlan 'bridge_vlan_100'
         option device 'br-lan'
         option vlan '100'
-`, generateInterfaceVlanConfigInt(app, b1, "lan", 100, "10.11.12.13/17", "unused"), "lan network should never be reconfigured")
+`, generateInterfaceVlanConfigInt(app, b1, "lan", 100, "10.11.12.13/17", "unused", emptyMap), "lan network should never be reconfigured")
 }
 
 func TestGenerateInterfaceVlanConfigForGateway(t *testing.T) {
@@ -1221,6 +1225,8 @@ func TestGenerateInterfaceVlanConfigForGateway(t *testing.T) {
 	err = app.Save(lan_vlan)
 	assert.Equal(t, nil, err)
 
+	emptymap := make([]PortTaggingConfig, 0)
+
 	assert.Equal(t, `
 config interface 'iot'
         option device 'br-lan.300'
@@ -1229,7 +1235,7 @@ config interface 'iot'
 config bridge-vlan 'bridge_vlan_300'
         option device 'br-lan'
         option vlan '300'
-`, generateInterfaceVlanConfig(app, d1, b1, iot_vlan), "device1 should have proto=none")
+`, generateInterfaceVlanConfig(app, d1, b1, iot_vlan, emptymap), "device1 should have proto=none")
 	assert.Equal(t, `
 config interface 'iot'
         option device 'br-lan.300'
@@ -1240,7 +1246,7 @@ config interface 'iot'
 config bridge-vlan 'bridge_vlan_300'
         option device 'br-lan'
         option vlan '300'
-`, generateInterfaceVlanConfig(app, d2, b1, iot_vlan), "device2 should have proto=static")
+`, generateInterfaceVlanConfig(app, d2, b1, iot_vlan, emptymap), "device2 should have proto=static")
 
 	assert.Equal(t, `
 config interface 'lan'
@@ -1249,7 +1255,7 @@ config interface 'lan'
 config bridge-vlan 'bridge_vlan_200'
         option device 'br-lan'
         option vlan '200'
-`, generateInterfaceVlanConfig(app, d1, b1, lan_vlan), "device1 should have no proto on lan")
+`, generateInterfaceVlanConfig(app, d1, b1, lan_vlan, emptymap), "device1 should have no proto on lan")
 	assert.Equal(t, `
 config interface 'lan'
         option device 'br-lan.200'
@@ -1257,7 +1263,7 @@ config interface 'lan'
 config bridge-vlan 'bridge_vlan_200'
         option device 'br-lan'
         option vlan '200'
-`, generateInterfaceVlanConfig(app, d2, b1, lan_vlan), "device2 should have no proto on lan")
+`, generateInterfaceVlanConfig(app, d2, b1, lan_vlan, emptymap), "device2 should have no proto on lan")
 
 }
 

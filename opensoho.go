@@ -844,14 +844,6 @@ func generateTaggingMap(app core.App, ports []*core.Record, defaultmode string, 
 
 // Currently all of them are the same mode
 func generatePortTaggingConfig(app core.App, ports []*core.Record, mode string, vlanconfigid string) string {
-
-	// TODO remove this again
-	for _, port := range ports {
-		errs := app.ExpandRecord(port, []string{"config"}, nil)
-		if len(errs) > 0 {
-			fmt.Println(errs)
-		}
-	}
 	portsconfig := generateTaggingMap(app, ports, mode, vlanconfigid)
 	// TODO add the full map here
 	portslist := ""
@@ -861,7 +853,7 @@ func generatePortTaggingConfig(app core.App, ports []*core.Record, mode string, 
 	return portslist
 }
 
-func generateInterfaceVlanConfig(app core.App, device *core.Record, bridgeConfig *core.Record, vlanConfig *core.Record) string {
+func generateInterfaceVlanConfig(app core.App, device *core.Record, bridgeConfig *core.Record, vlanConfig *core.Record, taggingConfig []PortTaggingConfig) string {
 	vlanname := vlanConfig.GetString("name")
 	vlanid := vlanConfig.GetInt("number")
 	gatewayid := vlanConfig.GetString("gateway")
@@ -871,10 +863,10 @@ func generateInterfaceVlanConfig(app core.App, device *core.Record, bridgeConfig
 		cidr = vlanConfig.GetString("cidr")
 	}
 
-	return generateInterfaceVlanConfigInt(app, bridgeConfig, vlanname, vlanid, cidr, vlanConfig.Id)
+	return generateInterfaceVlanConfigInt(app, bridgeConfig, vlanname, vlanid, cidr, vlanConfig.Id, taggingConfig)
 }
 
-func generateInterfaceVlanConfigInt(app core.App, bridgeConfig *core.Record, vlanname string, vlanid int, cidr string, vlanconfigid string) string {
+func generateInterfaceVlanConfigInt(app core.App, bridgeConfig *core.Record, vlanname string, vlanid int, cidr string, vlanconfigid string, taggingConfig []PortTaggingConfig) string {
 	// TODO we might already have the port config map available around here, since we want to pass it to the portTaggingConfig
 	if vlanid < 1 || vlanid > 4094 || len(vlanname) == 0 {
 		return ""
@@ -951,10 +943,14 @@ func generateInterfacesConfig(app core.App, device *core.Record) string {
 		fmt.Println(err)
 		return ""
 	}
+
+	fullmap := generateFullTaggingMap(app, bridgeConfig.ExpandedAll("ethernet"), vlans)
+	fmt.Println(fullmap)
+
 	fmt.Printf("LOOPING %v\n", vlans)
 	output := ""
 	for _, vlan := range vlans {
-		output += generateInterfaceVlanConfig(app, device, bridgeConfig, vlan)
+		output += generateInterfaceVlanConfig(app, device, bridgeConfig, vlan, fullmap[vlan.Id])
 	}
 
 	return output

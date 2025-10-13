@@ -650,8 +650,10 @@ func TestGeneratePortTaggingConfig(t *testing.T) {
 	devicecollection := setupDeviceCollection(t, app, wificollection)
 	ethernetcollection := setupEthernetCollection(t, app, devicecollection, vlancollection)
 
+	portsconfig := []PortTaggingConfig{}
+
 	//Test empty
-	assert.Equal(t, "", generatePortTaggingConfig(app, []*core.Record{}, "u*", "unused"))
+	assert.Equal(t, "", generatePortTaggingConfig(app, portsconfig /*, "u*", "unused"*/))
 
 	e1 := core.NewRecord(ethernetcollection)
 	e1.Id = "somethindevice1"
@@ -659,8 +661,9 @@ func TestGeneratePortTaggingConfig(t *testing.T) {
 	e1.Set("speed", "1000F")
 	err := app.Save(e1) // Saving is not really required
 	assert.Equal(t, nil, err)
+	portsconfig = []PortTaggingConfig{{Port: "lan1", Mode: "u*"}}
 
-	assert.Equal(t, "        list ports 'lan1:u*'\n", generatePortTaggingConfig(app, []*core.Record{e1}, "u*", "unused"))
+	assert.Equal(t, "        list ports 'lan1:u*'\n", generatePortTaggingConfig(app, portsconfig /*, []*core.Record{e1}, "u*", "unused"*/))
 
 	e2 := core.NewRecord(ethernetcollection)
 	e2.Id = "somethindevice2"
@@ -669,8 +672,9 @@ func TestGeneratePortTaggingConfig(t *testing.T) {
 	err = app.Save(e2) // Saving is not really required
 	assert.Equal(t, nil, err)
 
-	// Expect sorting to maintain a clean config
-	assert.Equal(t, "        list ports 'lan1:t'\n        list ports 'lan2:t'\n", generatePortTaggingConfig(app, []*core.Record{e2, e1}, "t", "unused"))
+	// Wrong order, expect sorting to maintain a clean config
+	portsconfig = []PortTaggingConfig{{Port: "lan2", Mode: "t"}, {Port: "lan1", Mode: "t"}}
+	assert.Equal(t, "        list ports 'lan1:t'\n        list ports 'lan2:t'\n", generatePortTaggingConfig(app, portsconfig /*, []*core.Record{e2, e1}, "t", "unused"*/))
 }
 
 func TestGetPortTagConfigForVlan(t *testing.T) {
@@ -1058,7 +1062,7 @@ func TestGenerateInterfaceVlanConfigInt(t *testing.T) {
 	err = app.Save(b1) // Saving is not really required
 	assert.Equal(t, nil, err)
 
-	emptyMap := make([]PortTaggingConfig, 0)
+	configMap := make([]PortTaggingConfig, 0)
 
 	// Test empty (maybe don't configure it in this case?)
 	assert.Equal(t, `
@@ -1069,12 +1073,14 @@ config interface 'iot'
 config bridge-vlan 'bridge_vlan_123'
         option device 'br-lan'
         option vlan '123'
-`, generateInterfaceVlanConfigInt(app, b1, "iot", 123, "", "unused", emptyMap))
+`, generateInterfaceVlanConfigInt(app, b1, "iot", 123, "", "unused", configMap))
 
 	// Common config with two ethernet ports on this bridge
 	b1.Set("ethernet", []string{e1.Id, e2.Id})
 	err = app.Save(b1)
 	assert.Equal(t, nil, err)
+
+	configMap = []PortTaggingConfig{{Port: "lan1", Mode: "t"}, {Port: "lan2", Mode: "t"}}
 
 	assert.Equal(t, `
 config interface 'iot'
@@ -1086,7 +1092,9 @@ config bridge-vlan 'bridge_vlan_456'
         option vlan '456'
         list ports 'lan1:t'
         list ports 'lan2:t'
-`, generateInterfaceVlanConfigInt(app, b1, "iot", 456, "", "unused", emptyMap)) // Will fail
+`, generateInterfaceVlanConfigInt(app, b1, "iot", 456, "", "unused", configMap))
+
+	configMap = []PortTaggingConfig{{Port: "lan1", Mode: "u*"}, {Port: "lan2", Mode: "u*"}}
 
 	// lan should be untagged
 	assert.Equal(t, `
@@ -1098,16 +1106,16 @@ config bridge-vlan 'bridge_vlan_4000'
         option vlan '4000'
         list ports 'lan1:u*'
         list ports 'lan2:u*'
-`, generateInterfaceVlanConfigInt(app, b1, "lan", 4000, "", "unused", emptyMap)) // Will fail
+`, generateInterfaceVlanConfigInt(app, b1, "lan", 4000, "", "unused", configMap)) // Will fail
 
 	// Don't generate configs with invalid vlan ids
-	assert.Equal(t, "", generateInterfaceVlanConfigInt(app, b1, "iot", -1, "", "unused", emptyMap))
-	assert.Equal(t, "", generateInterfaceVlanConfigInt(app, b1, "iot", 0, "", "unused", emptyMap))
-	assert.Equal(t, "", generateInterfaceVlanConfigInt(app, b1, "iot", 4095, "", "unused", emptyMap))
-	assert.Equal(t, "", generateInterfaceVlanConfigInt(app, b1, "iot", 100000, "", "unused", emptyMap))
+	assert.Equal(t, "", generateInterfaceVlanConfigInt(app, b1, "iot", -1, "", "unused", configMap))
+	assert.Equal(t, "", generateInterfaceVlanConfigInt(app, b1, "iot", 0, "", "unused", configMap))
+	assert.Equal(t, "", generateInterfaceVlanConfigInt(app, b1, "iot", 4095, "", "unused", configMap))
+	assert.Equal(t, "", generateInterfaceVlanConfigInt(app, b1, "iot", 100000, "", "unused", configMap))
 
 	// Don't generate configs with empty vlan name
-	assert.Equal(t, "", generateInterfaceVlanConfigInt(app, b1, "", 100, "", "unused", emptyMap))
+	assert.Equal(t, "", generateInterfaceVlanConfigInt(app, b1, "", 100, "", "unused", configMap))
 }
 
 func TestGenerateInterfaceVlanConfigIntWithCIDR(t *testing.T) {

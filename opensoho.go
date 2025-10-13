@@ -843,9 +843,14 @@ func generateTaggingMap(app core.App, ports []*core.Record, defaultmode string, 
 }
 
 // Currently all of them are the same mode
-func generatePortTaggingConfig(app core.App, ports []*core.Record, mode string, vlanconfigid string) string {
-	portsconfig := generateTaggingMap(app, ports, mode, vlanconfigid)
+func generatePortTaggingConfig(app core.App, portsconfig []PortTaggingConfig /*, ports []*core.Record, mode string, vlanconfigid string*/) string {
+	//portsconfig := generateTaggingMap(app, ports, mode, vlanconfigid)
 	// TODO add the full map here
+	// Sort the static records
+	sort.Slice(portsconfig, func(i, j int) bool {
+		return portsconfig[i].Port < portsconfig[j].Port
+	})
+
 	portslist := ""
 	for _, portconfig := range portsconfig {
 		portslist += fmt.Sprintf("        list ports '%s:%s'\n", portconfig.Port, portconfig.Mode)
@@ -876,7 +881,7 @@ func generateInterfaceVlanConfigInt(app core.App, bridgeConfig *core.Record, vla
 		fmt.Printf("failed to expand: %v", errs)
 		return ""
 	}
-	mode := "t"
+	//mode := "t"
 	intfmode := "\n        option proto 'none'"
 
 	// Avoid overwriting the default LAN configuration
@@ -895,7 +900,7 @@ func generateInterfaceVlanConfigInt(app core.App, bridgeConfig *core.Record, vla
 	}
 
 	if vlanname == "lan" {
-		mode = "u*"
+		//mode = "u*"
 		intfmode = ""
 	}
 
@@ -907,7 +912,7 @@ config interface '%[1]s'
 config bridge-vlan 'bridge_vlan_%[2]d'
         option device 'br-lan'
         option vlan '%[2]d'
-%[3]s`, vlanname, vlanid, generatePortTaggingConfig(app, bridgeConfig.ExpandedAll("ethernet"), mode, vlanconfigid), intfmode)
+%[3]s`, vlanname, vlanid, generatePortTaggingConfig(app, taggingConfig /*bridgeConfig.ExpandedAll("ethernet"), mode, vlanconfigid*/), intfmode)
 }
 func generateInterfacesConfig(app core.App, device *core.Record) string {
 	if false == IsFeatureApplied(device, "vlan") {

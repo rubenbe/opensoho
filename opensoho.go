@@ -843,8 +843,7 @@ func generateTaggingMap(app core.App, ports []*core.Record, defaultmode string, 
 }
 
 // Currently all of them are the same mode
-func generatePortTaggingConfig(app core.App, portsconfig []PortTaggingConfig /*, ports []*core.Record, mode string, vlanconfigid string*/) string {
-	//portsconfig := generateTaggingMap(app, ports, mode, vlanconfigid)
+func generatePortTaggingConfig(app core.App, portsconfig []PortTaggingConfig) string {
 	// TODO add the full map here
 	// Sort the static records
 	sort.Slice(portsconfig, func(i, j int) bool {
@@ -868,10 +867,10 @@ func generateInterfaceVlanConfig(app core.App, device *core.Record, bridgeConfig
 		cidr = vlanConfig.GetString("cidr")
 	}
 
-	return generateInterfaceVlanConfigInt(app, bridgeConfig, vlanname, vlanid, cidr, vlanConfig.Id, taggingConfig)
+	return generateInterfaceVlanConfigInt(app, bridgeConfig, vlanname, vlanid, cidr, taggingConfig)
 }
 
-func generateInterfaceVlanConfigInt(app core.App, bridgeConfig *core.Record, vlanname string, vlanid int, cidr string, vlanconfigid string, taggingConfig []PortTaggingConfig) string {
+func generateInterfaceVlanConfigInt(app core.App, bridgeConfig *core.Record, vlanname string, vlanid int, cidr string, taggingConfig []PortTaggingConfig) string {
 	// TODO we might already have the port config map available around here, since we want to pass it to the portTaggingConfig
 	if vlanid < 1 || vlanid > 4094 || len(vlanname) == 0 {
 		return ""
@@ -912,7 +911,7 @@ config interface '%[1]s'
 config bridge-vlan 'bridge_vlan_%[2]d'
         option device 'br-lan'
         option vlan '%[2]d'
-%[3]s`, vlanname, vlanid, generatePortTaggingConfig(app, taggingConfig /*bridgeConfig.ExpandedAll("ethernet"), mode, vlanconfigid*/), intfmode)
+%[3]s`, vlanname, vlanid, generatePortTaggingConfig(app, taggingConfig), intfmode)
 }
 func generateInterfacesConfig(app core.App, device *core.Record) string {
 	if false == IsFeatureApplied(device, "vlan") {

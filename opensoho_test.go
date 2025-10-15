@@ -1080,7 +1080,8 @@ config bridge-vlan 'bridge_vlan_123'
 	err = app.Save(b1)
 	assert.Equal(t, nil, err)
 
-	configMap = []PortTaggingConfig{{Port: "lan1", Mode: "t"}, {Port: "lan2", Mode: "t"}}
+	// lan3 should be ignored
+	configMap = []PortTaggingConfig{{Port: "lan1", Mode: "t"}, {Port: "lan2", Mode: "t"}, {Port: "lan3", Mode: ""}}
 
 	assert.Equal(t, `
 config interface 'iot'

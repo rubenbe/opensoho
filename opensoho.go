@@ -852,7 +852,9 @@ func generatePortTaggingConfig(app core.App, portsconfig []PortTaggingConfig) st
 
 	portslist := ""
 	for _, portconfig := range portsconfig {
-		portslist += fmt.Sprintf("        list ports '%s:%s'\n", portconfig.Port, portconfig.Mode)
+		if len(portconfig.Mode) > 0 {
+			portslist += fmt.Sprintf("        list ports '%s:%s'\n", portconfig.Port, portconfig.Mode)
+		}
 	}
 	return portslist
 }

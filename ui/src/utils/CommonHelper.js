@@ -1207,10 +1207,16 @@ export default class CommonHelper {
         // Full Read-only
         case "bridges":
         case "dhcp_leases":
-        case "ethernet":
         case "interfaces":
         return true;
         // Partial read_write
+        case "ethernet":
+            switch (fieldname.toLowerCase()){
+            case "config":
+                return false;
+            default:
+                 return true;
+        }
         case "clients":
             switch (fieldname.toLowerCase()){
             case "alias":

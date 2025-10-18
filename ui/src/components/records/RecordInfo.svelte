@@ -19,12 +19,11 @@
 
     <a
         href="#/collections?collection={record.collectionId}&recordId={record.id}"
-        target="_blank"
         class="inline-flex link-hint"
         rel="noopener noreferrer"
         use:tooltip={{
             text:
-                "Open relation record in new tab:\n" +
+                "Open relation record:\n" +
                 CommonHelper.truncate(
                     JSON.stringify(CommonHelper.truncateObject(excludeProps(record, "expand")), null, 2),
                     800,

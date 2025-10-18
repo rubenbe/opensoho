@@ -24,8 +24,12 @@
         return "";
     }
 </script>
-
-{#if field.primaryKey}
+{#if field.id === "text1579384326" && record.collectionId === "pbc_3745276689"}
+    <!-- VLAN name should have a color -->
+    <div class="label" style="background-color: {CommonHelper.getNetworkColor(rawValue)};">
+        <div class="txt txt-ellipsis">{rawValue}</div>
+    </div>
+{:else if field.primaryKey}
     <div class="label">
         <CopyIcon value={rawValue} />
         <div class="txt txt-ellipsis">{rawValue}</div>

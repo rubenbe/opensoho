@@ -1,4 +1,5 @@
 import { DateTime } from "luxon";
+import PrngHelper from "@/utils/PrngHelper";
 
 const imageExtensions = [
     ".jpg", ".jpeg", ".png", ".svg",
@@ -1260,6 +1261,18 @@ export default class CommonHelper {
             default:
             return false;
         }
+    }
+
+    static getNetworkColor(forName){
+	if (forName == null)
+		return '#eeeeee';
+	else if (forName == 'lan')
+		return '#90f090';
+	else if (forName == 'wan')
+		return '#f09090';
+
+	const prng = new PrngHelper()
+	return prng.derive_color(forName);
     }
 
     static getCollectionIcon(type, name){

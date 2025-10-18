@@ -8,12 +8,21 @@
     import GeoPointValue from "@/components/records/fields/GeoPointValue.svelte";
     import { superuser } from "@/stores/superuser";
     import CommonHelper from "@/utils/CommonHelper";
+    import { collections } from "@/stores/collections";
 
     export let record;
     export let field;
     export let short = false;
 
     $: rawValue = record?.[field.name];
+
+    function customColor(record) {
+        if(record.collectionId === "pbc_3745276689"){
+            const color = CommonHelper.getNetworkColor(record?.name)
+            return "background-color: " + color + ";"
+        }
+        return "";
+    }
 </script>
 
 {#if field.primaryKey}
@@ -101,7 +110,7 @@
     <div class="inline-flex">
         {#if expanded.length}
             {#each expanded.slice(0, relLimit) as item, i (i + item)}
-                <span class="label data--{field.name}--{item}">
+                <span class="label data--{field.name}--{item}" style="{customColor(item)}">
                     <RecordInfo record={item} />
                 </span>
             {/each}

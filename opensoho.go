@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-ozzo/ozzo-validation/v4"
 	"github.com/google/uuid"
 	"github.com/pocketbase/dbx"
 	"github.com/rubenbe/pocketbase"
@@ -166,7 +167,7 @@ func validateRadioHtModeBandCombo(band string, htmode string) error {
 
 	htmodes, ok := validHtModes[band]
 	if !ok {
-		return errors.New("invalid band")
+		return validation.NewError("validation_invalid_value", "Invalid band")
 	}
 
 	for _, h := range htmodes {
@@ -175,7 +176,7 @@ func validateRadioHtModeBandCombo(band string, htmode string) error {
 		}
 	}
 
-	return errors.New("HT mode does not match selected band")
+	return validation.NewError("validation_invalid_value", "HT mode does not match selected band")
 }
 
 func validateRadioFrequencyBandCombo(band string, frequency string) error {
@@ -200,7 +201,7 @@ func validateRadioFrequencyBandCombo(band string, frequency string) error {
 
 	freqs, ok := validFrequencies[band]
 	if !ok {
-		return errors.New("invalid band")
+		return validation.NewError("validation_invalid_value", "Invalid band")
 	}
 
 	for _, f := range freqs {
@@ -209,7 +210,7 @@ func validateRadioFrequencyBandCombo(band string, frequency string) error {
 		}
 	}
 
-	return errors.New("frequency does not match selected band")
+	return validation.NewError("validation_invalid_value", "Frequency does not match selected band")
 }
 
 func validateRadio(record *core.Record) error {

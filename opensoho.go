@@ -157,13 +157,7 @@ func frequencyToChannel(freqMHz int) (int, bool) {
 	}
 }
 
-func validateRadio(record *core.Record) error {
-	if record.Collection().Name != "radios" {
-		return nil
-	}
-
-	band := record.GetString("band")
-	freq := record.GetString("frequency")
+func validateRadioFrequencyBandCombo(band string, frequency string) error {
 
 	validFrequencies := map[string][]string{
 		"2.4": {"2412", "2417", "2422", "2427", "2432", "2437", "2442", "2447", "2452", "2457", "2462", "2467", "2472"},
@@ -189,12 +183,18 @@ func validateRadio(record *core.Record) error {
 	}
 
 	for _, f := range freqs {
-		if f == freq {
+		if f == frequency {
 			return nil
 		}
 	}
 
 	return errors.New("frequency does not match selected band")
+}
+
+func validateRadio(record *core.Record) error {
+	band := record.GetString("band")
+	frequency := record.GetString("frequency")
+	return validateRadioFrequencyBandCombo(band, frequency)
 }
 
 type Client struct {

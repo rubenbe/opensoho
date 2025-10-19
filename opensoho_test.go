@@ -746,6 +746,20 @@ func TestGetPortTagConfigForVlan(t *testing.T) {
 	assert.Equal(t, "t", getPortTagConfigForVlan(iot_vlan.Id, defaultSettings))
 }
 
+func TestValidateRadioFrequencyBandCombo(t *testing.T) {
+	// Valid combinations
+	assert.Nil(t, validateRadioFrequencyBandCombo("2.4", "2412"))
+	assert.Nil(t, validateRadioFrequencyBandCombo("5", "5180"))
+	assert.Nil(t, validateRadioFrequencyBandCombo("6", "5995"))
+	// Invalid combinations
+	assert.Error(t, validateRadioFrequencyBandCombo("5", "2180"))
+	assert.Error(t, validateRadioFrequencyBandCombo("2.4", "5955"))
+
+	// Invalid input
+	assert.Error(t, validateRadioFrequencyBandCombo("7", "5955"))
+	assert.Error(t, validateRadioFrequencyBandCombo("5", "1000"))
+}
+
 // Test making a full map with the port tagging config
 func TestGenerateFullTaggingMap(t *testing.T) {
 	app, _ := tests.NewTestApp()

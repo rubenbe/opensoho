@@ -421,11 +421,15 @@ func generateRadioConfig(radio *core.Record) string {
 	if radio.GetBool("auto_frequency") != true {
 		frequency_txt = fmt.Sprintf("%d", channel)
 	}
+	ht_mode_txt := ""
+	if ht_mode := radio.GetString("ht_mode"); len(ht_mode) > 0 {
+		ht_mode_txt = fmt.Sprintf("  option htmode '%[1]s'\n", ht_mode)
+	}
 
 	return fmt.Sprintf(`
 config wifi-device 'radio%[1]d'
 	option channel '%[2]s'
-`, radio.GetInt("radio"), frequency_txt)
+%[3]s`, radio.GetInt("radio"), frequency_txt, ht_mode_txt)
 }
 
 func getRadiosForDevice(device *core.Record, app core.App) ([]*core.Record, error) {

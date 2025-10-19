@@ -2239,6 +2239,12 @@ config wifi-device 'radio3'
 config wifi-device 'radio3'
 	option channel 'auto'
 `)
+	record.Set("ht_mode", "VHT20")
+	assert.Equal(t, generateRadioConfig(record), `
+config wifi-device 'radio3'
+	option channel 'auto'
+  option htmode 'VHT20'
+`)
 }
 func TestGenerateRadioConfigs(t *testing.T) {
 	radios := make(map[int]Radio)

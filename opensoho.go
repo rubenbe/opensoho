@@ -157,6 +157,27 @@ func frequencyToChannel(freqMHz int) (int, bool) {
 	}
 }
 
+func validateRadioHtModeBandCombo(band string, htmode string) error {
+	validHtModes := map[string][]string{
+		"2.4": {"HT20", "HT40"},
+		"5":   {"HT20", "HT40", "VHT20", "VHT40", "VHT80", "VHT160"},
+		"6":   {"HE20", "HE40", "HE80", "HE160"},
+	}
+
+	htmodes, ok := validHtModes[band]
+	if !ok {
+		return errors.New("invalid band")
+	}
+
+	for _, h := range htmodes {
+		if h == htmode {
+			return nil
+		}
+	}
+
+	return errors.New("HT mode does not match selected band")
+}
+
 func validateRadioFrequencyBandCombo(band string, frequency string) error {
 
 	validFrequencies := map[string][]string{
@@ -194,7 +215,16 @@ func validateRadioFrequencyBandCombo(band string, frequency string) error {
 func validateRadio(record *core.Record) error {
 	band := record.GetString("band")
 	frequency := record.GetString("frequency")
-	return validateRadioFrequencyBandCombo(band, frequency)
+
+	err := validateRadioFrequencyBandCombo(band, frequency)
+	if err != nil {
+		return err
+	}
+
+	htmode := record.GetString("ht_mode")
+
+	err = validateRadioHtModeBandCombo(band, htmode)
+	return err
 }
 
 type Client struct {

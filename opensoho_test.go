@@ -760,6 +760,57 @@ func TestValidateRadioFrequencyBandCombo(t *testing.T) {
 	assert.Error(t, validateRadioFrequencyBandCombo("5", "1000"))
 }
 
+func TestValidateRadioHtModeBandCombo(t *testing.T) {
+	// Valid combinations
+	assert.Nil(t, validateRadioHtModeBandCombo("2.4", "HT20"))
+	assert.Nil(t, validateRadioHtModeBandCombo("2.4", "HT40"))
+	assert.Nil(t, validateRadioHtModeBandCombo("5", "HT20"))
+	assert.Nil(t, validateRadioHtModeBandCombo("5", "HT40"))
+	assert.Nil(t, validateRadioHtModeBandCombo("5", "VHT20"))
+	assert.Nil(t, validateRadioHtModeBandCombo("5", "VHT40"))
+	assert.Nil(t, validateRadioHtModeBandCombo("5", "VHT80"))
+	assert.Nil(t, validateRadioHtModeBandCombo("5", "VHT160"))
+	assert.Nil(t, validateRadioHtModeBandCombo("6", "HE20"))
+	assert.Nil(t, validateRadioHtModeBandCombo("6", "HE40"))
+	assert.Nil(t, validateRadioHtModeBandCombo("6", "HE80"))
+	assert.Nil(t, validateRadioHtModeBandCombo("6", "HE160"))
+	// Invalid combinations
+	assert.Error(t, validateRadioHtModeBandCombo("5", "HE20"))
+	assert.Error(t, validateRadioHtModeBandCombo("2.4", "VHT40"))
+	assert.Error(t, validateRadioHtModeBandCombo("6", "VHT40"))
+
+	// Invalid input
+	assert.Error(t, validateRadioHtModeBandCombo("60", "HE160"))
+	assert.Error(t, validateRadioHtModeBandCombo("5", "HT1000"))
+}
+
+func TestValidateRadio(t *testing.T) {
+	app, err := tests.NewTestApp()
+	assert.Nil(t, err)
+	defer app.Cleanup()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	radiocollection := setupRadioCollection(t, app, devicecollection)
+
+	r := core.NewRecord(radiocollection)
+	r.Set("frequency", "2412")
+	r.Set("band", "2.4")
+	r.Set("ht_mode", "HT40")
+
+	assert.Nil(t, validateRadio(r))
+
+	r.Set("ht_mode", "VHT40")
+	assert.Error(t, validateRadio(r))
+
+	r.Set("frequency", "5180")
+	assert.Error(t, validateRadio(r))
+
+	r.Set("band", "5")
+	assert.Nil(t, validateRadio(r))
+}
+
 // Test making a full map with the port tagging config
 func TestGenerateFullTaggingMap(t *testing.T) {
 	app, _ := tests.NewTestApp()
@@ -2296,6 +2347,10 @@ func setupRadioCollection(t *testing.T, app core.App, devicecollection *core.Col
 	})
 	radiocollection.Fields.Add(&core.TextField{
 		Name:     "band",
+		Required: false,
+	})
+	radiocollection.Fields.Add(&core.TextField{
+		Name:     "ht_mode",
 		Required: false,
 	})
 	radiocollection.Fields.Add(&core.BoolField{

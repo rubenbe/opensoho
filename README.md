@@ -8,14 +8,14 @@
 * [Containerized Deployments (Docker, Podman, Kubernetes)](doc/containers.md)
 
 OpenSOHO is built to manage a small number OpenWRT based network devices. Hence the name SOHO from Small Office Home Office (SOHO) Networks.
-Only OpenWRT 24.10.x is tested.
+Only OpenWRT 24.10.x DSA is tested.
 
-* From 2 to 20 devices
+* From 2 to 20 devices (there is no hard limit)
 * No multitenancy
 * Compatible with openwisp-config and openwisp-monitoring.
 * Simple to deploy
 
-It is inspired by OpenWisp, but aims for networks which are too small to be maintained with OpenWISP.
+It is inspired by OpenWISP, but aims for networks which are too small to be maintained with OpenWISP.
 As OpenWisp mentioned:
 > However, OpenWISP may not be the best fit for very small networks (fewer than 20 devices), organizations lacking IT expertise, or enterprises seeking open-source alternatives solely for cost-saving purposes.
 
@@ -26,22 +26,26 @@ As OpenWisp mentioned:
 </p>
 
 # Getting Started with OpenSOHO
+## Install OpenSOHO
 
-* Download the latest OpenSOHO release
+* Download the latest OpenSOHO release (or use a docker container)
 
-[Releases](https://github.com/rubenbe/opensoho/releases)
-
+  [Releases](https://github.com/rubenbe/opensoho/releases)
 
 * Start OpenSOHO
 
-The shared secret will be used by openwisp-config to register. Choose a long random string for optimal security.
+First step is to choose a shared secret which will allow the OpenWRT devices (using openwisp-config) to register with OpenSOHO.
+
+Choose a long random string for optimal security.
+
 It needs to match what you will configure in Luci in the next steps.
 
 ```
 OPENSOHO_SHARED_SECRET=randompassphrase ./opensoho serve --http 0.0.0.0:8090
 ```
-OpenSOHO will output a URL on the commandline which will allow you to create the admin account.
-Simply copy paste it into your browser.
+
+Now OpenSOHO will output a URL on the commandline which will allow you to create the admin account.
+Simply copy paste the URL into your browser.
 
 Alternatively you can create a superuser in via the commandline:
 ```
@@ -69,7 +73,9 @@ When installing wpad-mbedtls, rebooting is required to switch to the new wpad bi
 
 ### Configure OpenWISP in Luci:
 
-* Set the `Server URL` and the `Shared secret` only. It is important to *NOT* a trailing slash to the `Server URL`.
+* Set the `Server URL` and the `Shared secret` only.
+  * It is important to *NOT* a trailing slash to the `Server URL`.
+  * The shared secret is the value you choose previously (`OPENSOHO_SHARED_SECRET`).
 * Optionally lower the `Update Interval` to 30 seconds for faster updates. (OpenSOHO will do this for you if you don't)
 * OpenSOHO will also enable monitoring and lower the monitoring interval to 15 seconds to have snappier updates of the network state.
 
@@ -77,7 +83,7 @@ It is highly recommended to enable monitoring, since OpenSOHO will deduce a lot 
 
 ## Configure OpenSOHO
 
-* Wait for the devices to self register using the shared secret.
+* Wait for the OpenWrt device(s) to self register using the shared secret.
 * Set the `numradios` to the correct value. For example for a 2.4 + 5GHz device, this value would be 2.
 * Setup a Wifi access point (SSID+KEY)
 * Attach the configured Wifi access point to a device to have it configured.

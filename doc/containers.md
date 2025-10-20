@@ -13,7 +13,7 @@ A docker compose setup could be used following this example:
 
 ```
   opensoho:
-    image: ghcr.io/opensoho/opensoho-da212a3daf23f854555a4afaf75d4a02:v0.6.0
+    image: ghcr.io/opensoho/opensoho:v0.9.0
     container_name: opensoho
     command: serve --http 0.0.0.0:8090
     environment:

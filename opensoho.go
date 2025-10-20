@@ -214,18 +214,26 @@ func validateRadioFrequencyBandCombo(band string, frequency string) error {
 }
 
 func validateRadio(record *core.Record) error {
+	errs := validation.Errors{}
 	band := record.GetString("band")
 	frequency := record.GetString("frequency")
 
 	err := validateRadioFrequencyBandCombo(band, frequency)
 	if err != nil {
-		return err
+		errs["frequency"] = err
 	}
 
 	htmode := record.GetString("ht_mode")
 
 	err = validateRadioHtModeBandCombo(band, htmode)
-	return err
+
+	if err != nil {
+		errs["ht_mode"] = err
+	}
+	if len(errs) > 0 {
+		return apis.NewBadRequestError("Failed to create record.", errs)
+	}
+	return nil
 }
 
 type Client struct {
@@ -1891,9 +1899,14 @@ table.table > thead > tr > th > div.col-header-content > span.txt
 		Priority: 0,
 	})
 
-	app.OnRecordValidate("radios").BindFunc(func(e *core.RecordEvent) error {
-		return validateRadio(e.Record)
+	app.OnRecordUpdateRequest("radios").BindFunc(func(e *core.RecordRequestEvent) error {
+		err := validateRadio(e.Record)
+		if err != nil {
+			return err
+		}
+		return e.Next()
 	})
+
 	app.OnRecordCreateExecute("device").BindFunc(func(e *core.RecordEvent) error {
 		fmt.Println()
 		if err := updateAndStoreDeviceConfig(e.App, e.Record); err != nil {

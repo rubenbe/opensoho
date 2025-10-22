@@ -418,7 +418,7 @@ config led 'led_%s'
 `, strings.ToLower(name), name, led.GetString("led_name"), led.GetString("trigger"))
 }
 
-func generateRadioConfig(radio *core.Record) string {
+func generateRadioConfig(radio *core.Record, country_code string) string {
 	frequency := radio.GetInt("frequency")
 	channel, ok := frequencyToChannel(frequency)
 	if ok == false {
@@ -432,13 +432,18 @@ func generateRadioConfig(radio *core.Record) string {
 	}
 	ht_mode_txt := ""
 	if ht_mode := radio.GetString("ht_mode"); len(ht_mode) > 0 {
-		ht_mode_txt = fmt.Sprintf("  option htmode '%[1]s'\n", ht_mode)
+		ht_mode_txt = fmt.Sprintf("        option htmode '%[1]s'\n", ht_mode)
+	}
+
+	country_txt := ""
+	if len(country_code) > 0 {
+		country_txt = fmt.Sprintf("        option country '%[1]s'\n", country_code)
 	}
 
 	return fmt.Sprintf(`
 config wifi-device 'radio%[1]d'
-	option channel '%[2]s'
-%[3]s`, radio.GetInt("radio"), frequency_txt, ht_mode_txt)
+        option channel '%[2]s'
+%[3]s%[4]s`, radio.GetInt("radio"), frequency_txt, country_txt, ht_mode_txt)
 }
 
 func getRadiosForDevice(device *core.Record, app core.App) ([]*core.Record, error) {
@@ -448,6 +453,11 @@ func getRadiosForDevice(device *core.Record, app core.App) ([]*core.Record, erro
 }
 
 func generateRadioConfigs(device *core.Record, app core.App) string {
+	countryrecord, err := app.FindFirstRecordByData("settings", "name", "country")
+	country := ""
+	if err == nil {
+		country = countryrecord.GetString("value")
+	}
 	output := ""
 	records, err := getRadiosForDevice(device, app)
 	if err != nil {
@@ -455,7 +465,7 @@ func generateRadioConfigs(device *core.Record, app core.App) string {
 		return ""
 	}
 	for _, record := range records {
-		output += generateRadioConfig(record)
+		output += generateRadioConfig(record, country)
 
 	}
 	return output

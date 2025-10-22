@@ -2248,21 +2248,27 @@ func TestGenerateRadioConfig(t *testing.T) {
 	record.Set("radio", "3")
 	record.Set("channel", "5")
 	record.Set("frequency", "5200")
-	assert.Equal(t, generateRadioConfig(record), `
+	assert.Equal(t, generateRadioConfig(record, ""), `
 config wifi-device 'radio3'
-	option channel '40'
+        option channel '40'
 `)
 
 	record.Set("auto_frequency", true)
-	assert.Equal(t, generateRadioConfig(record), `
+	assert.Equal(t, generateRadioConfig(record, ""), `
 config wifi-device 'radio3'
-	option channel 'auto'
+        option channel 'auto'
 `)
 	record.Set("ht_mode", "VHT20")
-	assert.Equal(t, generateRadioConfig(record), `
+	assert.Equal(t, generateRadioConfig(record, ""), `
 config wifi-device 'radio3'
-	option channel 'auto'
-  option htmode 'VHT20'
+        option channel 'auto'
+        option htmode 'VHT20'
+`)
+	assert.Equal(t, generateRadioConfig(record, "FR"), `
+config wifi-device 'radio3'
+        option channel 'auto'
+        option country 'FR'
+        option htmode 'VHT20'
 `)
 }
 func TestGenerateRadioConfigs(t *testing.T) {
@@ -2275,6 +2281,7 @@ func TestGenerateRadioConfigs(t *testing.T) {
 	devicecollection := core.NewBaseCollection("devices")
 	err := app.Save(devicecollection)
 	assert.Equal(t, err, nil)
+	settingscollection := setupSettingsCollection(t, app)
 
 	// Create radios collection
 	radiocollection := core.NewBaseCollection("radios")
@@ -2322,10 +2329,25 @@ func TestGenerateRadioConfigs(t *testing.T) {
 
 	assert.Equal(t, `
 config wifi-device 'radio0'
-	option channel '1'
+        option channel '1'
 
 config wifi-device 'radio1'
-	option channel '40'
+        option channel '40'
+`, generateRadioConfigs(d, app))
+
+	country := core.NewRecord(settingscollection)
+	country.Set("name", "country")
+	country.Set("value", "DE")
+	app.Save(country)
+
+	assert.Equal(t, `
+config wifi-device 'radio0'
+        option channel '1'
+        option country 'DE'
+
+config wifi-device 'radio1'
+        option channel '40'
+        option country 'DE'
 `, generateRadioConfigs(d, app))
 
 }

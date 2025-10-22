@@ -811,6 +811,25 @@ func TestValidateRadio(t *testing.T) {
 	assert.Nil(t, validateRadio(r))
 }
 
+func TestValidateSetting(t *testing.T) {
+	app, err := tests.NewTestApp()
+	assert.Nil(t, err)
+	defer app.Cleanup()
+
+	settingscollection := setupSettingsCollection(t, app)
+
+	s := core.NewRecord(settingscollection)
+	s.Set("name", "country")
+	s.Set("value", "")
+	assert.Nil(t, validateSetting(s))
+
+	s.Set("value", "BE")
+	assert.Nil(t, validateSetting(s))
+
+	s.Set("value", "XX")
+	assert.Error(t, validateSetting(s))
+}
+
 // Test making a full map with the port tagging config
 func TestGenerateFullTaggingMap(t *testing.T) {
 	app, _ := tests.NewTestApp()
@@ -2650,6 +2669,21 @@ func setupInterfacesCollection(t *testing.T, app core.App) *core.Collection {
 	err := app.Save(ifacecollection)
 	assert.Equal(t, err, nil)
 	return ifacecollection
+}
+
+func setupSettingsCollection(t *testing.T, app core.App) *core.Collection {
+	settingscollection := core.NewBaseCollection("settings")
+	settingscollection.Fields.Add(&core.TextField{
+		Name:     "name",
+		Required: true,
+	})
+	settingscollection.Fields.Add(&core.TextField{
+		Name:     "value",
+		Required: true,
+	})
+	err := app.Save(settingscollection)
+	assert.Nil(t, err)
+	return settingscollection
 }
 
 func setupVlanCollection(t *testing.T, app core.App) *core.Collection {

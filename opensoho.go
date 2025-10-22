@@ -1907,6 +1907,14 @@ table.table > thead > tr > th > div.col-header-content > span.txt
 		return e.Next()
 	})
 
+	app.OnRecordUpdateRequest("settings").BindFunc(func(e *core.RecordRequestEvent) error {
+		err := validateSetting(e.Record)
+		if err != nil {
+			return err
+		}
+		return e.Next()
+	})
+
 	app.OnRecordCreateExecute("device").BindFunc(func(e *core.RecordEvent) error {
 		fmt.Println()
 		if err := updateAndStoreDeviceConfig(e.App, e.Record); err != nil {
@@ -1923,6 +1931,23 @@ table.table > thead > tr > th > div.col-header-content > span.txt
 	if err := app.Start(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func validateSetting(record *core.Record) error {
+	name := record.GetString("name")
+	value := record.GetString("value")
+
+	errs := validation.Errors{}
+	switch name {
+	case "country":
+		if IsValidCountryCode(value) == false {
+			errs["value"] = validation.NewError("validation_invalid_value", "Value must be a 2 letter country code (e.g. 'BE'). '00' for global. Leave empty for the driver default.")
+		}
+	}
+	if len(errs) > 0 {
+		return apis.NewBadRequestError("Failed to create record.", errs)
+	}
+	return nil
 }
 
 func updateAndStoreDeviceConfig(app core.App, record *core.Record) error {

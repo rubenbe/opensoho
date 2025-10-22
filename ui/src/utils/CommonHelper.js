@@ -1307,6 +1307,8 @@ export default class CommonHelper {
 		return "ri-signal-wifi-off-line";
             case "ssh_keys":
                 return "ri-key-line";
+            case "settings":
+                return "ri-tools-line";
 	    default:
 		return CommonHelper.getCollectionTypeIcon(type);
         }

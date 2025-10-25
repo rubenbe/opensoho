@@ -17,6 +17,13 @@
 ## Getting started
 1. Under `Vlans`, ensure a `Vlan` named `lan` exists.
    Give it a number e.g. 100, this will be your `lan` VLAN id. Avoid VLAN IDs 1 and 2.
+
+<p align="center">
+  <a href="https://raw.githubusercontent.com/opensoho/assets/16c557f7d38a467ed81d0f5119c5c1e1dedff787/vlan/vlan.png" target="_blank">
+    <img src="https://raw.githubusercontent.com/opensoho/assets/16c557f7d38a467ed81d0f5119c5c1e1dedff787/vlan/vlan.png" width="80%" />
+  </a>
+</p>
+
 2. Under `Devices`, add `vlan` as `apply` value for each device that requires VLAN support.
    Do this *GRADUALLY* as there is no easy way back (using OpenSOHO).
    A good strategy is to slowly work your way up from the least important APs towards my main router.

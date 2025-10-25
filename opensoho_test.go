@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"image/png"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/liyue201/goqr"
 	"github.com/rubenbe/pocketbase/core"
 	"github.com/rubenbe/pocketbase/tests"
 	"github.com/rubenbe/pocketbase/tools/router"
@@ -3872,4 +3875,31 @@ func TestApiGenerateDeviceStatus(t *testing.T) {
 		}
 	}
 
+}
+
+func TestGenerateWifiQr(t *testing.T) {
+	app, err := tests.NewTestApp()
+	assert.Nil(t, err)
+	defer app.Cleanup()
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	w := core.NewRecord(wificollection)
+	w.Id = "somethingabcdef"
+	w.Set("ssid", "OpenWRT1")
+	w.Set("key", "the_key")
+	w.Set("ieee80211r", true)
+	w.Set("encryption", "the_encryption")
+	err = app.Save(w)
+	assert.Equal(t, nil, err)
+
+	rawpngbuffer, err := generateWifiQr(w)
+	assert.Nil(t, err)
+	// Test the QR
+	img, err := png.Decode(bytes.NewReader(rawpngbuffer.Bytes()))
+	assert.Nil(t, err, "failed to decode png")
+	symbols, err := goqr.Recognize(img)
+	assert.Nil(t, err, "failed to parse QR")
+	assert.Equal(t, len(symbols), 1, "Expect one sybol in the QR")
+	output := fmt.Sprintf("%s", symbols[0].Payload)
+	assert.Equal(t, "WIFI:S:OpenWRT1;T:WPA;P:the_key;H:false;", output)
 }

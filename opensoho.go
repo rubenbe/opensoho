@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"image/png"
 	"io"
 	"io/fs"
 	"log"
@@ -32,6 +33,7 @@ import (
 	"github.com/rubenbe/pocketbase/apis"
 	"github.com/rubenbe/pocketbase/core"
 	//"github.com/rubenbe/pocketbase/plugins/ghupdate"
+	"github.com/reugn/wifiqr"
 	"github.com/rubenbe/opensoho/ui"
 	"github.com/rubenbe/pocketbase/plugins/jsvm"
 	"github.com/rubenbe/pocketbase/plugins/migratecmd"
@@ -1984,4 +1986,24 @@ func apiGenerateDeviceStatus(e *core.RequestEvent) error {
 	fmt.Println("HASS health status", mac_address, health_status, sensor_status)
 
 	return e.String(200, sensor_status)
+}
+
+func generateWifiQr(wifi *core.Record) (*bytes.Buffer, error) {
+	buf := new(bytes.Buffer)
+	encProto, err := wifiqr.NewEncryptionProtocol("wpa") // Let's hardcode to WPA for now
+	if err != nil {
+		fmt.Println("Invalid encryption:", err)
+		return buf, err
+	}
+	qrconfig := wifiqr.NewConfig(wifi.GetString("ssid"), wifi.GetString("key"), encProto, false /*hidden*/)
+	qr, err := wifiqr.InitCode(qrconfig)
+	if err != nil {
+		fmt.Println("Invalid encryption:", err)
+		return buf, err
+	}
+	err = png.Encode(buf, qr.Image(256))
+	if err != nil {
+		log.Fatalf("Failed to encode PNG: %v", err)
+	}
+	return buf, nil
 }

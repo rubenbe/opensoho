@@ -1919,25 +1919,36 @@ func TestUpdateInterface(t *testing.T) {
 }
 
 func TestUpdateLastSeen(t *testing.T) {
-	app, _ := tests.NewTestApp()
+	app, err := tests.NewTestApp()
+	assert.Nil(t, err)
+	defer app.Cleanup()
+
 	collection := core.NewBaseCollection("devices")
 	collection.Fields.Add(&core.DateField{Name: "last_seen"})
 	collection.Fields.Add(&core.SelectField{Name: "health_status", MaxSelect: 1, Values: []string{"unknown", "healthy", "critical"}})
-	err := app.Save(collection)
-	assert.Equal(t, err, nil)
+	collection.Fields.Add(&core.TextField{Name: "ip_address"})
+	err = app.Save(collection)
+	assert.Nil(t, err)
 
 	m := core.NewRecord(collection)
 	m.Id = "testaidalongera"
 	m.Set("health_status", "unknown")
+	m.Set("ip_address", "0.0.0.0")
 	assert.Equal(t, m.GetDateTime("last_seen"), types.DateTime{})
 	err = app.Save(m)
 	assert.Equal(t, err, nil)
+	event := core.RequestEvent{}
+	event.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+	event.Request.RemoteAddr = "200.200.100.100:12345"
+	event.App = app
+	assert.Equal(t, "200.200.100.100", event.RealIP())
 
-	updateLastSeen(app, m)
+	updateLastSeen(&event, m)
 	assert.NotEqual(t, m.GetDateTime("last_seen"), types.DateTime{})
 	assert.WithinDuration(t, m.GetDateTime("last_seen").Time(), types.NowDateTime().Time(), 1*time.Second, "Last Seen should be updated")
 	record, err := app.FindRecordById("devices", "testaidalongera")
 	assert.Equal(t, "healthy", m.GetString("health_status"))
+	assert.Equal(t, "200.200.100.100", m.GetString("ip_address"))
 
 	// The record is newer than 60 seconds, so should remain healthy
 	now := types.NowDateTime()
@@ -1946,6 +1957,7 @@ func TestUpdateLastSeen(t *testing.T) {
 	record, err = app.FindRecordById("devices", "testaidalongera")
 	assert.Equal(t, err, nil)
 	assert.Equal(t, "healthy", record.GetString("health_status"))
+	assert.Equal(t, "200.200.100.100", m.GetString("ip_address"), "should not be updated")
 
 	// The record should have been updated to unhealthy
 	now = now.Add(2 * time.Second)
@@ -1953,7 +1965,7 @@ func TestUpdateLastSeen(t *testing.T) {
 	record, err = app.FindRecordById("devices", "testaidalongera")
 	assert.Equal(t, err, nil)
 	assert.Equal(t, "unhealthy", record.GetString("health_status"))
-
+	assert.Equal(t, "200.200.100.100", m.GetString("ip_address"), "should not be updated")
 }
 
 func TestExtractRadioNumber(t *testing.T) {

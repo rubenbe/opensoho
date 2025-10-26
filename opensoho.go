@@ -109,10 +109,11 @@ func updateDeviceHealth(app core.App, currenttime types.DateTime) {
 	}
 
 }
-func updateLastSeen(app core.App, record *core.Record) error {
+func updateLastSeen(e *core.RequestEvent, record *core.Record) error {
 	record.Set("last_seen", time.Now())
 	record.Set("health_status", "healthy")
-	return app.Save(record)
+	record.Set("ip_address", e.RealIP())
+	return e.App.Save(record)
 }
 
 func frequencyToBand(frequency int) string {
@@ -671,7 +672,7 @@ func hexToPocketBaseID(hexStr string) (string, error) {
 	// Convert to Base36
 	return bigInt.Text(36)[0:15], nil
 }
-func getDeviceRecord(app core.App, key string) (*core.Record, error) {
+func getDeviceRecord(e *core.RequestEvent, key string) (*core.Record, error) {
 	if len(key) != 32 {
 		return nil, fmt.Errorf("Key not valid")
 	}
@@ -679,7 +680,7 @@ func getDeviceRecord(app core.App, key string) (*core.Record, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Key not hex")
 	}
-	record, err := app.FindRecordById("devices", pbID)
+	record, err := e.App.FindRecordById("devices", pbID)
 	if err != nil {
 		return nil, fmt.Errorf("Device not known")
 	}
@@ -688,7 +689,7 @@ func getDeviceRecord(app core.App, key string) (*core.Record, error) {
 	}
 	// Successful authentication means the device is alive and online
 	fmt.Println("UpdateLastSeen")
-	if updateLastSeen(app, record) != nil {
+	if updateLastSeen(e, record) != nil {
 		fmt.Println("could not update last seen")
 		// Let's not make this an error for now
 	}
@@ -1506,7 +1507,7 @@ func handleDeviceInfoUpdate(e *core.RequestEvent) error {
 	if err := e.BindBody(&data); err != nil {
 		return e.BadRequestError("Missing fields", err)
 	}
-	record, err := getDeviceRecord(e.App, data.Key)
+	record, err := getDeviceRecord(e, data.Key)
 	if err != nil {
 		fmt.Println(err)
 		return e.ForbiddenError("Not allowed", err)
@@ -1536,7 +1537,7 @@ func handleDeviceStatusUpdate(e *core.RequestEvent) error {
 	if err := e.BindBody(&data); err != nil {
 		return e.BadRequestError("Missing fields", err)
 	}
-	record, err := getDeviceRecord(e.App, data.Key)
+	record, err := getDeviceRecord(e, data.Key)
 	if err != nil {
 		fmt.Println(err)
 		return e.ForbiddenError("Not allowed", err)
@@ -1642,7 +1643,7 @@ func bindAppHooks(app core.App, shared_secret string, enableNewDevices bool) {
 		se.Router.GET("/controller/checksum/{device_uuid}/", func(e *core.RequestEvent) error {
 			e.Response.Header().Set("X-Openwisp-Controller", "true")
 			key := e.Request.URL.Query().Get("key")
-			record, err := getDeviceRecord(app, key)
+			record, err := getDeviceRecord(e, key)
 			if err != nil {
 				return e.ForbiddenError("Not allowed", err)
 			}
@@ -1659,7 +1660,7 @@ func bindAppHooks(app core.App, shared_secret string, enableNewDevices bool) {
 		se.Router.GET("/controller/download-config/{device_uuid}/", func(e *core.RequestEvent) error {
 			e.Response.Header().Set("X-Openwisp-Controller", "true")
 			key := e.Request.URL.Query().Get("key")
-			record, err := getDeviceRecord(app, key)
+			record, err := getDeviceRecord(e, key)
 			if err != nil {
 				return e.ForbiddenError("Not allowed", err)
 			}
@@ -1681,7 +1682,7 @@ func bindAppHooks(app core.App, shared_secret string, enableNewDevices bool) {
 		se.Router.POST("/api/v1/monitoring/device/", func(e *core.RequestEvent) error {
 
 			key := e.Request.URL.Query().Get("key")
-			device, err := getDeviceRecord(app, key)
+			device, err := getDeviceRecord(e, key)
 			if err != nil {
 				return e.ForbiddenError("Not allowed", err)
 			}

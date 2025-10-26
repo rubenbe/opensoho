@@ -2617,6 +2617,10 @@ func setupWifiCollection(t *testing.T, app core.App, vlancollection *core.Collec
 		Name:     "ieee80211k",
 		Required: false,
 	})
+	wificollection.Fields.Add(&core.NumberField{
+		Name:     "dtim_period",
+		Required: false,
+	})
 	wificollection.Fields.Add(&core.RelationField{
 		Name:         "network",
 		MaxSelect:    1,
@@ -3077,6 +3081,7 @@ config wifi-iface 'wifi_3_radio4'
         option wnm_sleep_mode_no_keys '0'
         option proxy_arp '0'
         option bss_transition '0'
+        option dtim_period '1'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
 `)
@@ -3112,6 +3117,7 @@ config wifi-iface 'wifi_3_radio4'
         option wnm_sleep_mode_no_keys '0'
         option proxy_arp '0'
         option bss_transition '1'
+        option dtim_period '1'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
 `)
@@ -3140,6 +3146,7 @@ config wifi-iface 'wifi_3_radio4'
         option wnm_sleep_mode_no_keys '0'
         option proxy_arp '0'
         option bss_transition '1'
+        option dtim_period '1'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
 `)
@@ -3173,6 +3180,7 @@ config wifi-iface 'wifi_3_radio4'
         option wnm_sleep_mode_no_keys '0'
         option proxy_arp '0'
         option bss_transition '1'
+        option dtim_period '1'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
         option macfilter 'deny'
@@ -3202,6 +3210,7 @@ config wifi-iface 'wifi_3_radio4'
         option wnm_sleep_mode_no_keys '0'
         option proxy_arp '0'
         option bss_transition '1'
+        option dtim_period '1'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
         option macfilter 'deny'
@@ -3212,6 +3221,8 @@ config wifi-iface 'wifi_3_radio4'
 	w.Set("ieee80211v_time_advertisement", "Europe/Brussels")
 	// Test proxy ARP
 	w.Set("ieee80211v_proxy_arp", true)
+	// Change DTIM period
+	w.Set("dtim_period", 3)
 
 	// Generate a config
 	wificonfig = generateWifiConfig(w, 3, 4, app, d)
@@ -3233,6 +3244,7 @@ config wifi-iface 'wifi_3_radio4'
         option wnm_sleep_mode_no_keys '0'
         option proxy_arp '1'
         option bss_transition '1'
+        option dtim_period '3'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
         option macfilter 'deny'
@@ -3914,4 +3926,11 @@ func TestGenerateWifiQr(t *testing.T) {
 	assert.Equal(t, len(symbols), 1, "Expect one sybol in the QR")
 	output := fmt.Sprintf("%s", symbols[0].Payload)
 	assert.Equal(t, "WIFI:S:OpenWRT1;T:WPA;P:the_key;H:false;", output)
+}
+
+func TestMaxInt(t *testing.T) {
+	assert.Equal(t, 1, maxInt(0, 1))
+	assert.Equal(t, 5, maxInt(-123, 5))
+	assert.Equal(t, 3, maxInt(1, 3))
+	assert.Equal(t, -999, maxInt(-1000, -999))
 }

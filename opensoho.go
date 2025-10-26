@@ -131,6 +131,14 @@ func frequencyToBand(frequency int) string {
 	}
 }
 
+func maxInt(a int, b int) int {
+	if a > b {
+		return a
+	} else {
+		return b
+	}
+}
+
 func frequencyToChannel(freqMHz int) (int, bool) {
 	switch {
 	// 2.4 GHz band: Channels 1–14
@@ -565,13 +573,14 @@ config wifi-iface 'wifi_%[6]d_radio%[3]d'
         option wnm_sleep_mode_no_keys '0'
         option proxy_arp '%[16]d'
         option bss_transition '%[10]d'
+        option dtim_period '%[17]d'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
 %[9]s`,
 		ssid, wifi.GetString("id"), radio, key, encryption,
 		wifiid, wifi.GetInt("ieee80211r"), getVlan(wifi, app), steeringconfig, wifi.GetInt("ieee80211v_bss_transition"),
 		max(1000, wifi.GetInt("ieee80211r_reassoc_deadline")), wifi.GetInt("ieee80211k"), wifi.GetInt("ieee80211v_wnm_sleep_mode"), vta_flag, vta_tz,
-		wifi.GetInt("ieee80211v_proxy_arp"))
+		wifi.GetInt("ieee80211v_proxy_arp"), maxInt(1, wifi.GetInt("dtim_period")))
 }
 
 func createConfigTar(files map[string]string) ([]byte, string, error) {

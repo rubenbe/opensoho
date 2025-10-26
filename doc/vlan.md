@@ -1,4 +1,4 @@
-# VLAN cofiguration
+# VLAN configuration
 
 ## Important information (read first!)
 * VLAN configuration is tricky to get right, so OpenSOHO tries to applies its configuration in a way that limits possible connection loss.

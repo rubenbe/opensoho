@@ -1,4 +1,4 @@
-# VLAN
+# VLAN cofiguration
 
 ## Important information (read first!)
 * VLAN configuration is tricky to get right, so OpenSOHO tries to applies its configuration in a way that limits possible connection loss.
@@ -6,7 +6,7 @@
 * LAN remains untagged on all ports (it is planned feature to override this for individual ports).
   The rationale is that the network should always keep working when VLAN tagging is enabled.
 * CIDR settings on the `lan` will be ignored since forcing those would break the network.
-  The CIDR settings are applied on the selected gateway.
+  The CIDR settings are applied on the selected gateway only. The interface on APs and switches be configured with `option proto 'none'`.
 * VLANs named `lan` and `wan` are extra protected from accidental modification.
   If you rename your `lan` or `wan` to something else, this protection will not be active.
 * OpenSOHO takes the ethernet interfaces reported by the OpenWRT device (via OpenWISP monitoring) and will:

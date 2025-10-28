@@ -80,6 +80,7 @@ export default class CommonHelper {
             "mac_address": "MAC address",
             "dhcp_leases": "DHCP leases",
             "ip_address": "IP address",
+            "wifi_client_psk": "Wifi client PSK",
         }
         const pattern = new RegExp("^"+ Object.keys(replacements).join("|"), "");
         const cleaned = value.replace(pattern, (matched) => replacements[matched.toLowerCase()]);
@@ -1309,6 +1310,8 @@ export default class CommonHelper {
                 return "ri-key-line";
             case "settings":
                 return "ri-tools-line";
+            case "wifi_client_psk":
+        return "ri-shield-keyhole-line";
 	    default:
 		return CommonHelper.getCollectionTypeIcon(type);
         }

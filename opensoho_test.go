@@ -3934,3 +3934,57 @@ func TestMaxInt(t *testing.T) {
 	assert.Equal(t, 3, maxInt(1, 3))
 	assert.Equal(t, -999, maxInt(-1000, -999))
 }
+
+func TestIsValidVlanNumber(t *testing.T) {
+	assert.Equal(t, false, isValidVlanNumber(-1))
+	assert.Equal(t, false, isValidVlanNumber(0))
+	assert.Equal(t, false, isValidVlanNumber(4095))
+
+	assert.Equal(t, true, isValidVlanNumber(1))
+	assert.Equal(t, true, isValidVlanNumber(100))
+	assert.Equal(t, true, isValidVlanNumber(4094))
+}
+
+func TestGenerateHostApdVlanMap(t *testing.T) {
+	vlans := []*core.Record{}
+	assert.Equal(t, "", generateHostApdVlanMap(vlans, "wlan"))
+
+	app, err := tests.NewTestApp()
+	assert.Nil(t, err)
+	defer app.Cleanup()
+
+	vlancollection := setupVlanCollection(t, app)
+	iot_vlan := core.NewRecord(vlancollection)
+	iot_vlan.Id = "zzzzziotvlan300"
+	iot_vlan.Set("name", "iot")
+	iot_vlan.Set("number", "300")
+	err = app.Save(iot_vlan)
+	assert.Equal(t, nil, err)
+
+	lan_vlan := core.NewRecord(vlancollection)
+	lan_vlan.Id = "zzzzzlanvlan200"
+	lan_vlan.Set("name", "lan")
+	lan_vlan.Set("number", "200")
+	err = app.Save(lan_vlan)
+	assert.Equal(t, nil, err)
+
+	// Wrong order, should be ordered by VLAN number
+	vlans = []*core.Record{iot_vlan, lan_vlan}
+	assert.Equal(t, `200 wlan0.200
+300 wlan0.300
+`, generateHostApdVlanMap(vlans, "wlan0"))
+
+	// A VLAN without a number should not be added.
+	wan_vlan := core.NewRecord(vlancollection)
+	wan_vlan.Id = "zzzzzlanvlan000"
+	wan_vlan.Set("name", "wan")
+	err = app.Save(wan_vlan)
+	assert.Equal(t, nil, err)
+
+	// Wrong order, should be ordered by VLAN number
+	vlans = []*core.Record{iot_vlan, lan_vlan, wan_vlan}
+	assert.Equal(t, `200 wlan0.200
+300 wlan0.300
+`, generateHostApdVlanMap(vlans, "wlan0"))
+
+}

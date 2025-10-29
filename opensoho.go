@@ -937,9 +937,13 @@ func generateInterfaceVlanConfig(app core.App, device *core.Record, bridgeConfig
 	return generateInterfaceVlanConfigInt(app, bridgeConfig, vlanname, vlanid, cidr, taggingConfig)
 }
 
+func isValidVlanNumber(vlanid int) bool {
+	return !(vlanid < 1 || vlanid > 4094)
+}
+
 func generateInterfaceVlanConfigInt(app core.App, bridgeConfig *core.Record, vlanname string, vlanid int, cidr string, taggingConfig []PortTaggingConfig) string {
 	// TODO we might already have the port config map available around here, since we want to pass it to the portTaggingConfig
-	if vlanid < 1 || vlanid > 4094 || len(vlanname) == 0 {
+	if (!isValidVlanNumber(vlanid)) || len(vlanname) == 0 {
 		return ""
 	}
 	errs := app.ExpandRecord(bridgeConfig, []string{"ethernet"}, nil)
@@ -2016,4 +2020,25 @@ func generateWifiQr(wifi *core.Record) (*bytes.Buffer, error) {
 		log.Fatalf("Failed to encode PNG: %v", err)
 	}
 	return buf, nil
+}
+
+func generateHostApdVlanPsk(client_psks []*core.Record, interfacename string) string {
+	output := ""
+	//client_psks := []core.Record
+	return output
+}
+
+func generateHostApdVlanMap(vlans []*core.Record, interfacename string) string {
+	sort.Slice(vlans, func(i, j int) bool {
+		return vlans[i].GetInt("number") < vlans[j].GetInt("number")
+	})
+	output := ""
+	for _, vlan := range vlans {
+		vlanNumber := vlan.GetInt("number")
+		if !isValidVlanNumber(vlanNumber) {
+			continue
+		}
+		output += fmt.Sprintf("%[1]d %[2]s.%[1]d\n", vlanNumber, interfacename)
+	}
+	return output
 }

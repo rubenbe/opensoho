@@ -2727,6 +2727,38 @@ func setupSettingsCollection(t *testing.T, app core.App) *core.Collection {
 	return settingscollection
 }
 
+func setupClientPskCollection(t *testing.T, app core.App, clientcollection *core.Collection, vlancollection *core.Collection, wificollection *core.Collection) *core.Collection {
+	pskcollection := core.NewBaseCollection("wifi_client_psk")
+	pskcollection.Fields.Add(&core.TextField{
+		Name:     "password",
+		Required: true,
+	})
+
+	pskcollection.Fields.Add(&core.RelationField{
+		Name:         "clients",
+		MaxSelect:    99, // For now one maximum
+		Required:     false,
+		CollectionId: clientcollection.Id,
+	})
+
+	pskcollection.Fields.Add(&core.RelationField{
+		Name:         "vlan",
+		MaxSelect:    1,
+		Required:     false,
+		CollectionId: vlancollection.Id,
+	})
+
+	pskcollection.Fields.Add(&core.RelationField{
+		Name:         "wifi",
+		MaxSelect:    1,
+		Required:     true,
+		CollectionId: wificollection.Id,
+	})
+	err := app.Save(pskcollection)
+	assert.Nil(t, err)
+	return pskcollection
+}
+
 func setupVlanCollection(t *testing.T, app core.App) *core.Collection {
 	vlancollection := core.NewBaseCollection("vlan")
 	vlancollection.Fields.Add(&core.TextField{
@@ -3987,4 +4019,64 @@ func TestGenerateHostApdVlanMap(t *testing.T) {
 300 wlan0.300
 `, generateHostApdVlanMap(vlans, "wlan0"))
 
+}
+func TestGenerateHostApdVlanPsk(t *testing.T) {
+	app, err := tests.NewTestApp()
+	assert.Nil(t, err)
+	defer app.Cleanup()
+	clientcollection := setupClientsCollection(t, app)
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	clientpskcollection := setupClientPskCollection(t, app, clientcollection, vlancollection, wificollection)
+
+	// Dummy wifi
+	w1 := core.NewRecord(wificollection)
+	w1.Id = "somethingabcdef"
+	w1.Set("ssid", "OpenWRT1")
+	w1.Set("key", "the_key")
+	w1.Set("ieee80211r", true)
+	w1.Set("encryption", "the_encryption")
+	err = app.Save(w1)
+	assert.Equal(t, nil, err)
+
+	// Simplest case: no client specified
+	psk1 := core.NewRecord(clientpskcollection)
+	psk1.Set("password", "aaaabbbb")
+	psk1.Set("wifi", w1.Id)
+	err = app.Save(psk1)
+	assert.Nil(t, err)
+
+	assert.Equal(t, "00:00:00:00:00:00 aaaabbbb\n", generateHostApdVlanPsk(app, []*core.Record{psk1}))
+
+	// Specify one client
+	c1 := core.NewRecord(clientcollection)
+	c1.Id = "zzzzzzzzclient1"
+	c1.Set("mac_address", "11:aa:bb:cc:dd:ee")
+	err = app.Save(c1)
+	assert.Nil(t, err)
+
+	// One client specified
+	psk2 := core.NewRecord(clientpskcollection)
+	psk2.Set("password", "aaaacccc")
+	psk2.Set("clients", []string{c1.Id})
+	psk2.Set("wifi", w1.Id)
+	err = app.Save(psk2)
+	assert.Nil(t, err)
+
+	// Specify one client
+	c2 := core.NewRecord(clientcollection)
+	c2.Id = "zzzzzzzzclient2"
+	c2.Set("mac_address", "22:aa:bb:cc:dd:ee")
+	err = app.Save(c2)
+	assert.Nil(t, err)
+
+	// Two clients specified(wrong order, need sorting)
+	psk2.Set("clients", []string{c2.Id, c1.Id})
+	err = app.Save(psk2)
+	assert.Nil(t, err)
+
+	assert.Equal(t, `00:00:00:00:00:00 aaaabbbb
+11:aa:bb:cc:dd:ee aaaacccc
+22:aa:bb:cc:dd:ee aaaacccc
+`, generateHostApdVlanPsk(app, []*core.Record{psk1, psk2}))
 }

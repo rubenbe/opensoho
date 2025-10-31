@@ -2022,9 +2022,35 @@ func generateWifiQr(wifi *core.Record) (*bytes.Buffer, error) {
 	return buf, nil
 }
 
-func generateHostApdVlanPsk(client_psks []*core.Record, interfacename string) string {
+// https://git.w1.fi/cgit/hostap/tree/hostapd/hostapd.wpa_psk
+func generateHostApdVlanPsk(app core.App, client_psks []*core.Record) string {
 	output := ""
-	//client_psks := []core.Record
+	for _, client_psk := range client_psks {
+		errs := app.ExpandRecord(client_psk, []string{"clients", "vlan"}, nil)
+		if len(errs) > 0 {
+			log.Println(errs)
+			continue
+		}
+		vlanconfig := ""
+		//if vlan := ExpandedOne("vlan") ;vlan != nil {
+		//	vlanconfig = fmt.Sprintf("vlanid=%d ", vlan.GetInt("number"))
+		//}
+		clients := []string{"00:00:00:00:00:00"}
+		if clientrecords := client_psk.ExpandedAll("clients"); len(clientrecords) > 0 {
+			clients = []string{}
+			for _, clientrecord := range clientrecords {
+				clients = append(clients, clientrecord.GetString("mac_address"))
+			}
+			// Sorts macs for a stable config
+			sort.Slice(clients, func(i, j int) bool {
+				return clients[i] < clients[j]
+			})
+		}
+		password := client_psk.GetString("password")
+		for _, client := range clients {
+			output += fmt.Sprintf("%[1]s%[2]s %[3]s\n", vlanconfig, client, password)
+		}
+	}
 	return output
 }
 

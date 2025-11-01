@@ -2023,6 +2023,15 @@ func generateWifiQr(wifi *core.Record) (*bytes.Buffer, error) {
 }
 
 // https://git.w1.fi/cgit/hostap/tree/hostapd/hostapd.wpa_psk
+func generateHostApdVlanPskForWifi(app core.App, wifi *core.Record) string {
+	records, err := app.FindAllRecords("wifi_client_psk",
+		dbx.NewExp("wifi = {:wifi}", dbx.Params{"wifi": wifi.Id}))
+	if err != nil {
+		fmt.Println("Failed to fetch client psks for wifi", wifi)
+		return ""
+	}
+	return generateHostApdVlanPsk(app, records)
+}
 func generateHostApdVlanPsk(app core.App, client_psks []*core.Record) string {
 	output := ""
 	for _, client_psk := range client_psks {

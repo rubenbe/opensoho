@@ -4031,11 +4031,21 @@ func TestGenerateHostApdVlanPsk(t *testing.T) {
 
 	// Dummy wifi
 	w1 := core.NewRecord(wificollection)
-	w1.Id = "somethingabcdef"
+	w1.Id = "somethingabcd01"
 	w1.Set("ssid", "OpenWRT1")
 	w1.Set("key", "the_key")
 	w1.Set("ieee80211r", true)
 	w1.Set("encryption", "the_encryption")
+	err = app.Save(w1)
+	assert.Equal(t, nil, err)
+
+	// Dummy wifi
+	w2 := core.NewRecord(wificollection)
+	w2.Id = "somethingabcd02"
+	w2.Set("ssid", "OpenWRT2")
+	w1.Set("ieee80211r", true)
+	w2.Set("key", "the_key")
+	w2.Set("encryption", "the_encryption")
 	err = app.Save(w1)
 	assert.Equal(t, nil, err)
 
@@ -4075,8 +4085,13 @@ func TestGenerateHostApdVlanPsk(t *testing.T) {
 	err = app.Save(psk2)
 	assert.Nil(t, err)
 
+	// Verify the wifi 1 configuration
 	assert.Equal(t, `00:00:00:00:00:00 aaaabbbb
 11:aa:bb:cc:dd:ee aaaacccc
 22:aa:bb:cc:dd:ee aaaacccc
 `, generateHostApdVlanPsk(app, []*core.Record{psk1, psk2}))
+	assert.Equal(t, generateHostApdVlanPskForWifi(app, w1), generateHostApdVlanPsk(app, []*core.Record{psk1, psk2}))
+
+	// Nothing configured for wifi 2 at this moment
+	assert.Equal(t, "", generateHostApdVlanPskForWifi(app, w2))
 }

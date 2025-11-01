@@ -4020,7 +4020,7 @@ func TestGenerateHostApdVlanMap(t *testing.T) {
 `, generateHostApdVlanMap(vlans, "wlan0"))
 
 }
-func TestGenerateHostApdVlanPsk(t *testing.T) {
+func TestGenerateHostApdPsk(t *testing.T) {
 	app, err := tests.NewTestApp()
 	assert.Nil(t, err)
 	defer app.Cleanup()
@@ -4043,10 +4043,10 @@ func TestGenerateHostApdVlanPsk(t *testing.T) {
 	w2 := core.NewRecord(wificollection)
 	w2.Id = "somethingabcd02"
 	w2.Set("ssid", "OpenWRT2")
-	w1.Set("ieee80211r", true)
+	w2.Set("ieee80211r", true)
 	w2.Set("key", "the_key")
 	w2.Set("encryption", "the_encryption")
-	err = app.Save(w1)
+	err = app.Save(w2)
 	assert.Equal(t, nil, err)
 
 	// Simplest case: no client specified
@@ -4056,7 +4056,7 @@ func TestGenerateHostApdVlanPsk(t *testing.T) {
 	err = app.Save(psk1)
 	assert.Nil(t, err)
 
-	assert.Equal(t, "00:00:00:00:00:00 aaaabbbb\n", generateHostApdVlanPsk(app, []*core.Record{psk1}))
+	assert.Equal(t, "00:00:00:00:00:00 aaaabbbb\n", generateHostApdPsk(app, []*core.Record{psk1}))
 
 	// Specify one client
 	c1 := core.NewRecord(clientcollection)
@@ -4084,14 +4084,41 @@ func TestGenerateHostApdVlanPsk(t *testing.T) {
 	psk2.Set("clients", []string{c2.Id, c1.Id})
 	err = app.Save(psk2)
 	assert.Nil(t, err)
-
-	// Verify the wifi 1 configuration
-	assert.Equal(t, `00:00:00:00:00:00 aaaabbbb
+	wifi_psk_config1 := `00:00:00:00:00:00 aaaabbbb
 11:aa:bb:cc:dd:ee aaaacccc
 22:aa:bb:cc:dd:ee aaaacccc
-`, generateHostApdVlanPsk(app, []*core.Record{psk1, psk2}))
-	assert.Equal(t, generateHostApdVlanPskForWifi(app, w1), generateHostApdVlanPsk(app, []*core.Record{psk1, psk2}))
+`
+	// Verify the wifi 1 configuration
+	assert.Equal(t, wifi_psk_config1, generateHostApdPsk(app, []*core.Record{psk1, psk2}))
+	assert.Equal(t, wifi_psk_config1, generateHostApdPskForWifi(app, w1))
 
 	// Nothing configured for wifi 2 at this moment
-	assert.Equal(t, "", generateHostApdVlanPskForWifi(app, w2))
+	assert.Equal(t, "", generateHostApdPskForWifi(app, w2))
+
+	// One client specified
+	psk3 := core.NewRecord(clientpskcollection)
+	psk3.Set("password", "dddddddd")
+	psk3.Set("wifi", w2.Id)
+	err = app.Save(psk3)
+	assert.Nil(t, err)
+
+	assert.Equal(t, wifi_psk_config1, generateHostApdPskForWifi(app, w1))
+	assert.Equal(t, "00:00:00:00:00:00 dddddddd\n", generateHostApdPskForWifi(app, w2))
+
+	// Dummy wifi
+	w3 := core.NewRecord(wificollection)
+	w3.Id = "somethingabcd03"
+	w3.Set("ssid", "OpenWRT2")
+	w3.Set("ieee80211r", true)
+	w3.Set("key", "the_key")
+	w3.Set("encryption", "the_encryption")
+	err = app.Save(w3)
+	assert.Equal(t, nil, err)
+
+	// Now test the config map generation (w3 should be ignored)
+	configmap := map[string]string{}
+	generateHostApdPskConfigs(app, []*core.Record{w1, w2, w3}, &configmap)
+	expectedconfigmap := map[string]string{"etc/hostapd/OpenWRT1.psk": "00:00:00:00:00:00 aaaabbbb\n11:aa:bb:cc:dd:ee aaaacccc\n22:aa:bb:cc:dd:ee aaaacccc\n", "etc/hostapd/OpenWRT2.psk": "00:00:00:00:00:00 dddddddd\n"}
+
+	assert.Equal(t, expectedconfigmap, configmap)
 }

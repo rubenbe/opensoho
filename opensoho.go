@@ -1203,6 +1203,7 @@ func generateDeviceConfig(app core.App, record *core.Record) ([]byte, string, er
 		//sort.Slice(wifirecords, func(i, j int) bool {
 		//	return wifirecords[i].GetDateTime("created").Before(wifirecords[j].GetDateTime("created"))
 		//})
+		generateHostApdPskConfigs(app, wifirecords, &configfiles)
 		wificonfigs := generateWifiConfigs(wifirecords, numradios, app, record)
 		fmt.Println(wificonfigs)
 		if len(wificonfigs) > 0 {
@@ -2022,17 +2023,26 @@ func generateWifiQr(wifi *core.Record) (*bytes.Buffer, error) {
 	return buf, nil
 }
 
+func generateHostApdPskConfigs(app core.App, wifirecords []*core.Record, configmap *map[string]string) {
+	for _, wifirecord := range wifirecords {
+		config := generateHostApdPskForWifi(app, wifirecord)
+		if len(config) > 0 {
+			(*configmap)[fmt.Sprintf("etc/hostapd/%s.psk", wifirecord.GetString("ssid"))] = config
+		}
+	}
+}
+
 // https://git.w1.fi/cgit/hostap/tree/hostapd/hostapd.wpa_psk
-func generateHostApdVlanPskForWifi(app core.App, wifi *core.Record) string {
+func generateHostApdPskForWifi(app core.App, wifi *core.Record) string {
 	records, err := app.FindAllRecords("wifi_client_psk",
 		dbx.NewExp("wifi = {:wifi}", dbx.Params{"wifi": wifi.Id}))
 	if err != nil {
 		fmt.Println("Failed to fetch client psks for wifi", wifi)
 		return ""
 	}
-	return generateHostApdVlanPsk(app, records)
+	return generateHostApdPsk(app, records)
 }
-func generateHostApdVlanPsk(app core.App, client_psks []*core.Record) string {
+func generateHostApdPsk(app core.App, client_psks []*core.Record) string {
 	output := ""
 	for _, client_psk := range client_psks {
 		errs := app.ExpandRecord(client_psk, []string{"clients", "vlan"}, nil)

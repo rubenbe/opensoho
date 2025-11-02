@@ -610,14 +610,20 @@ func createConfigTar(files map[string]string) ([]byte, string, error) {
 	}
 
 	sort.Strings(filenames)
+	executables := []string{"etc/hotplug.d/openwisp/opensoho"}
 
 	for _, filePath := range filenames {
+		var mode int64 = 0644
+		// TODO ugly hardcoded but works for now
+		if slices.Contains(executables, filePath) {
+			mode = 0755
+		}
 		fileBytes := []byte(files[filePath])
 
 		header := &tar.Header{
 			Name: filePath,
 			Size: int64(len(fileBytes)),
-			Mode: 0644,
+			Mode: mode,
 		}
 
 		// Write header and file content to tar archive
@@ -1262,6 +1268,20 @@ func generateDeviceConfig(app core.App, record *core.Record) ([]byte, string, er
 			configfiles["etc/config/dhcp"] = dhcpconfigs
 		}
 	}
+	configfiles["etc/hotplug.d/openwisp/opensoho"] = `#!/bin/sh
+[ -n "$(ls -A /etc/hostapd/ 2>/dev/null)" ] || exit 0
+if command -v hostapd_cli 1>/dev/null; then
+	logger "Reloading hostapd WPA PSK" \
+	-t opensoho \
+	-p daemon.info
+	command hostapd_cli reload_wpa_psk
+else
+	logger "Install hostapd_cli for effecient PSK updates" \
+	-t opensoho \
+	-p daemon.warn
+	wifi reload
+fi
+`
 
 	blob, checksum, err := createConfigTar(configfiles)
 

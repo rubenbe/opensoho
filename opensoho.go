@@ -2095,9 +2095,9 @@ func generateHostApdPsk(app core.App, client_psks []*core.Record) string {
 			continue
 		}
 		vlanconfig := ""
-		//if vlan := ExpandedOne("vlan") ;vlan != nil {
-		//	vlanconfig = fmt.Sprintf("vlanid=%d ", vlan.GetInt("number"))
-		//}
+		if vlan := client_psk.ExpandedOne("vlan"); vlan != nil {
+			vlanconfig = fmt.Sprintf("vlanid=%d ", vlan.GetInt("number"))
+		}
 		clients := []string{"00:00:00:00:00:00"}
 		if clientrecords := client_psk.ExpandedAll("clients"); len(clientrecords) > 0 {
 			clients = []string{}

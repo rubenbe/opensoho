@@ -4142,7 +4142,7 @@ func TestGenerateHostApdPsk(t *testing.T) {
 	w3.Set("key", "the_key")
 	w3.Set("encryption", "the_encryption")
 	err = app.Save(w3)
-	assert.Equal(t, nil, err)
+	assert.Nil(t, err)
 
 	// Now test the config map generation (w3 should be ignored)
 	configmap := map[string]string{}
@@ -4153,4 +4153,17 @@ func TestGenerateHostApdPsk(t *testing.T) {
 	assert.Equal(t, records, []WifiRecord{WifiRecord{w1, "etc/hostapd/OpenWRT1.psk"}, WifiRecord{w2, "etc/hostapd/OpenWRT2.psk"}, WifiRecord{w3, ""}})
 
 	assert.Equal(t, expectedconfigmap, configmap)
+
+	// Add a VLAN
+	iot_vlan := core.NewRecord(vlancollection)
+	iot_vlan.Id = "zzzzziotvlan300"
+	iot_vlan.Set("name", "iot")
+	iot_vlan.Set("number", "300")
+	err = app.Save(iot_vlan)
+	assert.Nil(t, err)
+
+	psk3.Set("vlan", iot_vlan.Id)
+	err = app.Save(psk3)
+	assert.Nil(t, err)
+	assert.Equal(t, "vlanid=300 00:00:00:00:00:00 dddddddd\n", generateHostApdPskForWifi(app, w2))
 }

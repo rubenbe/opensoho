@@ -349,6 +349,11 @@ type MonitoringData struct {
 	DHCPLeases []DHCPLease `json:"dhcp_leases,omitempty"`
 }
 
+type WifiRecord struct {
+	Record             *core.Record
+	HostApdPskFilename string
+}
+
 func updateRadios(device *core.Record, app core.App, newradios map[int]Radio) {
 	// Radio has radio number as index, it is not an index in a list.
 	// Function modifies the existing newradios list, important for tests
@@ -542,7 +547,8 @@ func getTimeAdvertisementValues(vta string) (int, string) {
 	return vta_flag, GetTzData(vta)
 }
 
-func generateWifiConfig(wifi *core.Record, wifiid int, radio uint, app core.App, device *core.Record) string {
+func generateWifiConfig(wifirecord WifiRecord, wifiid int, radio uint, app core.App, device *core.Record) string {
+	wifi := wifirecord.Record
 	ssid := wifi.GetString("ssid")
 	key := wifi.GetString("key")
 	steeringconfig, err := generateMacClientSteeringConfig(app, wifi, device)
@@ -553,6 +559,12 @@ func generateWifiConfig(wifi *core.Record, wifiid int, radio uint, app core.App,
 	if len(encryption) == 0 {
 		encryption = "psk2+ccmp"
 	}
+
+	clientpskconfig := wifirecord.HostApdPskFilename
+	if len(clientpskconfig) > 0 {
+		clientpskconfig = fmt.Sprintf("        option wpa_psk_file '%s'\n", clientpskconfig)
+	}
+
 	vta_flag, vta_tz := getTimeAdvertisementValues(wifi.GetString("ieee80211v_time_advertisement"))
 	fmt.Println(vta_tz)
 	return fmt.Sprintf(`
@@ -576,11 +588,11 @@ config wifi-iface 'wifi_%[6]d_radio%[3]d'
         option dtim_period '%[17]d'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
-%[9]s`,
+%[18]s%[9]s`,
 		ssid, wifi.GetString("id"), radio, key, encryption,
 		wifiid, wifi.GetInt("ieee80211r"), getVlan(wifi, app), steeringconfig, wifi.GetInt("ieee80211v_bss_transition"),
 		max(1000, wifi.GetInt("ieee80211r_reassoc_deadline")), wifi.GetInt("ieee80211k"), wifi.GetInt("ieee80211v_wnm_sleep_mode"), vta_flag, vta_tz,
-		wifi.GetInt("ieee80211v_proxy_arp"), maxInt(1, wifi.GetInt("dtim_period")))
+		wifi.GetInt("ieee80211v_proxy_arp"), maxInt(1, wifi.GetInt("dtim_period")), clientpskconfig)
 }
 
 func createConfigTar(files map[string]string) ([]byte, string, error) {
@@ -653,7 +665,7 @@ func generateLedConfigs(leds []*core.Record) string {
 	return output
 }
 
-func generateWifiConfigs(wifis []*core.Record, numradios uint, app core.App, device *core.Record) string {
+func generateWifiConfigs(wifis []WifiRecord, numradios uint, app core.App, device *core.Record) string {
 	output := ""
 	for i, wifi := range wifis {
 		for j := range numradios {
@@ -1203,8 +1215,10 @@ func generateDeviceConfig(app core.App, record *core.Record) ([]byte, string, er
 		//sort.Slice(wifirecords, func(i, j int) bool {
 		//	return wifirecords[i].GetDateTime("created").Before(wifirecords[j].GetDateTime("created"))
 		//})
-		generateHostApdPskConfigs(app, wifirecords, &configfiles)
-		wificonfigs := generateWifiConfigs(wifirecords, numradios, app, record)
+
+		// HostApdPskConfig needs to be called before the generateWifiConfigs
+		wificonfigsstructs := generateHostApdPskConfigs(app, wifirecords, &configfiles)
+		wificonfigs := generateWifiConfigs(wificonfigsstructs, numradios, app, record)
 		fmt.Println(wificonfigs)
 		if len(wificonfigs) > 0 {
 			configfiles["etc/config/wireless"] = wificonfigs
@@ -2023,13 +2037,23 @@ func generateWifiQr(wifi *core.Record) (*bytes.Buffer, error) {
 	return buf, nil
 }
 
-func generateHostApdPskConfigs(app core.App, wifirecords []*core.Record, configmap *map[string]string) {
+func generateHostApdPskConfigFilename(wifirecord *core.Record) string {
+	return fmt.Sprintf("etc/hostapd/%s.psk", wifirecord.GetString("ssid"))
+}
+
+func generateHostApdPskConfigs(app core.App, wifirecords []*core.Record, configmap *map[string]string) []WifiRecord {
+	wificonfigs := []WifiRecord{}
 	for _, wifirecord := range wifirecords {
+		wificonfig := WifiRecord{wifirecord, ""}
 		config := generateHostApdPskForWifi(app, wifirecord)
 		if len(config) > 0 {
-			(*configmap)[fmt.Sprintf("etc/hostapd/%s.psk", wifirecord.GetString("ssid"))] = config
+			filename := generateHostApdPskConfigFilename(wifirecord)
+			(*configmap)[filename] = config
+			wificonfig.HostApdPskFilename = filename
 		}
+		wificonfigs = append(wificonfigs, wificonfig)
 	}
+	return wificonfigs
 }
 
 // https://git.w1.fi/cgit/hostap/tree/hostapd/hostapd.wpa_psk

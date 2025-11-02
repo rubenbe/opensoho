@@ -3070,6 +3070,7 @@ func TestGenerateWifiConfig(t *testing.T) {
 	w.Set("encryption", "the_encryption")
 	err = app.Save(w)
 	assert.Equal(t, nil, err)
+	wr := WifiRecord{Record: w}
 
 	// Add a client
 	c := core.NewRecord(clientcollection)
@@ -3094,7 +3095,7 @@ func TestGenerateWifiConfig(t *testing.T) {
 	assert.Equal(t, nil, err)
 
 	// Generate a config
-	wificonfig := generateWifiConfig(w, 3, 4, app, d)
+	wificonfig := generateWifiConfig(wr, 3, 4, app, d)
 	assert.Equal(t, wificonfig, `
 config wifi-iface 'wifi_3_radio4'
         option device 'radio4'
@@ -3130,7 +3131,7 @@ config wifi-iface 'wifi_3_radio4'
 	w.Set("encryption", "")
 
 	// Generate a config
-	wificonfig = generateWifiConfig(w, 3, 4, app, d)
+	wificonfig = generateWifiConfig(wr, 3, 4, app, d)
 	assert.Equal(t, wificonfig, `
 config wifi-iface 'wifi_3_radio4'
         option device 'radio4'
@@ -3159,7 +3160,7 @@ config wifi-iface 'wifi_3_radio4'
 	err = app.Save(w)
 
 	// Generate a config
-	wificonfig = generateWifiConfig(w, 3, 4, app, d)
+	wificonfig = generateWifiConfig(wr, 3, 4, app, d)
 	assert.Equal(t, wificonfig, `
 config wifi-iface 'wifi_3_radio4'
         option device 'radio4'
@@ -3193,7 +3194,7 @@ config wifi-iface 'wifi_3_radio4'
 	assert.Equal(t, nil, err)
 	assert.Equal(t, []string{d2.Id}, cs.GetStringSlice("whitelist"))
 	// Generate a config
-	wificonfig = generateWifiConfig(w, 3, 4, app, d)
+	wificonfig = generateWifiConfig(wr, 3, 4, app, d)
 	assert.Equal(t, wificonfig, `
 config wifi-iface 'wifi_3_radio4'
         option device 'radio4'
@@ -3223,7 +3224,7 @@ config wifi-iface 'wifi_3_radio4'
 	// Explicitely set the time advertisement to disabled
 	w.Set("ieee80211v_time_advertisement", "Disabled")
 	// Generate a config
-	wificonfig = generateWifiConfig(w, 3, 4, app, d)
+	wificonfig = generateWifiConfig(wr, 3, 4, app, d)
 	assert.Equal(t, wificonfig, `
 config wifi-iface 'wifi_3_radio4'
         option device 'radio4'
@@ -3257,7 +3258,7 @@ config wifi-iface 'wifi_3_radio4'
 	w.Set("dtim_period", 3)
 
 	// Generate a config
-	wificonfig = generateWifiConfig(w, 3, 4, app, d)
+	wificonfig = generateWifiConfig(wr, 3, 4, app, d)
 	assert.Equal(t, wificonfig, `
 config wifi-iface 'wifi_3_radio4'
         option device 'radio4'
@@ -3279,6 +3280,34 @@ config wifi-iface 'wifi_3_radio4'
         option dtim_period '3'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
+        option macfilter 'deny'
+        list maclist '11:22:33:44:55:66'
+`)
+	wr.HostApdPskFilename = "/etc/hostapd/something.psk"
+	wificonfig = generateWifiConfig(wr, 3, 4, app, d)
+
+	assert.Equal(t, wificonfig, `
+config wifi-iface 'wifi_3_radio4'
+        option device 'radio4'
+        option network 'wan'
+        option disabled '0'
+        option mode 'ap'
+        option ssid 'the_ssid'
+        option encryption 'psk2+ccmp'
+        option key 'the_key'
+        option ieee80211k '1'
+        option ieee80211r '0'
+        option reassociation_deadline '1000'
+        option time_advertisement '2'
+        option time_zone 'CET-1CEST,M3.5.0,M10.5.0/3'
+        option wnm_sleep_mode '1'
+        option wnm_sleep_mode_no_keys '0'
+        option proxy_arp '1'
+        option bss_transition '1'
+        option dtim_period '3'
+        option ft_over_ds '0'
+        option ft_psk_generate_local '1'
+        option wpa_psk_file '/etc/hostapd/something.psk'
         option macfilter 'deny'
         list maclist '11:22:33:44:55:66'
 `)
@@ -4117,8 +4146,11 @@ func TestGenerateHostApdPsk(t *testing.T) {
 
 	// Now test the config map generation (w3 should be ignored)
 	configmap := map[string]string{}
-	generateHostApdPskConfigs(app, []*core.Record{w1, w2, w3}, &configmap)
+	records := generateHostApdPskConfigs(app, []*core.Record{w1, w2, w3}, &configmap)
 	expectedconfigmap := map[string]string{"etc/hostapd/OpenWRT1.psk": "00:00:00:00:00:00 aaaabbbb\n11:aa:bb:cc:dd:ee aaaacccc\n22:aa:bb:cc:dd:ee aaaacccc\n", "etc/hostapd/OpenWRT2.psk": "00:00:00:00:00:00 dddddddd\n"}
+
+	// W3 should be inside the retval, but without a config file
+	assert.Equal(t, records, []WifiRecord{WifiRecord{w1, "etc/hostapd/OpenWRT1.psk"}, WifiRecord{w2, "etc/hostapd/OpenWRT2.psk"}, WifiRecord{w3, ""}})
 
 	assert.Equal(t, expectedconfigmap, configmap)
 }

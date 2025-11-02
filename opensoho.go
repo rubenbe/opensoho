@@ -569,8 +569,9 @@ func generateWifiConfig(wifirecord WifiRecord, wifiid int, radio uint, app core.
 
 	vta_flag, vta_tz := getTimeAdvertisementValues(wifi.GetString("ieee80211v_time_advertisement"))
 	fmt.Println(vta_tz)
+	interfacename := fmt.Sprintf("wifi_%[1]d_radio%[2]d", wifiid, radio)
 	return fmt.Sprintf(`
-config wifi-iface 'wifi_%[6]d_radio%[3]d'
+config wifi-iface '%[6]s'
         option device 'radio%[3]d'
         option network '%[8]s'
         option disabled '0'
@@ -592,7 +593,7 @@ config wifi-iface 'wifi_%[6]d_radio%[3]d'
         option ft_psk_generate_local '1'
 %[18]s%[9]s`,
 		ssid, wifi.GetString("id"), radio, key, encryption,
-		wifiid, wifi.GetInt("ieee80211r"), getVlan(wifi, app), steeringconfig, wifi.GetInt("ieee80211v_bss_transition"),
+		interfacename, wifi.GetInt("ieee80211r"), getVlan(wifi, app), steeringconfig, wifi.GetInt("ieee80211v_bss_transition"),
 		max(1000, wifi.GetInt("ieee80211r_reassoc_deadline")), wifi.GetInt("ieee80211k"), wifi.GetInt("ieee80211v_wnm_sleep_mode"), vta_flag, vta_tz,
 		wifi.GetInt("ieee80211v_proxy_arp"), maxInt(1, wifi.GetInt("dtim_period")), clientpskconfig)
 }
@@ -1225,18 +1226,18 @@ func generateDeviceConfig(app core.App, record *core.Record) ([]byte, string, er
 		//})
 
 		// HostApdPskConfig needs to be called before the generateWifiConfigs
-		wificonfigsstructs, deviceHasPskConfig := generateHostApdPskConfigs(app, wifirecords, &configfiles)
+		wificonfigsstructs /*deviceHasPskConfig*/, _ := generateHostApdPskConfigs(app, wifirecords, &configfiles)
 		wificonfigs := generateWifiConfigs(wificonfigsstructs, numradios, app, record)
 		fmt.Println(wificonfigs)
 		if len(wificonfigs) > 0 {
 			configfiles["etc/config/wireless"] = wificonfigs
 		}
-		if deviceHasPskConfig {
-			vlanmapconfig := generateHostApdVlanConfig(app)
-			if len(vlanmapconfig) > 0 {
-				configfiles["etc/hostapd/vlan.map"] = vlanmapconfig
-			}
-		}
+		//if deviceHasPskConfig {
+		//	vlanmapconfig := generateHostApdVlanConfig(app)
+		//	if len(vlanmapconfig) > 0 {
+		//		configfiles["etc/hostapd/vlan.map"] = vlanmapconfig
+		//	}
+		//}
 	}
 
 	{
@@ -2087,7 +2088,6 @@ func generateHostApdPskConfigs(app core.App, wifirecords []*core.Record, configm
 	return wificonfigs, deviceHasPskConfig
 }
 
-// https://git.w1.fi/cgit/hostap/tree/hostapd/hostapd.wpa_psk
 func generateHostApdPskForWifi(app core.App, wifi *core.Record) string {
 	records, err := app.FindAllRecords("wifi_client_psk",
 		dbx.NewExp("wifi = {:wifi}", dbx.Params{"wifi": wifi.Id}))
@@ -2107,7 +2107,7 @@ func generateHostApdPsk(app core.App, client_psks []*core.Record) string {
 		}
 		vlanconfig := ""
 		if vlan := client_psk.ExpandedOne("vlan"); vlan != nil {
-			vlanconfig = fmt.Sprintf("vlanid=%d ", vlan.GetInt("number"))
+			vlanconfig = fmt.Sprintf("        option vid '%d'\n", vlan.GetInt("number"))
 		}
 		clients := []string{"00:00:00:00:00:00"}
 		if clientrecords := client_psk.ExpandedAll("clients"); len(clientrecords) > 0 {
@@ -2122,7 +2122,11 @@ func generateHostApdPsk(app core.App, client_psks []*core.Record) string {
 		}
 		password := client_psk.GetString("password")
 		for _, client := range clients {
-			output += fmt.Sprintf("%[1]s%[2]s %[3]s\n", vlanconfig, client, password)
+			output += fmt.Sprintf(`
+config wifi-station
+        option key '%[1]s'
+        option mac '%[2]s'
+%[3]s`, password, client, vlanconfig)
 		}
 	}
 	return output

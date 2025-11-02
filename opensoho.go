@@ -559,17 +559,17 @@ func generateWifiConfig(wifirecord WifiRecord, wifiid int, radio uint, app core.
 	if len(encryption) == 0 {
 		encryption = "psk2+ccmp"
 	}
+	interfacename := fmt.Sprintf("wifi_%[1]d_radio%[2]d", wifiid, radio)
 
-	clientpskconfig := wifirecord.HostApdPskFilename
-	if len(clientpskconfig) > 0 {
-		clientpskconfig = fmt.Sprintf(`        option wpa_psk_file '%s'
-        option vlan_file '/etc/hostapd/vlan.map'
-`, clientpskconfig)
-	}
+	clientpskconfig := generateHostApdPskForWifi(app, wifirecord.Record, interfacename)
+	/*clientpskconfig := wifirecord.HostApdPskFilename
+		if len(clientpskconfig) > 0 {
+			clientpskconfig = fmt.Sprintf(`        option wpa_psk_file '%s'
+	        option vlan_file '/etc/hostapd/vlan.map'
+	`, clientpskconfig)
+		}*/
 
 	vta_flag, vta_tz := getTimeAdvertisementValues(wifi.GetString("ieee80211v_time_advertisement"))
-	fmt.Println(vta_tz)
-	interfacename := fmt.Sprintf("wifi_%[1]d_radio%[2]d", wifiid, radio)
 	return fmt.Sprintf(`
 config wifi-iface '%[6]s'
         option device 'radio%[3]d'
@@ -2076,28 +2076,28 @@ func generateHostApdPskConfigs(app core.App, wifirecords []*core.Record, configm
 	deviceHasPskConfig := false
 	for _, wifirecord := range wifirecords {
 		wificonfig := WifiRecord{wifirecord, ""}
-		config := generateHostApdPskForWifi(app, wifirecord)
-		if len(config) > 0 {
-			filename := generateHostApdPskConfigFilename(wifirecord)
-			(*configmap)[filename] = config
-			wificonfig.HostApdPskFilename = "/" + filename
-			deviceHasPskConfig = true
-		}
+		//config := generateHostApdPskForWifi(app, wifirecord)
+		//if len(config) > 0 {
+		//	filename := generateHostApdPskConfigFilename(wifirecord)
+		//	//(*configmap)[filename] = config
+		//	wificonfig.HostApdPskFilename = "/" + filename
+		//	deviceHasPskConfig = true
+		//}
 		wificonfigs = append(wificonfigs, wificonfig)
 	}
 	return wificonfigs, deviceHasPskConfig
 }
 
-func generateHostApdPskForWifi(app core.App, wifi *core.Record) string {
+func generateHostApdPskForWifi(app core.App, wifi *core.Record, wifiname string) string {
 	records, err := app.FindAllRecords("wifi_client_psk",
 		dbx.NewExp("wifi = {:wifi}", dbx.Params{"wifi": wifi.Id}))
 	if err != nil {
 		fmt.Println("Failed to fetch client psks for wifi", wifi)
 		return ""
 	}
-	return generateHostApdPsk(app, records)
+	return generateHostApdPsk(app, records, wifiname)
 }
-func generateHostApdPsk(app core.App, client_psks []*core.Record) string {
+func generateHostApdPsk(app core.App, client_psks []*core.Record, wifiname string) string {
 	output := ""
 	for _, client_psk := range client_psks {
 		errs := app.ExpandRecord(client_psk, []string{"clients", "vlan"}, nil)
@@ -2124,9 +2124,10 @@ func generateHostApdPsk(app core.App, client_psks []*core.Record) string {
 		for _, client := range clients {
 			output += fmt.Sprintf(`
 config wifi-station
+        option iface '%[3]s'
         option key '%[1]s'
         option mac '%[2]s'
-%[3]s`, password, client, vlanconfig)
+%[4]s`, password, client, wifiname, vlanconfig)
 		}
 	}
 	return output
@@ -2138,10 +2139,10 @@ func generateHostApdVlanConfig(app core.App) string {
 		fmt.Println(err)
 		return ""
 	}
-	return generateHostApdVlanMap(vlans, "br-lan")
+	return generateHostApdVlanMap(vlans)
 }
 
-func generateHostApdVlanMap(vlans []*core.Record, interfacename string) string {
+func generateHostApdVlanMap(vlans []*core.Record) string {
 	sort.Slice(vlans, func(i, j int) bool {
 		return vlans[i].GetInt("number") < vlans[j].GetInt("number")
 	})
@@ -2151,7 +2152,12 @@ func generateHostApdVlanMap(vlans []*core.Record, interfacename string) string {
 		if !isValidVlanNumber(vlanNumber) {
 			continue
 		}
-		output += fmt.Sprintf("%[1]d %[2]s.%[1]d\n", vlanNumber, interfacename)
+		output += fmt.Sprintf(`
+config wifi-vlan
+        option name 'wifi_vlan_%[1]d'
+        option network 'bridge_vlan_%[1]d'
+        option vid '%[1]d'
+`, vlanNumber)
 	}
 	return output
 }

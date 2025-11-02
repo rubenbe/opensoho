@@ -3286,7 +3286,7 @@ config wifi-iface 'wifi_3_radio4'
 	wr.HostApdPskFilename = "/etc/hostapd/something.psk"
 	wificonfig = generateWifiConfig(wr, 3, 4, app, d)
 
-	assert.Equal(t, wificonfig, `
+	assert.Equal(t, `
 config wifi-iface 'wifi_3_radio4'
         option device 'radio4'
         option network 'wan'
@@ -3307,11 +3307,9 @@ config wifi-iface 'wifi_3_radio4'
         option dtim_period '3'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
-        option wpa_psk_file '/etc/hostapd/something.psk'
-        option vlan_file '/etc/hostapd/vlan.map'
         option macfilter 'deny'
         list maclist '11:22:33:44:55:66'
-`)
+`, wificonfig)
 }
 
 func TestIsUnHealthyQuorumReached(t *testing.T) {
@@ -4009,7 +4007,7 @@ func TestIsValidVlanNumber(t *testing.T) {
 
 func TestGenerateHostApdVlanMap(t *testing.T) {
 	vlans := []*core.Record{}
-	assert.Equal(t, "", generateHostApdVlanMap(vlans, "wlan"))
+	assert.Equal(t, "", generateHostApdVlanMap(vlans))
 
 	app, err := tests.NewTestApp()
 	assert.Nil(t, err)
@@ -4030,11 +4028,20 @@ func TestGenerateHostApdVlanMap(t *testing.T) {
 	err = app.Save(lan_vlan)
 	assert.Equal(t, nil, err)
 
+	expectedconfig := `
+config wifi-vlan
+        option name 'wifi_vlan_200'
+        option network 'bridge_vlan_200'
+        option vid '200'
+
+config wifi-vlan
+        option name 'wifi_vlan_300'
+        option network 'bridge_vlan_300'
+        option vid '300'
+`
 	// Wrong order, should be ordered by VLAN number
 	vlans = []*core.Record{iot_vlan, lan_vlan}
-	assert.Equal(t, `200 wlan0.200
-300 wlan0.300
-`, generateHostApdVlanMap(vlans, "wlan0"))
+	assert.Equal(t, expectedconfig, generateHostApdVlanMap(vlans))
 
 	// A VLAN without a number should not be added.
 	wan_vlan := core.NewRecord(vlancollection)
@@ -4045,15 +4052,11 @@ func TestGenerateHostApdVlanMap(t *testing.T) {
 
 	// Wrong order, should be ordered by VLAN number
 	vlans = []*core.Record{iot_vlan, lan_vlan, wan_vlan}
-	assert.Equal(t, `200 wlan0.200
-300 wlan0.300
-`, generateHostApdVlanMap(vlans, "wlan0"))
+	assert.Equal(t, expectedconfig, generateHostApdVlanMap(vlans))
 
 	// Now test the full thing
 	config := generateHostApdVlanConfig(app)
-	assert.Equal(t, `200 br-lan.200
-300 br-lan.300
-`, config)
+	assert.Equal(t, expectedconfig, config)
 }
 func TestGenerateHostApdPsk(t *testing.T) {
 	app, err := tests.NewTestApp()
@@ -4093,9 +4096,10 @@ func TestGenerateHostApdPsk(t *testing.T) {
 
 	assert.Equal(t, `
 config wifi-station
+        option iface 'something'
         option key 'aaaabbbb'
         option mac '00:00:00:00:00:00'
-`, generateHostApdPsk(app, []*core.Record{psk1}))
+`, generateHostApdPsk(app, []*core.Record{psk1}, "something"))
 
 	// Specify one client
 	c1 := core.NewRecord(clientcollection)
@@ -4125,23 +4129,26 @@ config wifi-station
 	assert.Nil(t, err)
 	wifi_psk_config1 := `
 config wifi-station
+        option iface 'wifi_1'
         option key 'aaaabbbb'
         option mac '00:00:00:00:00:00'
 
 config wifi-station
+        option iface 'wifi_1'
         option key 'aaaacccc'
         option mac '11:aa:bb:cc:dd:ee'
 
 config wifi-station
+        option iface 'wifi_1'
         option key 'aaaacccc'
         option mac '22:aa:bb:cc:dd:ee'
 `
 	// Verify the wifi 1 configuration
-	assert.Equal(t, wifi_psk_config1, generateHostApdPsk(app, []*core.Record{psk1, psk2}))
-	assert.Equal(t, wifi_psk_config1, generateHostApdPskForWifi(app, w1))
+	assert.Equal(t, wifi_psk_config1, generateHostApdPsk(app, []*core.Record{psk1, psk2}, "wifi_1"))
+	assert.Equal(t, wifi_psk_config1, generateHostApdPskForWifi(app, w1, "wifi_1"))
 
 	// Nothing configured for wifi 2 at this moment
-	assert.Equal(t, "", generateHostApdPskForWifi(app, w2))
+	assert.Equal(t, "", generateHostApdPskForWifi(app, w2, "wifi_1"))
 
 	// One client specified
 	psk3 := core.NewRecord(clientpskcollection)
@@ -4150,12 +4157,13 @@ config wifi-station
 	err = app.Save(psk3)
 	assert.Nil(t, err)
 
-	assert.Equal(t, wifi_psk_config1, generateHostApdPskForWifi(app, w1))
+	assert.Equal(t, wifi_psk_config1, generateHostApdPskForWifi(app, w1, "wifi_1"))
 	assert.Equal(t, `
 config wifi-station
+        option iface 'wifi_2'
         option key 'dddddddd'
         option mac '00:00:00:00:00:00'
-`, generateHostApdPskForWifi(app, w2))
+`, generateHostApdPskForWifi(app, w2, "wifi_2"))
 
 	// Dummy wifi
 	w3 := core.NewRecord(wificollection)
@@ -4169,9 +4177,9 @@ config wifi-station
 
 	// Now test the config map generation (w3 should be ignored)
 	configmap := map[string]string{}
-	/*records*/ _, deviceHasPskConfigs := generateHostApdPskConfigs(app, []*core.Record{w1, w2, w3}, &configmap)
+	/*records*/ _, _ = generateHostApdPskConfigs(app, []*core.Record{w1, w2, w3}, &configmap)
 	//expectedconfigmap := map[string]string{"etc/hostapd/OpenWRT1.psk": "00:00:00:00:00:00 aaaabbbb\n11:aa:bb:cc:dd:ee aaaacccc\n22:aa:bb:cc:dd:ee aaaacccc\n", "etc/hostapd/OpenWRT2.psk": "00:00:00:00:00:00 dddddddd\n"}
-	assert.True(t, deviceHasPskConfigs)
+	//assert.True(t, deviceHasPskConfigs)
 
 	// W3 should be inside the retval, but without a config file
 	//assert.Equal(t, records, []WifiRecord{WifiRecord{w1, "/etc/hostapd/OpenWRT1.psk"}, WifiRecord{w2, "/etc/hostapd/OpenWRT2.psk"}, WifiRecord{w3, ""}})
@@ -4191,10 +4199,11 @@ config wifi-station
 	assert.Nil(t, err)
 	assert.Equal(t, `
 config wifi-station
+        option iface 'wifi_2'
         option key 'dddddddd'
         option mac '00:00:00:00:00:00'
         option vid '300'
-`, generateHostApdPskForWifi(app, w2))
+`, generateHostApdPskForWifi(app, w2, "wifi_2"))
 	{
 		configmap2 := map[string]string{}
 		_, deviceHasPskConfigs := generateHostApdPskConfigs(app, []*core.Record{}, &configmap2)

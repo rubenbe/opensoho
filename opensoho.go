@@ -562,7 +562,9 @@ func generateWifiConfig(wifirecord WifiRecord, wifiid int, radio uint, app core.
 
 	clientpskconfig := wifirecord.HostApdPskFilename
 	if len(clientpskconfig) > 0 {
-		clientpskconfig = fmt.Sprintf("        option wpa_psk_file '%s'\n", clientpskconfig)
+		clientpskconfig = fmt.Sprintf(`        option wpa_psk_file '%s'
+        option vlan_file '/etc/hostapd/vlan.map'
+`, clientpskconfig)
 	}
 
 	vta_flag, vta_tz := getTimeAdvertisementValues(wifi.GetString("ieee80211v_time_advertisement"))
@@ -1223,13 +1225,20 @@ func generateDeviceConfig(app core.App, record *core.Record) ([]byte, string, er
 		//})
 
 		// HostApdPskConfig needs to be called before the generateWifiConfigs
-		wificonfigsstructs := generateHostApdPskConfigs(app, wifirecords, &configfiles)
+		wificonfigsstructs, deviceHasPskConfig := generateHostApdPskConfigs(app, wifirecords, &configfiles)
 		wificonfigs := generateWifiConfigs(wificonfigsstructs, numradios, app, record)
 		fmt.Println(wificonfigs)
 		if len(wificonfigs) > 0 {
 			configfiles["etc/config/wireless"] = wificonfigs
 		}
+		if deviceHasPskConfig {
+			vlanmapconfig := generateHostApdVlanConfig(app)
+			if len(vlanmapconfig) > 0 {
+				configfiles["etc/hostapd/vlan.map"] = vlanmapconfig
+			}
+		}
 	}
+
 	{
 		radioconfigs := generateRadioConfigs(record, app)
 		fmt.Println(radioconfigs)
@@ -2061,19 +2070,21 @@ func generateHostApdPskConfigFilename(wifirecord *core.Record) string {
 	return fmt.Sprintf("etc/hostapd/%s.psk", wifirecord.GetString("ssid"))
 }
 
-func generateHostApdPskConfigs(app core.App, wifirecords []*core.Record, configmap *map[string]string) []WifiRecord {
+func generateHostApdPskConfigs(app core.App, wifirecords []*core.Record, configmap *map[string]string) ([]WifiRecord, bool) {
 	wificonfigs := []WifiRecord{}
+	deviceHasPskConfig := false
 	for _, wifirecord := range wifirecords {
 		wificonfig := WifiRecord{wifirecord, ""}
 		config := generateHostApdPskForWifi(app, wifirecord)
 		if len(config) > 0 {
 			filename := generateHostApdPskConfigFilename(wifirecord)
 			(*configmap)[filename] = config
-			wificonfig.HostApdPskFilename = filename
+			wificonfig.HostApdPskFilename = "/" + filename
+			deviceHasPskConfig = true
 		}
 		wificonfigs = append(wificonfigs, wificonfig)
 	}
-	return wificonfigs
+	return wificonfigs, deviceHasPskConfig
 }
 
 // https://git.w1.fi/cgit/hostap/tree/hostapd/hostapd.wpa_psk
@@ -2115,6 +2126,15 @@ func generateHostApdPsk(app core.App, client_psks []*core.Record) string {
 		}
 	}
 	return output
+}
+
+func generateHostApdVlanConfig(app core.App) string {
+	vlans, err := app.FindAllRecords("vlan", dbx.NewExp("true"))
+	if err != nil {
+		fmt.Println(err)
+		return ""
+	}
+	return generateHostApdVlanMap(vlans, "br-lan")
 }
 
 func generateHostApdVlanMap(vlans []*core.Record, interfacename string) string {

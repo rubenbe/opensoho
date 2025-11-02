@@ -3308,6 +3308,7 @@ config wifi-iface 'wifi_3_radio4'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
         option wpa_psk_file '/etc/hostapd/something.psk'
+        option vlan_file '/etc/hostapd/vlan.map'
         option macfilter 'deny'
         list maclist '11:22:33:44:55:66'
 `)
@@ -4048,6 +4049,11 @@ func TestGenerateHostApdVlanMap(t *testing.T) {
 300 wlan0.300
 `, generateHostApdVlanMap(vlans, "wlan0"))
 
+	// Now test the full thing
+	config := generateHostApdVlanConfig(app)
+	assert.Equal(t, `200 br-lan.200
+300 br-lan.300
+`, config)
 }
 func TestGenerateHostApdPsk(t *testing.T) {
 	app, err := tests.NewTestApp()
@@ -4146,11 +4152,12 @@ func TestGenerateHostApdPsk(t *testing.T) {
 
 	// Now test the config map generation (w3 should be ignored)
 	configmap := map[string]string{}
-	records := generateHostApdPskConfigs(app, []*core.Record{w1, w2, w3}, &configmap)
+	records, deviceHasPskConfigs := generateHostApdPskConfigs(app, []*core.Record{w1, w2, w3}, &configmap)
 	expectedconfigmap := map[string]string{"etc/hostapd/OpenWRT1.psk": "00:00:00:00:00:00 aaaabbbb\n11:aa:bb:cc:dd:ee aaaacccc\n22:aa:bb:cc:dd:ee aaaacccc\n", "etc/hostapd/OpenWRT2.psk": "00:00:00:00:00:00 dddddddd\n"}
+	assert.True(t, deviceHasPskConfigs)
 
 	// W3 should be inside the retval, but without a config file
-	assert.Equal(t, records, []WifiRecord{WifiRecord{w1, "etc/hostapd/OpenWRT1.psk"}, WifiRecord{w2, "etc/hostapd/OpenWRT2.psk"}, WifiRecord{w3, ""}})
+	assert.Equal(t, records, []WifiRecord{WifiRecord{w1, "/etc/hostapd/OpenWRT1.psk"}, WifiRecord{w2, "/etc/hostapd/OpenWRT2.psk"}, WifiRecord{w3, ""}})
 
 	assert.Equal(t, expectedconfigmap, configmap)
 
@@ -4166,4 +4173,11 @@ func TestGenerateHostApdPsk(t *testing.T) {
 	err = app.Save(psk3)
 	assert.Nil(t, err)
 	assert.Equal(t, "vlanid=300 00:00:00:00:00:00 dddddddd\n", generateHostApdPskForWifi(app, w2))
+
+	{
+		configmap2 := map[string]string{}
+		_, deviceHasPskConfigs := generateHostApdPskConfigs(app, []*core.Record{}, &configmap2)
+		assert.False(t, deviceHasPskConfigs)
+		assert.Equal(t, map[string]string{}, configmap2)
+	}
 }

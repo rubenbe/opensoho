@@ -3283,7 +3283,15 @@ config wifi-iface 'wifi_3_radio4'
         option macfilter 'deny'
         list maclist '11:22:33:44:55:66'
 `)
-	wr.HostApdPskFilename = "/etc/hostapd/something.psk"
+
+	clientpskcollection := setupClientPskCollection(t, app, clientcollection, vlancollection, wificollection)
+	// Simplest case: no client specified
+	psk1 := core.NewRecord(clientpskcollection)
+	psk1.Set("password", "aaaabbbb")
+	psk1.Set("wifi", w.Id)
+	err = app.Save(psk1)
+	assert.Nil(t, err)
+
 	wificonfig = generateWifiConfig(wr, 3, 4, app, d)
 
 	assert.Equal(t, `
@@ -3309,6 +3317,11 @@ config wifi-iface 'wifi_3_radio4'
         option ft_psk_generate_local '1'
         option macfilter 'deny'
         list maclist '11:22:33:44:55:66'
+
+config wifi-station
+        option iface 'wifi_3_radio4'
+        option key 'aaaabbbb'
+        option mac '00:00:00:00:00:00'
 `, wificonfig)
 }
 
@@ -4175,17 +4188,6 @@ config wifi-station
 	err = app.Save(w3)
 	assert.Nil(t, err)
 
-	// Now test the config map generation (w3 should be ignored)
-	configmap := map[string]string{}
-	/*records*/ _, _ = generateHostApdPskConfigs(app, []*core.Record{w1, w2, w3}, &configmap)
-	//expectedconfigmap := map[string]string{"etc/hostapd/OpenWRT1.psk": "00:00:00:00:00:00 aaaabbbb\n11:aa:bb:cc:dd:ee aaaacccc\n22:aa:bb:cc:dd:ee aaaacccc\n", "etc/hostapd/OpenWRT2.psk": "00:00:00:00:00:00 dddddddd\n"}
-	//assert.True(t, deviceHasPskConfigs)
-
-	// W3 should be inside the retval, but without a config file
-	//assert.Equal(t, records, []WifiRecord{WifiRecord{w1, "/etc/hostapd/OpenWRT1.psk"}, WifiRecord{w2, "/etc/hostapd/OpenWRT2.psk"}, WifiRecord{w3, ""}})
-
-	//assert.Equal(t, expectedconfigmap, configmap)
-
 	// Add a VLAN
 	iot_vlan := core.NewRecord(vlancollection)
 	iot_vlan.Id = "zzzzziotvlan300"
@@ -4204,10 +4206,4 @@ config wifi-station
         option mac '00:00:00:00:00:00'
         option vid '300'
 `, generateHostApdPskForWifi(app, w2, "wifi_2"))
-	{
-		configmap2 := map[string]string{}
-		_, deviceHasPskConfigs := generateHostApdPskConfigs(app, []*core.Record{}, &configmap2)
-		assert.False(t, deviceHasPskConfigs)
-		assert.Equal(t, map[string]string{}, configmap2)
-	}
 }

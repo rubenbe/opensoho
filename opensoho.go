@@ -350,8 +350,7 @@ type MonitoringData struct {
 }
 
 type WifiRecord struct {
-	Record             *core.Record
-	HostApdPskFilename string
+	Record *core.Record
 }
 
 func updateRadios(device *core.Record, app core.App, newradios map[int]Radio) {
@@ -562,12 +561,6 @@ func generateWifiConfig(wifirecord WifiRecord, wifiid int, radio uint, app core.
 	interfacename := fmt.Sprintf("wifi_%[1]d_radio%[2]d", wifiid, radio)
 
 	clientpskconfig := generateHostApdPskForWifi(app, wifirecord.Record, interfacename)
-	/*clientpskconfig := wifirecord.HostApdPskFilename
-		if len(clientpskconfig) > 0 {
-			clientpskconfig = fmt.Sprintf(`        option wpa_psk_file '%s'
-	        option vlan_file '/etc/hostapd/vlan.map'
-	`, clientpskconfig)
-		}*/
 
 	vta_flag, vta_tz := getTimeAdvertisementValues(wifi.GetString("ieee80211v_time_advertisement"))
 	return fmt.Sprintf(`
@@ -591,7 +584,7 @@ config wifi-iface '%[6]s'
         option dtim_period '%[17]d'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
-%[18]s%[9]s`,
+%[9]s%[18]s`,
 		ssid, wifi.GetString("id"), radio, key, encryption,
 		interfacename, wifi.GetInt("ieee80211r"), getVlan(wifi, app), steeringconfig, wifi.GetInt("ieee80211v_bss_transition"),
 		max(1000, wifi.GetInt("ieee80211r_reassoc_deadline")), wifi.GetInt("ieee80211k"), wifi.GetInt("ieee80211v_wnm_sleep_mode"), vta_flag, vta_tz,
@@ -682,7 +675,6 @@ func generateWifiConfigs(wifis []WifiRecord, numradios uint, app core.App, devic
 			output += generateWifiConfig(wifi, i, j, app, device)
 		}
 	}
-
 	return output
 }
 
@@ -1225,13 +1217,25 @@ func generateDeviceConfig(app core.App, record *core.Record) ([]byte, string, er
 		//	return wifirecords[i].GetDateTime("created").Before(wifirecords[j].GetDateTime("created"))
 		//})
 
+		wificonfigstructs := []WifiRecord{}
+		for _, wifirecord := range wifirecords {
+			wificonfigstruct := WifiRecord{wifirecord}
+			wificonfigstructs = append(wificonfigstructs, wificonfigstruct)
+		}
+
 		// HostApdPskConfig needs to be called before the generateWifiConfigs
-		wificonfigsstructs /*deviceHasPskConfig*/, _ := generateHostApdPskConfigs(app, wifirecords, &configfiles)
-		wificonfigs := generateWifiConfigs(wificonfigsstructs, numradios, app, record)
+		//wificonfigsstructs /*deviceHasPskConfig*/, _ := generateHostApdPskConfigs(app, wifirecords, &configfiles)
+		wificonfigs := generateWifiConfigs(wificonfigstructs, numradios, app, record)
 		fmt.Println(wificonfigs)
 		if len(wificonfigs) > 0 {
 			configfiles["etc/config/wireless"] = wificonfigs
 		}
+		{
+			configfiles["etc/config/wireless"] += generateHostApdVlanConfig(app)
+		}
+		//{
+		//	configfiles["etc/config/wireless"] += generateHostApdPskConfigs(app, wificonfigstructs)
+		//}
 		//if deviceHasPskConfig {
 		//	vlanmapconfig := generateHostApdVlanConfig(app)
 		//	if len(vlanmapconfig) > 0 {
@@ -2071,22 +2075,13 @@ func generateHostApdPskConfigFilename(wifirecord *core.Record) string {
 	return fmt.Sprintf("etc/hostapd/%s.psk", wifirecord.GetString("ssid"))
 }
 
-func generateHostApdPskConfigs(app core.App, wifirecords []*core.Record, configmap *map[string]string) ([]WifiRecord, bool) {
-	wificonfigs := []WifiRecord{}
-	deviceHasPskConfig := false
-	for _, wifirecord := range wifirecords {
-		wificonfig := WifiRecord{wifirecord, ""}
-		//config := generateHostApdPskForWifi(app, wifirecord)
-		//if len(config) > 0 {
-		//	filename := generateHostApdPskConfigFilename(wifirecord)
-		//	//(*configmap)[filename] = config
-		//	wificonfig.HostApdPskFilename = "/" + filename
-		//	deviceHasPskConfig = true
-		//}
-		wificonfigs = append(wificonfigs, wificonfig)
-	}
-	return wificonfigs, deviceHasPskConfig
-}
+//func generateHostApdPskConfigs(app core.App, wifistructs []WifiRecord) string {
+//	output := ""
+//	for _, wifistruct := range wifistructs {
+//		output += generateHostApdPskForWifi(app, wifistruct.record)
+//	}
+//	return output
+//}
 
 func generateHostApdPskForWifi(app core.App, wifi *core.Record, wifiname string) string {
 	records, err := app.FindAllRecords("wifi_client_psk",

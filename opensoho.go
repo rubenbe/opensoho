@@ -1233,15 +1233,6 @@ func generateDeviceConfig(app core.App, record *core.Record) ([]byte, string, er
 		{
 			configfiles["etc/config/wireless"] += generateHostApdVlanConfig(app)
 		}
-		//{
-		//	configfiles["etc/config/wireless"] += generateHostApdPskConfigs(app, wificonfigstructs)
-		//}
-		//if deviceHasPskConfig {
-		//	vlanmapconfig := generateHostApdVlanConfig(app)
-		//	if len(vlanmapconfig) > 0 {
-		//		configfiles["etc/hostapd/vlan.map"] = vlanmapconfig
-		//	}
-		//}
 	}
 
 	{
@@ -2116,13 +2107,13 @@ func generateHostApdPsk(app core.App, client_psks []*core.Record, wifiname strin
 			})
 		}
 		password := client_psk.GetString("password")
-		for _, client := range clients {
+		for num, client := range clients {
 			output += fmt.Sprintf(`
-config wifi-station
+config wifi-station 'psk_%[5]s_%[6]d'
         option iface '%[3]s'
         option key '%[1]s'
         option mac '%[2]s'
-%[4]s`, password, client, wifiname, vlanconfig)
+%[4]s`, password, client, wifiname, vlanconfig, client_psk.Id, num)
 		}
 	}
 	return output
@@ -2148,7 +2139,7 @@ func generateHostApdVlanMap(vlans []*core.Record) string {
 			continue
 		}
 		output += fmt.Sprintf(`
-config wifi-vlan
+config wifi-vlan 'wifi_vlan_%[1]d'
         option name 'wifi_vlan_%[1]d'
         option network 'bridge_vlan_%[1]d'
         option vid '%[1]d'

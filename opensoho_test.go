@@ -3287,6 +3287,7 @@ config wifi-iface 'wifi_3_radio4'
 	clientpskcollection := setupClientPskCollection(t, app, clientcollection, vlancollection, wificollection)
 	// Simplest case: no client specified
 	psk1 := core.NewRecord(clientpskcollection)
+	psk1.Id = "somethingapsk03"
 	psk1.Set("password", "aaaabbbb")
 	psk1.Set("wifi", w.Id)
 	err = app.Save(psk1)
@@ -3318,7 +3319,7 @@ config wifi-iface 'wifi_3_radio4'
         option macfilter 'deny'
         list maclist '11:22:33:44:55:66'
 
-config wifi-station
+config wifi-station 'psk_somethingapsk03_0'
         option iface 'wifi_3_radio4'
         option key 'aaaabbbb'
         option mac '00:00:00:00:00:00'
@@ -4042,12 +4043,12 @@ func TestGenerateHostApdVlanMap(t *testing.T) {
 	assert.Equal(t, nil, err)
 
 	expectedconfig := `
-config wifi-vlan
+config wifi-vlan 'wifi_vlan_200'
         option name 'wifi_vlan_200'
         option network 'bridge_vlan_200'
         option vid '200'
 
-config wifi-vlan
+config wifi-vlan 'wifi_vlan_300'
         option name 'wifi_vlan_300'
         option network 'bridge_vlan_300'
         option vid '300'
@@ -4102,13 +4103,14 @@ func TestGenerateHostApdPsk(t *testing.T) {
 
 	// Simplest case: no client specified
 	psk1 := core.NewRecord(clientpskcollection)
+	psk1.Id = "somethingapsk01"
 	psk1.Set("password", "aaaabbbb")
 	psk1.Set("wifi", w1.Id)
 	err = app.Save(psk1)
 	assert.Nil(t, err)
 
 	assert.Equal(t, `
-config wifi-station
+config wifi-station 'psk_somethingapsk01_0'
         option iface 'something'
         option key 'aaaabbbb'
         option mac '00:00:00:00:00:00'
@@ -4123,6 +4125,7 @@ config wifi-station
 
 	// One client specified
 	psk2 := core.NewRecord(clientpskcollection)
+	psk2.Id = "somethingapsk02"
 	psk2.Set("password", "aaaacccc")
 	psk2.Set("clients", []string{c1.Id})
 	psk2.Set("wifi", w1.Id)
@@ -4141,17 +4144,17 @@ config wifi-station
 	err = app.Save(psk2)
 	assert.Nil(t, err)
 	wifi_psk_config1 := `
-config wifi-station
+config wifi-station 'psk_somethingapsk01_0'
         option iface 'wifi_1'
         option key 'aaaabbbb'
         option mac '00:00:00:00:00:00'
 
-config wifi-station
+config wifi-station 'psk_somethingapsk02_0'
         option iface 'wifi_1'
         option key 'aaaacccc'
         option mac '11:aa:bb:cc:dd:ee'
 
-config wifi-station
+config wifi-station 'psk_somethingapsk02_1'
         option iface 'wifi_1'
         option key 'aaaacccc'
         option mac '22:aa:bb:cc:dd:ee'
@@ -4165,6 +4168,7 @@ config wifi-station
 
 	// One client specified
 	psk3 := core.NewRecord(clientpskcollection)
+	psk3.Id = "somethingapsk03"
 	psk3.Set("password", "dddddddd")
 	psk3.Set("wifi", w2.Id)
 	err = app.Save(psk3)
@@ -4172,7 +4176,7 @@ config wifi-station
 
 	assert.Equal(t, wifi_psk_config1, generateHostApdPskForWifi(app, w1, "wifi_1"))
 	assert.Equal(t, `
-config wifi-station
+config wifi-station 'psk_somethingapsk03_0'
         option iface 'wifi_2'
         option key 'dddddddd'
         option mac '00:00:00:00:00:00'
@@ -4200,7 +4204,7 @@ config wifi-station
 	err = app.Save(psk3)
 	assert.Nil(t, err)
 	assert.Equal(t, `
-config wifi-station
+config wifi-station 'psk_somethingapsk03_0'
         option iface 'wifi_2'
         option key 'dddddddd'
         option mac '00:00:00:00:00:00'

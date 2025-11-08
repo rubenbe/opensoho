@@ -2140,7 +2140,7 @@ func generateHostApdVlanMap(vlans []*core.Record) string {
 		}
 		output += fmt.Sprintf(`
 config wifi-vlan 'wifi_vlan_%[1]d'
-        option name 'wifi_vlan_%[1]d'
+        option name 'wv%[1]d'
         option network 'bridge_vlan_%[1]d'
         option vid '%[1]d'
 `, vlanNumber)

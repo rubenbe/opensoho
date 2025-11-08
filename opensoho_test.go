@@ -4044,12 +4044,12 @@ func TestGenerateHostApdVlanMap(t *testing.T) {
 
 	expectedconfig := `
 config wifi-vlan 'wifi_vlan_200'
-        option name 'wifi_vlan_200'
+        option name 'wv200'
         option network 'bridge_vlan_200'
         option vid '200'
 
 config wifi-vlan 'wifi_vlan_300'
-        option name 'wifi_vlan_300'
+        option name 'wv300'
         option network 'bridge_vlan_300'
         option vid '300'
 `

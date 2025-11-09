@@ -546,7 +546,7 @@ func getTimeAdvertisementValues(vta string) (int, string) {
 	return vta_flag, GetTzData(vta)
 }
 
-func generateWifiConfig(wifirecord WifiRecord, wifiid int, radio uint, app core.App, device *core.Record) string {
+func generateWifiConfig(wifirecord WifiRecord, wifiid int, radio uint, app core.App, device *core.Record) (string, bool) {
 	wifi := wifirecord.Record
 	ssid := wifi.GetString("ssid")
 	key := wifi.GetString("key")
@@ -585,10 +585,11 @@ config wifi-iface '%[6]s'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
 %[9]s%[18]s`,
-		ssid, wifi.GetString("id"), radio, key, encryption,
-		interfacename, wifi.GetInt("ieee80211r"), getVlan(wifi, app), steeringconfig, wifi.GetInt("ieee80211v_bss_transition"),
-		max(1000, wifi.GetInt("ieee80211r_reassoc_deadline")), wifi.GetInt("ieee80211k"), wifi.GetInt("ieee80211v_wnm_sleep_mode"), vta_flag, vta_tz,
-		wifi.GetInt("ieee80211v_proxy_arp"), maxInt(1, wifi.GetInt("dtim_period")), clientpskconfig)
+			ssid, wifi.GetString("id"), radio, key, encryption,
+			interfacename, wifi.GetInt("ieee80211r"), getVlan(wifi, app), steeringconfig, wifi.GetInt("ieee80211v_bss_transition"),
+			max(1000, wifi.GetInt("ieee80211r_reassoc_deadline")), wifi.GetInt("ieee80211k"), wifi.GetInt("ieee80211v_wnm_sleep_mode"), vta_flag, vta_tz,
+			wifi.GetInt("ieee80211v_proxy_arp"), maxInt(1, wifi.GetInt("dtim_period")), clientpskconfig),
+		len(clientpskconfig) > 0
 }
 
 func createConfigTar(files map[string]string) ([]byte, string, error) {
@@ -667,15 +668,18 @@ func generateLedConfigs(leds []*core.Record) string {
 	return output
 }
 
-func generateWifiConfigs(wifis []WifiRecord, numradios uint, app core.App, device *core.Record) string {
+func generateWifiConfigs(wifis []WifiRecord, numradios uint, app core.App, device *core.Record) (string, bool) {
 	output := ""
+	glob_has_vlan_config := false
 	for i, wifi := range wifis {
 		for j := range numradios {
 			fmt.Println(wifi)
-			output += generateWifiConfig(wifi, i, j, app, device)
+			config_output, has_vlan_config := generateWifiConfig(wifi, i, j, app, device)
+			output += config_output
+			glob_has_vlan_config = glob_has_vlan_config || has_vlan_config
 		}
 	}
-	return output
+	return output, glob_has_vlan_config
 }
 
 func hexToPocketBaseID(hexStr string) (string, error) {
@@ -1225,12 +1229,12 @@ func generateDeviceConfig(app core.App, record *core.Record) ([]byte, string, er
 
 		// HostApdPskConfig needs to be called before the generateWifiConfigs
 		//wificonfigsstructs /*deviceHasPskConfig*/, _ := generateHostApdPskConfigs(app, wifirecords, &configfiles)
-		wificonfigs := generateWifiConfigs(wificonfigstructs, numradios, app, record)
+		wificonfigs, has_vlan_config := generateWifiConfigs(wificonfigstructs, numradios, app, record)
 		fmt.Println(wificonfigs)
 		if len(wificonfigs) > 0 {
 			configfiles["etc/config/wireless"] = wificonfigs
 		}
-		{
+		if has_vlan_config {
 			configfiles["etc/config/wireless"] += generateHostApdVlanConfig(app)
 		}
 	}

@@ -5,13 +5,13 @@
 
 Prebuilt OpenSOHO container images can be found in https://github.com/orgs/opensoho/packages
 
-A custom container image can be built using the Dockerfile in this repo.
+A custom container image can be built using the `Dockerfile` in this repo.
 
 ### docker compose
 
 A docker compose setup could be used following this example:
 
-```
+```yaml
   opensoho:
     image: ghcr.io/opensoho/opensoho:v0.9.0
     container_name: opensoho

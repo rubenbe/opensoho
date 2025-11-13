@@ -1,18 +1,18 @@
 # Home Assistant
 
-The Home Assistant integration is currently limited, but can be used to notify when an OpenWRT device is no longer checking in with OpenSOHO (the router/AP becomes *unhealthy*)
+The Home Assistant integration is currently limited, but can be used to notify when an OpenWRT device is no longer checking in with OpenSOHO (the router/AP becomes `unhealthy`)
 
-First add an API user to OpenSOHO using the admin interface. This is safer than using your admin account.
+First, add an API user to OpenSOHO using the admin interface. This is safer than using your admin account.
 OpenSOHO uses access tokens which are valid for 3 years.
 
 
 ## Generating an initial token
-We need to generate an authentication token using the username and password that Home Assistant can use.
-```
+Generate an authentication token using the username and password that Home Assistant can use:
+```sh
 curl -X POST http://192.168.1.1:8090/api/collections/api_users/auth-with-password -H "Content-type:application/json" -d '{"identity":"name", "password":"PASSWORD"}'
 ```
 
-This will return a JSON, but we're only interested in the `token` value, which needs to be used in the Home Assistant yaml configuration.
+This return a JSON object, but we're only interested in the `token` value, for use in the Home Assistant yaml configuration.
 
 ## Storing the token in Home Assistant
 In Home assistant go to `Settings > Devices > Helpers`. Create a new input helper named `opensoho_access_token`. Set the length to 250 and set the type to password.
@@ -23,7 +23,7 @@ Paste your access token in here.
 Next we can configure a REST sensor for each OpenWRT device.
 The `DEVICE_ID` is the id found for the record in the `devices` collection.
 
-```
+```yaml
   - platform: rest
     name: "OpenWrt-Router via OpenSOHO"
     resource: "http://192.168.1.1:8090/api/v1/devicestatus/DEVICE_MAC"
@@ -34,14 +34,14 @@ The `DEVICE_ID` is the id found for the record in the `devices` collection.
 
 Reload the Home Assistant config after each config file modification. The sensor should now show a valid configuration!
 
-To test/debug the token, you can run:
-```
+To test/debug the token, run:
+```sh
 curl -H "Authorization: TOKEN" http://192.168.1.1:8090/api/v1/devicestatus/00:11:22:33:44:55
 ```
 
 ## Updating the access token
-In case a token is about to expire, you can request a new one via an API call:
+In case a token is about to expire, request a new one via an API call:
 
-```
+```sh
 curl -X POST -H "Authorization: OLDTOKEN" http://192.168.1.1:8090/api/collections/api_users/auth-refresh
 ```

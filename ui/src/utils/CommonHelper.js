@@ -1192,7 +1192,6 @@ export default class CommonHelper {
      */
     static isCollectionReadOnly(name){
         switch (name?.toLowerCase()){
-            case "clients":
         case "devices":
         case "dhcp_leases":
         case "ethernet":
@@ -1221,6 +1220,7 @@ export default class CommonHelper {
         }
         case "clients":
             switch (fieldname.toLowerCase()){
+            case "mac_address":
             case "alias":
                 return false;
             default:

@@ -1332,7 +1332,6 @@ func handleBridgeMonitoring(app core.App, iface Interface, device *core.Record, 
 	ethernetlist := []string{}
 	wifilist := []string{}
 	for _, membername := range iface.BridgeMembers {
-
 		eth_record, eth_err := app.FindFirstRecordByFilter(ethernetcollection, "device = {:device} && name = {:name}", dbx.Params{"device": device.Id}, dbx.Params{"name": membername})
 		wifi_record, wifi_err := app.FindFirstRecordByFilter(interfacescollection, "device = {:device} && interface = {:name}", dbx.Params{"device": device.Id}, dbx.Params{"name": membername})
 
@@ -1349,8 +1348,8 @@ func handleBridgeMonitoring(app core.App, iface Interface, device *core.Record, 
 			fmt.Println(err)
 		}
 		if wifi_record == nil && eth_record == nil {
-			err = fmt.Errorf("Unknown bridge member %s", membername)
-			fmt.Println(err)
+			err_ignored := fmt.Errorf("Unknown bridge member %s", membername)
+			fmt.Println(err_ignored)
 		}
 		if wifi_record != nil {
 			fmt.Println("ADDING WIFI", wifi_record)
@@ -2144,10 +2143,10 @@ func generateHostApdVlanMap(vlans []*core.Record) string {
 		}
 		output += fmt.Sprintf(`
 config wifi-vlan 'wifi_vlan_%[1]d'
-        option name 'wv%[1]d'
-        option network 'bridge_vlan_%[1]d'
+        option name 'vl%[1]d'
+        option network '%[2]s'
         option vid '%[1]d'
-`, vlanNumber)
+`, vlanNumber, vlan.GetString("name"))
 	}
 	return output
 }

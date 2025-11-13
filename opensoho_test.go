@@ -273,7 +273,8 @@ func TestHandleBridgeMonitoring(t *testing.T) {
 	}
 
 	err = handleBridgeMonitoring(app, iface, d1, bridgescollection, interfacescollection, ethernetcollection)
-	assert.Equal(t, "Unknown bridge member phy1-ap0", err.Error())
+	//assert.Equal(t, "Unknown bridge member phy1-ap0", err.Error())
+	assert.Nil(t, err)
 	records, err := app.FindAllRecords("bridges")
 	assert.Equal(t, nil, err)
 	assert.Equal(t, 1, len(records))
@@ -294,7 +295,8 @@ func TestHandleBridgeMonitoring(t *testing.T) {
 	assert.Equal(t, nil, err)
 
 	err = handleBridgeMonitoring(app, iface, d1, bridgescollection, interfacescollection, ethernetcollection)
-	assert.Equal(t, "Unknown bridge member lan2", err.Error())
+	//assert.Equal(t, "Unknown bridge member lan2", err.Error())
+	assert.Nil(t, err)
 
 	// Now add an Ethernet interface too
 	e1 := core.NewRecord(ethernetcollection)
@@ -3186,6 +3188,7 @@ config wifi-iface 'wifi_3_radio4'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
 `)
+
 	// Test the clientsteering, client should be steered away from this AP
 	cs := core.NewRecord(clientsteeringcollection)
 	cs.Set("client", c.Id)
@@ -4052,13 +4055,13 @@ func TestGenerateHostApdVlanMap(t *testing.T) {
 
 	expectedconfig := `
 config wifi-vlan 'wifi_vlan_200'
-        option name 'wv200'
-        option network 'bridge_vlan_200'
+        option name 'vl200'
+        option network 'lan'
         option vid '200'
 
 config wifi-vlan 'wifi_vlan_300'
-        option name 'wv300'
-        option network 'bridge_vlan_300'
+        option name 'vl300'
+        option network 'iot'
         option vid '300'
 `
 	// Wrong order, should be ordered by VLAN number

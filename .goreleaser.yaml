@@ -52,6 +52,8 @@ kos:
     working_dir: .
 
     base_image: alpine
+    labels:
+      org.opencontainers.image.source: https://github.com/rubenbe/opensoho
 
     repositories:
       - ghcr.io/opensoho

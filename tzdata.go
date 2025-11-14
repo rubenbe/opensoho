@@ -1,5 +1,9 @@
 package main
 
+import (
+	"strings"
+)
+
 var tzData = map[string]string{
 	"Disabled":                       "",
 	"UTC":                            "",
@@ -454,6 +458,10 @@ func GetTzData(timezoneName string) string {
 	if tzdata, ok := tzData[timezoneName]; ok {
 		return tzdata
 	} else {
-		return timezoneName
+		return GetUciSafeTzName(timezoneName)
 	}
+}
+
+func GetUciSafeTzName(timezoneName string) string {
+	return strings.Replace(timezoneName, " ", "_", -1)
 }

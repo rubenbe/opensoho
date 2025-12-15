@@ -1979,13 +1979,15 @@ func TestExtractRadioNumber(t *testing.T) {
 		{"phy1-ap0", 1, false},
 		{"phy0-ap0", 0, false},
 		{"phy2-ap3", 2, false},
+		{"wl0-ap0", 0, false},
+		{"wl1-ap2", 1, false},
 		{"invalid-string", 0, true}, // error case
 	}
 
 	for _, tt := range tests {
 		result, err := extractRadioNumber(tt.input)
-		assert.Equal(t, err != nil, tt.expectError)
-		assert.Equal(t, result, tt.expected)
+		assert.Equal(t, err != nil, tt.expectError, tt.input)
+		assert.Equal(t, result, tt.expected, tt.input)
 	}
 }
 

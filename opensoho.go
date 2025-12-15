@@ -90,10 +90,10 @@ func copyEmbedDirToDisk(embedFS fs.FS, targetDir string) error {
 }
 
 func extractRadioNumber(s string) (int, error) {
-	re := regexp.MustCompile(`phy(\d+)-`)
+	re := regexp.MustCompile(`^(?:phy|wl)(\d+)-`)
 	match := re.FindStringSubmatch(s)
 	if len(match) < 2 {
-		return 0, fmt.Errorf("phy number not found in string: %s", s)
+		return 0, fmt.Errorf("radio number not found in string: %s", s)
 	}
 	return strconv.Atoi(match[1])
 }

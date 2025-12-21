@@ -6,6 +6,7 @@
 * [Frequently asked questions](doc/faq.md)
 * [VLAN configuration](doc/vlan.md)
 * [Containerized Deployments (Docker, Podman, Kubernetes)](doc/containers.md)
+* [Home Assistant integration](doc/hass.md)
 
 OpenSOHO is built to manage a small number OpenWRT based network devices. Hence the name SOHO from Small Office Home Office (SOHO) Networks.
 Only OpenWRT 24.10.x DSA is tested.

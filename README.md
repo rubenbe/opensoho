@@ -85,7 +85,7 @@ It is highly recommended to enable monitoring, since OpenSOHO deduces a lot of t
 
 * Wait for the OpenWrt device(s) to self-register using the shared secret.
 * Set the `numradios` to the correct value. For example for a 2.4 + 5GHz device, this value would be 2.
-* Set up a Wifi access point (SSID+KEY).
+* Set up a Wifi access point (SSID+KEY). This procedure allows OpenSOHO to detect the radio configuration correctly upon device registration.
 * Attach the configured Wifi access point to a device to have it configured.
 * Currently each network will be automatically configured on all radios (configured using `numradios`).
 * Optionally leds can also be turned on or off (only static config for now).

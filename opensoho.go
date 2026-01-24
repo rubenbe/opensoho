@@ -234,7 +234,7 @@ func validateRadio(record *core.Record) error {
 		errs["frequency"] = err
 	}
 
-	htmode := record.GetString("ht_mode")
+	htmode := record.GetString("htmode")
 
 	err = validateRadioHtModeBandCombo(band, htmode)
 

@@ -239,7 +239,7 @@ func validateRadio(record *core.Record) error {
 	err = validateRadioHtModeBandCombo(band, htmode)
 
 	if err != nil {
-		errs["ht_mode"] = err
+		errs["htmode"] = err
 	}
 	if len(errs) > 0 {
 		return apis.NewBadRequestError("Failed to create record.", errs)
@@ -263,11 +263,11 @@ type Client struct {
 }
 
 type Radio struct {
-	Frequency int
-	Channel   int
-	HTmode    string
-	TxPower   int
-	MAC       string
+	Frequency int	 `json:"frequency"`
+	Channel   int	 `json:"channel"`
+	HTmode    string `json:"htmode"`
+	TxPower   int	 `json:"tx_power"`
+	MAC       string `json:"mac"`
 }
 
 type Wireless struct {
@@ -445,9 +445,9 @@ func generateRadioConfig(radio *core.Record, country_code string) string {
 	if radio.GetBool("auto_frequency") != true {
 		frequency_txt = fmt.Sprintf("%d", channel)
 	}
-	ht_mode_txt := ""
-	if ht_mode := radio.GetString("htmode"); len(ht_mode) > 0 {
-		ht_mode_txt = fmt.Sprintf("        option htmode '%[1]s'\n", ht_mode)
+	htmode_txt := ""
+	if htmode := radio.GetString("htmode"); len(htmode) > 0 {
+		htmode_txt = fmt.Sprintf("        option htmode '%[1]s'\n", htmode)
 	}
 
 	country_txt := ""
@@ -458,7 +458,7 @@ func generateRadioConfig(radio *core.Record, country_code string) string {
 	return fmt.Sprintf(`
 config wifi-device 'radio%[1]d'
         option channel '%[2]s'
-%[3]s%[4]s`, radio.GetInt("radio"), frequency_txt, country_txt, ht_mode_txt)
+%[3]s%[4]s`, radio.GetInt("radio"), frequency_txt, country_txt, htmode_txt)
 }
 
 func getRadiosForDevice(device *core.Record, app core.App) ([]*core.Record, error) {

@@ -446,7 +446,7 @@ func generateRadioConfig(radio *core.Record, country_code string) string {
 		frequency_txt = fmt.Sprintf("%d", channel)
 	}
 	ht_mode_txt := ""
-	if ht_mode := radio.GetString("ht_mode"); len(ht_mode) > 0 {
+	if ht_mode := radio.GetString("htmode"); len(ht_mode) > 0 {
 		ht_mode_txt = fmt.Sprintf("        option htmode '%[1]s'\n", ht_mode)
 	}
 

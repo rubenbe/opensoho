@@ -807,11 +807,11 @@ func TestValidateRadio(t *testing.T) {
 	r := core.NewRecord(radiocollection)
 	r.Set("frequency", "2412")
 	r.Set("band", "2.4")
-	r.Set("ht_mode", "HT40")
+	r.Set("htmode", "HT40")
 
 	assert.Nil(t, validateRadio(r))
 
-	r.Set("ht_mode", "VHT40")
+	r.Set("htmode", "VHT40")
 	assert.Error(t, validateRadio(r))
 
 	r.Set("frequency", "5180")
@@ -2282,7 +2282,7 @@ config wifi-device 'radio3'
 config wifi-device 'radio3'
         option channel 'auto'
 `)
-	record.Set("ht_mode", "VHT20")
+	record.Set("htmode", "VHT20")
 	assert.Equal(t, generateRadioConfig(record, ""), `
 config wifi-device 'radio3'
         option channel 'auto'
@@ -2421,7 +2421,7 @@ func setupRadioCollection(t *testing.T, app core.App, devicecollection *core.Col
 		Required: false,
 	})
 	radiocollection.Fields.Add(&core.TextField{
-		Name:     "ht_mode",
+		Name:     "htmode",
 		Required: false,
 	})
 	radiocollection.Fields.Add(&core.BoolField{

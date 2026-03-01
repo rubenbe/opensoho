@@ -3073,6 +3073,9 @@ func TestGenerateWifiConfig(t *testing.T) {
 	w.Id = "somethingabcdef"
 	w.Set("ssid", "the_ssid")
 	w.Set("key", "the_key")
+	w.Set("hidden", false)
+	w.Set("isolate_clients", false)
+	w.Set("key", "the_key")
 	w.Set("ieee80211k", false)
 	w.Set("ieee80211r", true)
 	w.Set("ieee80211r_reassoc_deadline", 5000)
@@ -3115,6 +3118,8 @@ config wifi-iface 'wifi_3_radio4'
         option ssid 'the_ssid'
         option encryption 'the_encryption'
         option key 'the_key'
+		option hidden '0'
+		option isolate '0'
         option ieee80211k '0'
         option ieee80211r '1'
         option reassociation_deadline '5000'
@@ -3139,6 +3144,9 @@ config wifi-iface 'wifi_3_radio4'
 	err = app.Save(w)
 	// Verify the encryption defaults to WPA2
 	w.Set("encryption", "")
+	// Verify the client isolation and hidden BSSID
+	w.Set("hidden", true)
+	w.Set("isolate_clients", true)
 
 	// Generate a config
 	wificonfig, has_psk = generateWifiConfig(wr, 3, 4, app, d)
@@ -3152,6 +3160,8 @@ config wifi-iface 'wifi_3_radio4'
         option ssid 'the_ssid'
         option encryption 'psk2+ccmp'
         option key 'the_key'
+		option hidden '1'
+		option isolate '1'
         option ieee80211k '1'
         option ieee80211r '0'
         option reassociation_deadline '1000'
@@ -3182,6 +3192,8 @@ config wifi-iface 'wifi_3_radio4'
         option ssid 'the_ssid'
         option encryption 'psk2+ccmp'
         option key 'the_key'
+		option hidden '1'
+		option isolate '1'
         option ieee80211k '1'
         option ieee80211r '0'
         option reassociation_deadline '1000'
@@ -3218,6 +3230,8 @@ config wifi-iface 'wifi_3_radio4'
         option ssid 'the_ssid'
         option encryption 'psk2+ccmp'
         option key 'the_key'
+		option hidden '1'
+		option isolate '1'
         option ieee80211k '1'
         option ieee80211r '0'
         option reassociation_deadline '1000'
@@ -3250,6 +3264,8 @@ config wifi-iface 'wifi_3_radio4'
         option ssid 'the_ssid'
         option encryption 'psk2+ccmp'
         option key 'the_key'
+		option hidden '1'
+		option isolate '1'
         option ieee80211k '1'
         option ieee80211r '0'
         option reassociation_deadline '1000'
@@ -3285,6 +3301,8 @@ config wifi-iface 'wifi_3_radio4'
         option ssid 'the_ssid'
         option encryption 'psk2+ccmp'
         option key 'the_key'
+		option hidden '1'
+		option isolate '1'
         option ieee80211k '1'
         option ieee80211r '0'
         option reassociation_deadline '1000'
@@ -3322,6 +3340,8 @@ config wifi-iface 'wifi_3_radio4'
         option ssid 'the_ssid'
         option encryption 'psk2+ccmp'
         option key 'the_key'
+		option hidden '1'
+		option isolate '1'
         option ieee80211k '1'
         option ieee80211r '0'
         option reassociation_deadline '1000'

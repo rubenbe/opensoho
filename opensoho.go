@@ -548,47 +548,65 @@ func getTimeAdvertisementValues(vta string) (int, string) {
 
 func generateWifiConfig(wifirecord WifiRecord, wifiid int, radio uint, app core.App, device *core.Record) (string, bool) {
 	wifi := wifirecord.Record
+
 	ssid := wifi.GetString("ssid")
 	key := wifi.GetString("key")
-	steeringconfig, err := generateMacClientSteeringConfig(app, wifi, device)
-	if err != nil {
-		fmt.Println(err)
-	}
 	encryption := wifi.GetString("encryption")
 	if len(encryption) == 0 {
 		encryption = "psk2+ccmp"
 	}
-	interfacename := fmt.Sprintf("wifi_%[1]d_radio%[2]d", wifiid, radio)
 
-	clientpskconfig := generateHostApdPskForWifi(app, wifirecord.Record, interfacename)
+	ifaceName := fmt.Sprintf("wifi_%d_radio%d", wifiid, radio)
+	vlanName := getVlan(wifi, app)
 
+	steeringconfig, err := generateMacClientSteeringConfig(app, wifi, device)
+	if err != nil {
+		fmt.Println("Steering error:", err)
+	}
+
+	clientpskconfig := generateHostApdPskForWifi(app, wifi, ifaceName)
 	vta_flag, vta_tz := getTimeAdvertisementValues(wifi.GetString("ieee80211v_time_advertisement"))
+
+	rDeadLine := max(1000, wifi.GetInt("ieee80211r_reassoc_deadline"))
+	dtim := maxInt(1, wifi.GetInt("dtim_period"))
+
 	return fmt.Sprintf(`
-config wifi-iface '%[6]s'
-        option device 'radio%[3]d'
-        option network '%[8]s'
+config wifi-iface '%s'
+        option device 'radio%d'
+        option network '%s'
         option disabled '0'
         option mode 'ap'
-        option ssid '%[1]s'
-        option encryption '%[5]s'
-        option key '%[4]s'
-        option ieee80211k '%[12]d'
-        option ieee80211r '%[7]d'
-        option reassociation_deadline '%[11]d'
-        option time_advertisement '%[14]d'
-        option time_zone '%[15]s'
-        option wnm_sleep_mode '%[13]d'
+        option ssid '%s'
+        option encryption '%s'
+        option key '%s'
+		option hidden '%d'
+		option isolate '%d'
+        option ieee80211k '%d'
+        option ieee80211r '%d'
+        option reassociation_deadline '%d'
+        option time_advertisement '%d'
+        option time_zone '%s'
+        option wnm_sleep_mode '%d'
         option wnm_sleep_mode_no_keys '0'
-        option proxy_arp '%[16]d'
-        option bss_transition '%[10]d'
-        option dtim_period '%[17]d'
+        option proxy_arp '%d'
+        option bss_transition '%d'
+        option dtim_period '%d'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
-%[9]s%[18]s`,
-			ssid, wifi.GetString("id"), radio, key, encryption,
-			interfacename, wifi.GetInt("ieee80211r"), getVlan(wifi, app), steeringconfig, wifi.GetInt("ieee80211v_bss_transition"),
-			max(1000, wifi.GetInt("ieee80211r_reassoc_deadline")), wifi.GetInt("ieee80211k"), wifi.GetInt("ieee80211v_wnm_sleep_mode"), vta_flag, vta_tz,
-			wifi.GetInt("ieee80211v_proxy_arp"), maxInt(1, wifi.GetInt("dtim_period")), clientpskconfig),
+%s%s`,
+			ifaceName, radio, vlanName,
+			ssid, encryption, key,
+			wifi.GetInt("hidden"),
+			wifi.GetInt("isolate_clients"),
+			wifi.GetInt("ieee80211k"),
+			wifi.GetInt("ieee80211r"),
+			rDeadLine,
+			vta_flag, vta_tz,
+			wifi.GetInt("ieee80211v_wnm_sleep_mode"),
+			wifi.GetInt("ieee80211v_proxy_arp"),
+			wifi.GetInt("ieee80211v_bss_transition"),
+			dtim,
+			steeringconfig, clientpskconfig),
 		len(clientpskconfig) > 0
 }
 

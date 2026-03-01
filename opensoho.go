@@ -263,10 +263,10 @@ type Client struct {
 }
 
 type Radio struct {
-	Frequency int	 `json:"frequency"`
-	Channel   int	 `json:"channel"`
+	Frequency int    `json:"frequency"`
+	Channel   int    `json:"channel"`
 	HTmode    string `json:"htmode"`
-	TxPower   int	 `json:"tx_power"`
+	TxPower   int    `json:"tx_power"`
 	MAC       string `json:"mac"`
 }
 

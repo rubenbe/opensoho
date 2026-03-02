@@ -3134,6 +3134,38 @@ config wifi-iface 'wifi_3_radio4'
         option ft_psk_generate_local '1'
 `)
 
+	// Verify the client isolation and hidden BSSID
+	w.Set("hidden", true)
+	w.Set("isolate_clients", true)
+
+	// Generate a config
+	wificonfig, has_psk = generateWifiConfig(wr, 3, 4, app, d)
+	assert.False(t, has_psk)
+	assert.Equal(t, wificonfig, `
+config wifi-iface 'wifi_3_radio4'
+        option device 'radio4'
+        option network 'lan'
+        option disabled '0'
+        option mode 'ap'
+        option ssid 'the_ssid'
+        option encryption 'the_encryption'
+        option key 'the_key'
+		option hidden '1'
+		option isolate '1'
+        option ieee80211k '0'
+        option ieee80211r '1'
+        option reassociation_deadline '5000'
+        option time_advertisement '0'
+        option time_zone ''
+        option wnm_sleep_mode '0'
+        option wnm_sleep_mode_no_keys '0'
+        option proxy_arp '0'
+        option bss_transition '0'
+        option dtim_period '1'
+        option ft_over_ds '0'
+        option ft_psk_generate_local '1'
+`)
+
 	// Generate a config with 80211k enabled
 	w.Set("ieee80211k", true)
 	// Generate a config with 80211r disabled
@@ -3144,9 +3176,6 @@ config wifi-iface 'wifi_3_radio4'
 	err = app.Save(w)
 	// Verify the encryption defaults to WPA2
 	w.Set("encryption", "")
-	// Verify the client isolation and hidden BSSID
-	w.Set("hidden", true)
-	w.Set("isolate_clients", true)
 
 	// Generate a config
 	wificonfig, has_psk = generateWifiConfig(wr, 3, 4, app, d)

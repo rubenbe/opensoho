@@ -9,7 +9,6 @@
 * [Home Assistant integration](doc/hass.md)
 
 OpenSOHO is built to manage a small number OpenWRT based network devices. Hence the name SOHO from Small Office Home Office (SOHO) Networks.
-Only OpenWRT 24.10.x DSA is tested.
 
 * From 2 to 20 devices (there is no hard limit)
 * No multi-tenancy
@@ -25,6 +24,10 @@ As OpenWisp mentioned:
     <img src="https://raw.githubusercontent.com/opensoho/assets/074a4c5c353fcbb295e2da84fb3490869c6c4de0/devices.png" width="80%" />
   </a>
 </p>
+
+The following versions are tested
+* OpenWRT 24.10.x DSA
+* OpenWRT 25.12.x DSA (beta support)
 
 # Getting Started with OpenSOHO
 ## Install OpenSOHO
@@ -62,9 +65,18 @@ opkg install openwisp-config openwisp-monitoring luci-app-openwisp
 ```
 
 If you want to use 802.11v client steering, the full wpad-mbedtls is necessary.
+
+On OpenWRT 2024.10
 ```sh
 opkg remove wpad-basic-mbedtls && \
 opkg install wpad-mbedtls && \
+service wpad restart
+```
+
+On OpenWRT 2025.12+
+```sh
+apk del wpad-basic-mbedtls && \
+apk add wpad-mbedtls && \
 service wpad restart
 ```
 
@@ -84,6 +96,7 @@ It is highly recommended to enable monitoring, since OpenSOHO deduces a lot of t
 ## Configure OpenSOHO
 
 * Wait for the OpenWrt device(s) to self-register using the shared secret.
+* Set the device `Enabled` flag to true.
 * Set the `numradios` to the correct value. For example for a 2.4 + 5GHz device, this value would be 2.
 * Set up a Wifi access point (SSID+KEY). This procedure allows OpenSOHO to detect the radio configuration correctly upon device registration.
 * Attach the configured Wifi access point to a device to have it configured.

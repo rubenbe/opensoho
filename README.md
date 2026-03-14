@@ -61,19 +61,20 @@ Alternatively, create the admin account via the command-line:
 ### Install the OpenWISP packages
 
 ```sh
-opkg install openwisp-config openwisp-monitoring luci-app-openwisp
+opkg install openwisp-config openwisp-monitoring luci-app-openwisp # OpenWRT 24.10
+apk add openwisp-config openwisp-monitoring luci-app-openwisp # OpenWRT 25.12+
 ```
 
 If you want to use 802.11v client steering, the full wpad-mbedtls is necessary.
 
-On OpenWRT 2024.10
+On OpenWRT 24.10
 ```sh
 opkg remove wpad-basic-mbedtls && \
 opkg install wpad-mbedtls && \
 service wpad restart
 ```
 
-On OpenWRT 2025.12+
+On OpenWRT 25.12+
 ```sh
 apk del wpad-basic-mbedtls && \
 apk add wpad-mbedtls && \

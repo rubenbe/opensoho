@@ -55,10 +55,10 @@
     <button
         type="button"
         draggable={false}
-        class="handle thumb {size ? `thumb-${size}` : ''}"
-        title={(hasPreview ? "Preview" : "Download") + " " + filename}
+        class="thumb {size ? `thumb-${size}` : ''} {hasPreview ? "handle" : ""}"
+        title={(hasPreview ? "Preview " : "") + filename}
         on:auxclick={() => openInNewTab(filename)}
-        on:click|stopPropagation={async () => {
+        on:click|stopPropagation={async (e) => {
             if (!hasPreview) {
                 openInNewTab(filename)
                 return;

@@ -90,9 +90,12 @@
             <a href="/settings" use:link>Dashboard settings</a>.
         </p>
         <p>
-            Because this endpoint process the requests in a single transaction it could degrade the
-            performance of your application if not used with proper care and configuration (e.g. too large
-            allowed execution timeout, large body size limit, etc.).
+            Because this endpoint process the requests in a single DB transaction it could degrade the
+            performance of your application if not used with proper care and configuration
+            <em
+                >(prefer smaller max processing and body size limits, avoid large file uploads over slow S3
+                networks and custom hooks that communicate with slow external APIs)</em
+            >.
         </p>
     </div>
 </div>
@@ -198,7 +201,7 @@
                 <p>
                     <strong>NB!</strong> When the batch request is send as
                     <code>multipart/form-data</code>, the regular batch action fields are expected to be
-                    submitted as serailized json under the <code>@jsonPayload</code> field and file keys need
+                    submitted as serialized json under the <code>@jsonPayload</code> field and file keys need
                     to follow the pattern <code>requests.N.fileField</code> or
                     <code>requests[N].fileField</code>
                     <em>

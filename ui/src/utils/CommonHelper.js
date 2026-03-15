@@ -1575,6 +1575,7 @@ export default class CommonHelper {
             disableMobile: true,
             allowInput: true,
             enableTime: true,
+            enableSeconds: true,
             time_24hr: true,
             locale: {
                 firstDayOfWeek: 1,
@@ -1926,7 +1927,7 @@ export default class CommonHelper {
     /**
      * Returns an array with all public collection identifiers (collection fields + type specific fields).
      *
-     * @param  {[type]} collection The collection to extract identifiers from.
+     * @param  {Object} collection The collection to extract identifiers from.
      * @param  {String} prefix     Optional prefix for each found identified.
      * @return {Array}
      */
@@ -1955,6 +1956,30 @@ export default class CommonHelper {
 
         return result;
     }
+
+    /**
+     * Returns a wildcard "fields" string with the excerpt modifier applied to all collection fields
+     * (except the primary key and relation fields).
+     *
+     * @param  {Object} collection
+     * @param  {Number} [maxExcerpt]
+     * @return {String}
+     */
+    static getExcerptCollectionFieldsList(collection, maxExcerpt = 200) {
+        let result = ["*"];
+
+        const fields = collection?.fields || [];
+        for (const field of fields) {
+            if (field.primaryKey || field.type == "relation") {
+                continue
+            }
+
+            result.push(`${field.name}:excerpt(${maxExcerpt})`);
+        }
+
+        return result.join(",");
+    }
+
 
     /**
      * Generates recursively a list with all the autocomplete field keys
@@ -2075,13 +2100,14 @@ export default class CommonHelper {
             for (const key of keys) {
                 result.push(key);
 
-                // add ":isset" modifier to non-base keys
+                // add ":isset"/":changed" modifier to non-base keys
                 const parts = key.split(".");
                 if (
                     parts.length === 3 &&
                     // doesn't contain another modifier
                     parts[2].indexOf(":") === -1
                 ) {
+                    result.push(key + ":changed");
                     result.push(key + ":isset");
                 }
             }

@@ -5,8 +5,14 @@
     import CommonHelper from "@/utils/CommonHelper";
     import { confirm } from "@/stores/confirmation";
     import { errors, removeError, setErrors } from "@/stores/errors";
-    import { addSuccessToast, removeAllToasts } from "@/stores/toasts";
-    import { addCollection, removeCollection, scaffolds, activeCollection } from "@/stores/collections";
+    import { addInfoToast, addSuccessToast, removeAllToasts } from "@/stores/toasts";
+    import {
+        addCollection,
+        removeCollection,
+        scaffolds,
+        activeCollection,
+        refreshScaffolds,
+    } from "@/stores/collections";
     import tooltip from "@/actions/tooltip";
     import Field from "@/components/base/Field.svelte";
     import OverlayPanel from "@/components/base/OverlayPanel.svelte";
@@ -161,7 +167,7 @@
         isLoadingConfirmation = false;
     }
 
-    function save(hideAfterSave = true) {
+    async function save(hideAfterSave = true) {
         if (isSaving) {
             return;
         }
@@ -171,45 +177,44 @@
         const data = exportFormData();
         const isNew = !collection.id;
 
-        let request;
-        if (isNew) {
-            request = ApiClient.collections.create(data);
-        } else {
-            request = ApiClient.collections.update(collection.id, data);
+        try {
+            let result;
+            if (isNew) {
+                result = await ApiClient.collections.create(data);
+            } else {
+                result = await ApiClient.collections.update(collection.id, data);
+            }
+
+            removeAllToasts();
+
+            addCollection(result);
+
+            if (hideAfterSave) {
+                confirmClose = false;
+                hide();
+            } else {
+                load(result);
+            }
+
+            addSuccessToast(
+                !collection.id ? "Successfully created collection." : "Successfully updated collection.",
+            );
+
+            dispatch("save", {
+                isNew: isNew,
+                collection: result,
+            });
+
+            if (isNew) {
+                $activeCollection = result;
+
+                await refreshScaffolds();
+            }
+        } catch (err) {
+            ApiClient.error(err);
         }
 
-        return request
-            .then((result) => {
-                removeAllToasts();
-
-                addCollection(result);
-
-                if (hideAfterSave) {
-                    confirmClose = false;
-                    hide();
-                } else {
-                    load(result);
-                }
-
-                addSuccessToast(
-                    !collection.id ? "Successfully created collection." : "Successfully updated collection.",
-                );
-
-                dispatch("save", {
-                    isNew: isNew,
-                    collection: result,
-                });
-
-                if (isNew) {
-                    $activeCollection = result;
-                }
-            })
-            .catch((err) => {
-                ApiClient.error(err);
-            })
-            .finally(() => {
-                isSaving = false;
-            });
+        isSaving = false;
     }
 
     function exportFormData() {
@@ -341,6 +346,11 @@
 
         return false;
     }
+
+    function copyJSON() {
+        CommonHelper.copyToClipboard(JSON.stringify(original, null, 2));
+        addInfoToast("The collection JSON was copied to your clipboard!", 3000);
+    }
 </script>
 
 <!-- svelte-ignore a11y-no-noninteractive-tabindex -->
@@ -377,7 +387,16 @@
                 class="btn btn-sm btn-circle btn-transparent flex-gap-0"
             >
                 <i class="ri-more-line" aria-hidden="true" />
-                <Toggler class="dropdown dropdown-right m-t-5">
+                <Toggler class="dropdown dropdown-right dropdown-nowrap">
+                    <button
+                        type="button"
+                        class="dropdown-item closable"
+                        role="menuitem"
+                        on:click={() => copyJSON()}
+                    >
+                        <i class="ri-braces-line" aria-hidden="true" />
+                        <span class="txt">Copy raw JSON</span>
+                    </button>
                     {#if !collection.system}
                         <button
                             type="button"
@@ -436,7 +455,19 @@
                     autofocus={!collection.id}
                     placeholder={isAuth ? `eg. "users"` : `eg. "posts"`}
                     value={collection.name}
+                    on:compositionend={(e) => {
+                        if (!e.data) {
+                            return
+                        }
+
+                        collection.name = CommonHelper.slugify(e.target.value);
+                        e.target.value = collection.name;
+                    }}
                     on:input={(e) => {
+                        if (e.isComposing) {
+                            return
+                        }
+
                         collection.name = CommonHelper.slugify(e.target.value);
                         e.target.value = collection.name;
                     }}

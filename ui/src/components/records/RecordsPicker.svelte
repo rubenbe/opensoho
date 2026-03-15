@@ -29,7 +29,7 @@
     let isLoadingSelected = false;
     let isReloadingRecord = {};
 
-    $: maxSelect = field?.maxSelect || null;
+    $: maxSelect = field?.maxSelect || 1;
 
     $: collectionId = field?.collectionId;
 
@@ -45,7 +45,7 @@
 
     $: canLoadMore = lastItemsCount == batchSize;
 
-    $: canSelectMore = maxSelect <= 0 || maxSelect > selected.length;
+    $: canSelectMore = maxSelect > selected.length;
 
     export function show() {
         filter = "";
@@ -98,7 +98,7 @@
                 ApiClient.collection(collectionId).getFullList({
                     batch: batchSize,
                     filter: filters.join("||"),
-                    fields: "*:excerpt(200)",
+                    fields: CommonHelper.getExcerptCollectionFieldsList(collection),
                     expand: getExpand(),
                     requestKey: null,
                 }),
@@ -162,7 +162,7 @@
             const result = await ApiClient.collection(collectionId).getList(page, batchSize, {
                 filter: CommonHelper.normalizeSearchFilter(filter, fallbackSearchFields),
                 sort: sort,
-                fields: "*:excerpt(200)",
+                fields: CommonHelper.getExcerptCollectionFieldsList(collection),
                 skipTotal: 1,
                 expand: getExpand(),
                 requestKey: uniqueId + "loadList",
@@ -190,7 +190,7 @@
 
         try {
             const reloaded = await ApiClient.collection(collectionId).getOne(record.id, {
-                fields: "*:excerpt(200)",
+                fields: CommonHelper.getExcerptCollectionFieldsList(collection),
                 expand: getExpand(),
                 requestKey: uniqueId + "reload" + record.id,
             });

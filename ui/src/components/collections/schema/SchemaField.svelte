@@ -70,6 +70,18 @@
         }
     }
 
+    function onFieldRename(input) {
+        if (!input) {
+            return
+        }
+
+        const oldName = field.name;
+        field.name = CommonHelper.slugify(input.value);
+        input.value = field.name;
+
+        dispatch("rename", { oldName: oldName, newName: field.name });
+    }
+
     function restore() {
         field._toDelete = false;
 
@@ -82,10 +94,6 @@
             collapse();
             dispatch("duplicate");
         }
-    }
-
-    function normalizeFieldName(name) {
-        return CommonHelper.slugify(name);
     }
 
     function expand() {
@@ -177,13 +185,19 @@
                 spellcheck="false"
                 placeholder="Field name"
                 value={field.name}
-                title="System field"
-                on:input={(e) => {
-                    const oldName = field.name;
-                    field.name = normalizeFieldName(e.target.value);
-                    e.target.value = field.name;
+                on:compositionend={(e) => {
+                    if (!e.data) {
+                        return
+                    }
 
-                    dispatch("rename", { oldName: oldName, newName: field.name });
+                    onFieldRename(e.target)
+                }}
+                on:input={(e) => {
+                    if (e.isComposing) {
+                        return
+                    }
+
+                    onFieldRename(e.target)
                 }}
             />
         </Field>
@@ -228,7 +242,7 @@
             <div class="schema-field-options-footer">
                 <!-- @todo move to each field after the refactoring -->
                 {#if !field.primaryKey && field.type != "autodate" && (!isAuthCollection || !authHideNonemptyToggle.includes(field.name))}
-                    <Field class="form-field form-field-toggle" name="requried" let:uniqueId>
+                    <Field class="form-field form-field-toggle" name="required" let:uniqueId>
                         <input type="checkbox" id={uniqueId} bind:checked={field.required} />
                         <label for={uniqueId}>
                             <span class="txt">{requiredLabel}</span>

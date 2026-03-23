@@ -570,11 +570,16 @@ func generateWifiConfig(wifirecord WifiRecord, wifiid int, radio uint, app core.
 	rDeadLine := max(1000, wifi.GetInt("ieee80211r_reassoc_deadline"))
 	dtim := maxInt(1, wifi.GetInt("dtim_period"))
 
+	disabled := 0
+	if !wifi.GetBool("enabled") {
+		disabled = 1
+	}
+
 	return fmt.Sprintf(`
 config wifi-iface '%s'
         option device 'radio%d'
         option network '%s'
-        option disabled '0'
+        option disabled '%d'
         option mode 'ap'
         option ssid '%s'
         option encryption '%s'
@@ -594,7 +599,7 @@ config wifi-iface '%s'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
 %s%s`,
-			ifaceName, radio, vlanName,
+			ifaceName, radio, vlanName, disabled,
 			ssid, encryption, key,
 			wifi.GetInt("hidden"),
 			wifi.GetInt("isolate_clients"),

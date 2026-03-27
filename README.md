@@ -30,6 +30,14 @@ The following versions are tested
 * OpenWRT 25.12.x DSA (beta support)
 
 # Getting Started with OpenSOHO
+## Overview
+Setting up OpenSOHO requires a few simple steps, each detailed in the sections below:
+
+* Install OpenSOHO on your server.
+* Install the OpenWisp packages on your OpenWRT devices.
+* Configure OpenWisp on each of your OpenWRT devices to connect to OpenSOHO.
+* Start configuring in OpenSOHO!
+
 ## Install OpenSOHO
 
 * Download the latest OpenSOHO release (or use a docker container)

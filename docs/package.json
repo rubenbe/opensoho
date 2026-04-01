@@ -1,0 +1,9 @@
+{
+  "name": "opensoho-docs",
+  "version": "0.0.1",
+  "private": true,
+  "devDependencies": {
+    "autoprefixer": "^10.4.16",
+    "postcss-cli": "^11.0.0"
+  }
+}

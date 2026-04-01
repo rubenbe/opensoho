@@ -1,0 +1,52 @@
+name: Deploy Docs
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "docs/**"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # needed for .Lastmod / git info
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Setup Hugo
+        uses: peaceiris/actions-hugo@v3
+        with:
+          hugo-version: "0.128.2"
+          extended: true
+
+      - name: Install Node dependencies
+        working-directory: docs
+        run: npm install
+
+      - name: Build
+        working-directory: docs
+        run: |
+          hugo mod tidy
+          hugo --minify
+
+      - name: Deploy to opensoho.github.io
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          personal_token: ${{ secrets.PAGES_DEPLOY_TOKEN }}
+          external_repository: opensoho/opensoho.github.io
+          publish_branch: main
+          publish_dir: docs/public
+          user_name: "github-actions[bot]"
+          user_email: "github-actions[bot]@users.noreply.github.com"
+          commit_message: "docs: deploy from ${{ github.sha }}"

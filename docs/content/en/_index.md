@@ -3,7 +3,7 @@ title: "OpenSOHO"
 linkTitle: "OpenSOHO"
 ---
 
-{{< blocks/cover title="OpenSOHO" image_anchor="top" height="full" color="primary" >}}
+{{< blocks/cover title="OpenSOHO" image_anchor="top" height="min" color="primary" >}}
 <a class="btn btn-lg btn-primary me-3 mb-4" href="/docs/">
   Get Started <i class="fas fa-arrow-alt-circle-right ms-2"></i>
 </a>

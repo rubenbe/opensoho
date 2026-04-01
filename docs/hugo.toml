@@ -18,7 +18,7 @@ copyright = "OpenSOHO Authors"
 github_repo = "https://github.com/rubenbe/opensoho"
 github_project_repo = "https://github.com/rubenbe/opensoho"
 github_branch = "main"
-github_subdir = "docs/content/en"
+github_subdir = "docs"
 
 [params.ui]
 sidebar_menu_compact = true

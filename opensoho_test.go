@@ -2589,7 +2589,7 @@ func setupEthernetCollection(t *testing.T, app core.App, devicecollection *core.
 }
 
 func setupWifiCollection(t *testing.T, app core.App, vlancollection *core.Collection) *core.Collection {
-	wificollection := core.NewBaseCollection("wifi")
+	wificollection := core.NewBaseCollection("wifi_ssids")
 	wificollection.Fields.Add(&core.TextField{
 		Name:     "ssid",
 		Required: true,

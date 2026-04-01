@@ -81,6 +81,7 @@ export default class CommonHelper {
             "dhcp_leases": "DHCP leases",
             "ip_address": "IP address",
             "wifi_client_psk": "Wifi client PSK",
+            "wifi_ssids": "Wifi SSIDs",
         }
         const pattern = new RegExp("^"+ Object.keys(replacements).join("|"), "");
         const cleaned = value.replace(pattern, (matched) => replacements[matched.toLowerCase()]);
@@ -1286,7 +1287,7 @@ export default class CommonHelper {
                 return "ri-device-line"
 	    case "vlan":
 		return "ri-stack-line"
-	    case "wifi":
+	    case "wifi_ssids":
 		return "ri-home-wifi-line"
 	    case "dhcp_leases":
 		return "ri-home-office-line"

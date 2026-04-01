@@ -747,7 +747,7 @@ func getDeviceRecord(e *core.RequestEvent, key string) (*core.Record, error) {
 }
 
 func getWifiRecord(app core.App, ssid string) (*core.Record, error) {
-	return app.FindFirstRecordByData("wifi", "ssid", ssid)
+	return app.FindFirstRecordByData("wifi_ssids", "ssid", ssid)
 }
 
 // Returns true when:
@@ -1183,7 +1183,7 @@ func generateClientSteeringConfigInt(app core.App, wifi *core.Record, device *co
 func generateWifiRecordList(app core.App, device *core.Record) ([]*core.Record, error) {
 	wifis := device.GetStringSlice("wifis")
 	// Get the static Wifi configurations
-	wifirecords, err := app.FindRecordsByIds("wifi", wifis)
+	wifirecords, err := app.FindRecordsByIds("wifi_ssids", wifis)
 	if err != nil {
 		return []*core.Record{}, err
 	}
@@ -1476,7 +1476,7 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 		return e.BadRequestError(errormsg, ""), radios
 	}
 	interfacecollection, _ := app.FindCollectionByNameOrId("interfaces")
-	wificollection, _ := app.FindCollectionByNameOrId("wifi")
+	wificollection, _ := app.FindCollectionByNameOrId("wifi_ssids")
 
 	ethernetcollection, _ := app.FindCollectionByNameOrId("ethernet")
 	bridgescollection, _ := app.FindCollectionByNameOrId("bridges")

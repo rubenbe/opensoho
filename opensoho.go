@@ -694,7 +694,7 @@ func generateLedConfigs(leds []*core.Record) string {
 func isWifiEnabledOnBand(wifi WifiRecord, band string, device *core.Record, app core.App) bool {
 	record, err := app.FindFirstRecordByFilter(
 		"wifi_aps",
-		"device = {:device} && wifi = {:wifi}",
+		"device ~ {:device} && wifi ~ {:wifi}",
 		dbx.Params{"device": device.Id},
 		dbx.Params{"wifi": wifi.Record.Id},
 	)
@@ -1211,9 +1211,31 @@ func generateClientSteeringConfigInt(app core.App, wifi *core.Record, device *co
 }
 
 func generateWifiRecordList(app core.App, device *core.Record) ([]*core.Record, error) {
-	wifis := device.GetStringSlice("wifis")
+	// Find all wifi_aps records for this device
+	wifiApRecords, err := app.FindRecordsByFilter(
+		"wifi_aps",
+		"device ~ {:device}",
+		"", 0, 0,
+		dbx.Params{"device": device.Id},
+	)
+	if err != nil {
+		return []*core.Record{}, err
+	}
+
+	// Collect unique wifi SSID IDs across all matching wifi_aps records
+	wifiIDSet := map[string]struct{}{}
+	for _, apRecord := range wifiApRecords {
+		for _, wifiID := range apRecord.GetStringSlice("wifi") {
+			wifiIDSet[wifiID] = struct{}{}
+		}
+	}
+	wifiIDs := make([]string, 0, len(wifiIDSet))
+	for id := range wifiIDSet {
+		wifiIDs = append(wifiIDs, id)
+	}
+
 	// Get the static Wifi configurations
-	wifirecords, err := app.FindRecordsByIds("wifi_ssids", wifis)
+	wifirecords, err := app.FindRecordsByIds("wifi_ssids", wifiIDs)
 	if err != nil {
 		return []*core.Record{}, err
 	}
@@ -1252,8 +1274,6 @@ func generateDeviceConfig(app core.App, record *core.Record) ([]byte, string, er
 	if len(systemconfig) > 0 {
 		configfiles["etc/config/system"] = systemconfig
 	}
-	fmt.Println("wifis")
-	fmt.Println(record.Get("wifis"))
 	numradios := uint(record.GetInt("numradios"))
 	fmt.Printf("numradios %d\n", numradios)
 	{

@@ -2934,6 +2934,7 @@ func TestGenerateWifiRecordList(t *testing.T) {
 	clientcollection := setupClientsCollection(t, app)
 	devicecollection := setupDeviceCollection(t, app, wificollection)
 	clientsteeringcollection := setupClientSteeringCollection(t, app, clientcollection, devicecollection, wificollection)
+	wifiapscollection := setupWifiApsCollection(t, app, devicecollection, wificollection)
 
 	// Add a vlan
 	v := core.NewRecord(vlancollection)
@@ -2993,8 +2994,6 @@ func TestGenerateWifiRecordList(t *testing.T) {
 	d1 := core.NewRecord(devicecollection)
 	d1.Set("name", "the_device1")
 	d1.Set("health_status", "healthy")
-	// Configure the wifis in the "wrong" order too
-	d1.Set("wifis", []string{w2.Id, w1.Id})
 	err = app.Save(d1)
 	assert.Equal(t, nil, err)
 
@@ -3002,9 +3001,23 @@ func TestGenerateWifiRecordList(t *testing.T) {
 	d2 := core.NewRecord(devicecollection)
 	d2.Set("name", "the_device2")
 	d2.Set("health_status", "healthy")
-	// Only add wifi 2 here, to test w1 is added after w2 for client steering
-	d2.Set("wifis", []string{w2.Id})
 	err = app.Save(d2)
+	assert.Equal(t, nil, err)
+
+	// w2 is shared across both devices in a single wifi_aps record
+	ap1 := core.NewRecord(wifiapscollection)
+	ap1.Set("device", []string{d1.Id, d2.Id})
+	ap1.Set("wifi", w2.Id)
+	ap1.Set("band", []string{"2.4", "5"})
+	err = app.Save(ap1)
+	assert.Equal(t, nil, err)
+
+	// w1 is only on d1
+	ap2 := core.NewRecord(wifiapscollection)
+	ap2.Set("device", []string{d1.Id})
+	ap2.Set("wifi", w1.Id)
+	ap2.Set("band", []string{"2.4", "5"})
+	err = app.Save(ap2)
 	assert.Equal(t, nil, err)
 
 	wifilist1, err := generateWifiRecordList(app, d1)
@@ -3099,7 +3112,6 @@ func TestGenerateWifiConfig(t *testing.T) {
 	d := core.NewRecord(devicecollection)
 	d.Set("name", "the_device1")
 	d.Set("health_status", "healthy")
-	d.Set("wifis", w.Id)
 	err = app.Save(d)
 	assert.Equal(t, nil, err)
 
@@ -3107,7 +3119,6 @@ func TestGenerateWifiConfig(t *testing.T) {
 	d2 := core.NewRecord(devicecollection)
 	d2.Set("name", "the_device2")
 	d2.Set("health_status", "healthy")
-	d2.Set("wifis", w.Id)
 	err = app.Save(d2)
 	assert.Equal(t, nil, err)
 
@@ -3664,7 +3675,6 @@ func TestSsidClientSteering(t *testing.T) {
 	d1.Id = "somethindevice1"
 	d1.Set("name", "the_device1")
 	d1.Set("health_status", "healthy")
-	d1.Set("wifis", w1.Id)
 	err = app.Save(d1)
 	assert.Equal(t, nil, err)
 
@@ -3673,7 +3683,6 @@ func TestSsidClientSteering(t *testing.T) {
 	d2.Id = "somethindevice2"
 	d2.Set("name", "the_device2")
 	d2.Set("health_status", "unhealthy")
-	d2.Set("wifis", w1.Id)
 	err = app.Save(d2)
 	assert.Equal(t, nil, err)
 
@@ -3682,7 +3691,6 @@ func TestSsidClientSteering(t *testing.T) {
 	d3.Id = "somethindevice3"
 	d3.Set("name", "the_device3")
 	d3.Set("health_status", "healthy")
-	d3.Set("wifis", []string{w1.Id, w2.Id})
 	err = app.Save(d3)
 	assert.Equal(t, nil, err)
 
@@ -3876,7 +3884,6 @@ func TestMacClientSteering(t *testing.T) {
 	d1.Id = "somethindevice1"
 	d1.Set("name", "the_device1")
 	d1.Set("health_status", "healthy")
-	d1.Set("wifis", w1.Id)
 	err = app.Save(d1)
 	assert.Equal(t, nil, err)
 
@@ -3885,7 +3892,6 @@ func TestMacClientSteering(t *testing.T) {
 	d2.Id = "somethindevice2"
 	d2.Set("name", "the_device2")
 	d2.Set("health_status", "unhealthy")
-	d2.Set("wifis", w1.Id)
 	err = app.Save(d2)
 	assert.Equal(t, nil, err)
 
@@ -3894,7 +3900,6 @@ func TestMacClientSteering(t *testing.T) {
 	d3.Id = "somethindevice3"
 	d3.Set("name", "the_device3")
 	d3.Set("health_status", "healthy")
-	d3.Set("wifis", []string{w1.Id, w2.Id})
 	err = app.Save(d3)
 	assert.Equal(t, nil, err)
 
@@ -4359,7 +4364,7 @@ func setupWifiApsCollection(t *testing.T, app core.App, devicecollection *core.C
 	col.Fields.Add(&core.RelationField{
 		Name:          "device",
 		Required:      false,
-		MaxSelect:     1,
+		MaxSelect:     99,
 		CascadeDelete: false,
 		CollectionId:  devicecollection.Id,
 	})

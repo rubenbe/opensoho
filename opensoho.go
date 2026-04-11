@@ -691,12 +691,42 @@ func generateLedConfigs(leds []*core.Record) string {
 	return output
 }
 
+func isWifiEnabledOnBand(wifi WifiRecord, band string, device *core.Record, app core.App) bool {
+	record, err := app.FindFirstRecordByFilter(
+		"wifi_aps",
+		"device = {:device} && wifi = {:wifi}",
+		dbx.Params{"device": device.Id},
+		dbx.Params{"wifi": wifi.Record.Id},
+	)
+	if err != nil {
+		return false
+	}
+	for _, b := range record.GetStringSlice("band") {
+		if b == band {
+			return true
+		}
+	}
+	return false
+}
+
 func generateWifiConfigs(wifis []WifiRecord, numradios uint, app core.App, device *core.Record) (string, bool) {
+	radios, _ := getRadiosForDevice(device, app)
 	output := ""
 	glob_has_vlan_config := false
 	for i, wifi := range wifis {
 		for j := range numradios {
 			fmt.Println(wifi)
+
+			var radio *core.Record
+			for _, r := range radios {
+				if r.GetInt("radio") == int(j) {
+					radio = r
+					break
+				}
+			}
+			if radio == nil || !isWifiEnabledOnBand(wifi, radio.GetString("band"), device, app) {
+				continue
+			}
 			config_output, has_vlan_config := generateWifiConfig(wifi, i, j, app, device)
 			output += config_output
 			glob_has_vlan_config = glob_has_vlan_config || has_vlan_config

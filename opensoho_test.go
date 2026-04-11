@@ -4353,3 +4353,88 @@ config wifi-station 'psk_somethingapsk03_0'
         option vid '300'
 `, generateHostApdPskForWifi(app, w2, "wifi_2"))
 }
+
+func setupWifiApsCollection(t *testing.T, app core.App, devicecollection *core.Collection, wificollection *core.Collection) *core.Collection {
+	col := core.NewBaseCollection("wifi_aps")
+	col.Fields.Add(&core.RelationField{
+		Name:          "device",
+		Required:      false,
+		MaxSelect:     1,
+		CascadeDelete: false,
+		CollectionId:  devicecollection.Id,
+	})
+	col.Fields.Add(&core.RelationField{
+		Name:          "wifi",
+		Required:      false,
+		MaxSelect:     1,
+		CascadeDelete: false,
+		CollectionId:  wificollection.Id,
+	})
+	col.Fields.Add(&core.SelectField{
+		Name:      "band",
+		Required:  false,
+		MaxSelect: 4,
+		Values:    []string{"2.4", "5", "6", "60"},
+	})
+	err := app.Save(col)
+	assert.Equal(t, nil, err)
+	return col
+}
+
+func TestIsWifiEnabledOnBand(t *testing.T) {
+	app, err := tests.NewTestApp()
+	assert.Nil(t, err)
+	defer app.Cleanup()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	wifiapscollection := setupWifiApsCollection(t, app, devicecollection, wificollection)
+
+	// Add a device
+	device := core.NewRecord(devicecollection)
+	device.Set("name", "test_device")
+	device.Set("health_status", "healthy")
+	err = app.Save(device)
+	assert.Nil(t, err)
+
+	// Add a wifi record
+	w := core.NewRecord(wificollection)
+	w.Set("ssid", "test_ssid")
+	w.Set("key", "test_key")
+	w.Set("encryption", "psk2")
+	w.Set("ieee80211r", true)
+	w.Set("enabled", true)
+	err = app.Save(w)
+	assert.Nil(t, err)
+	wr := WifiRecord{Record: w}
+
+	// Add another wifi record (no wifi_aps entry)
+	w2 := core.NewRecord(wificollection)
+	w2.Set("ssid", "other_ssid")
+	w2.Set("key", "other_key")
+	w2.Set("encryption", "psk2")
+	w2.Set("ieee80211r", true)
+	w2.Set("enabled", true)
+	err = app.Save(w2)
+	assert.Nil(t, err)
+	wr2 := WifiRecord{Record: w2}
+
+	// Add a wifi_aps record enabling the wifi on 2.4 and 5
+	ap := core.NewRecord(wifiapscollection)
+	ap.Set("device", device.Id)
+	ap.Set("wifi", w.Id)
+	ap.Set("band", []string{"2.4", "5"})
+	err = app.Save(ap)
+	assert.Nil(t, err)
+
+	// Returns true when band matches
+	assert.True(t, isWifiEnabledOnBand(wr, "2.4", device, app))
+	assert.True(t, isWifiEnabledOnBand(wr, "5", device, app))
+
+	// Returns false when band is not in the list
+	assert.False(t, isWifiEnabledOnBand(wr, "6", device, app))
+
+	// Returns false when no wifi_aps record exists for the wifi
+	assert.False(t, isWifiEnabledOnBand(wr2, "2.4", device, app))
+}

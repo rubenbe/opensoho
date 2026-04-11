@@ -4438,3 +4438,51 @@ func TestIsWifiEnabledOnBand(t *testing.T) {
 	// Returns false when no wifi_aps record exists for the wifi
 	assert.False(t, isWifiEnabledOnBand(wr2, "2.4", device, app))
 }
+
+func TestGenerateWifiConfigsRadioNotInCollection(t *testing.T) {
+	app, err := tests.NewTestApp()
+	assert.Nil(t, err)
+	defer app.Cleanup()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	clientcollection := setupClientsCollection(t, app)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	setupClientSteeringCollection(t, app, clientcollection, devicecollection, wificollection)
+	setupRadioCollection(t, app, devicecollection)
+	wifiapscollection := setupWifiApsCollection(t, app, devicecollection, wificollection)
+
+	// Add a device with 1 radio
+	device := core.NewRecord(devicecollection)
+	device.Set("name", "test_device")
+	device.Set("health_status", "healthy")
+	device.Set("numradios", 1)
+	err = app.Save(device)
+	assert.Nil(t, err)
+
+	// Add a wifi record
+	w := core.NewRecord(wificollection)
+	w.Set("ssid", "test_ssid")
+	w.Set("key", "test_key")
+	w.Set("encryption", "psk2")
+	w.Set("ieee80211r", true)
+	w.Set("enabled", true)
+	err = app.Save(w)
+	assert.Nil(t, err)
+	wr := WifiRecord{Record: w}
+
+	// Add a wifi_aps record enabling the wifi on 2.4
+	ap := core.NewRecord(wifiapscollection)
+	ap.Set("device", device.Id)
+	ap.Set("wifi", w.Id)
+	ap.Set("band", []string{"2.4"})
+	err = app.Save(ap)
+	assert.Nil(t, err)
+
+	// No radio records exist in the radios collection for this device.
+	// generateWifiConfigs should still produce output for radio 0 because
+	// the band check is skipped when no radio record is found.
+	output, _ := generateWifiConfigs([]WifiRecord{wr}, 1, app, device)
+	assert.NotEmpty(t, output)
+	assert.Contains(t, output, "wifi_0_radio0")
+}

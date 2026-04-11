@@ -724,7 +724,7 @@ func generateWifiConfigs(wifis []WifiRecord, numradios uint, app core.App, devic
 					break
 				}
 			}
-			if radio == nil || !isWifiEnabledOnBand(wifi, radio.GetString("band"), device, app) {
+			if radio != nil && !isWifiEnabledOnBand(wifi, radio.GetString("band"), device, app) {
 				continue
 			}
 			config_output, has_vlan_config := generateWifiConfig(wifi, i, j, app, device)

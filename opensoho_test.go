@@ -4371,7 +4371,7 @@ func setupWifiApsCollection(t *testing.T, app core.App, devicecollection *core.C
 	col.Fields.Add(&core.RelationField{
 		Name:          "wifi",
 		Required:      false,
-		MaxSelect:     1,
+		MaxSelect:     99,
 		CascadeDelete: false,
 		CollectionId:  wificollection.Id,
 	})
@@ -4442,6 +4442,51 @@ func TestIsWifiEnabledOnBand(t *testing.T) {
 
 	// Returns false when no wifi_aps record exists for the wifi
 	assert.False(t, isWifiEnabledOnBand(wr2, "2.4", device, app))
+
+	// Multiple devices + multiple SSIDs in one wifi_aps record
+	device2 := core.NewRecord(devicecollection)
+	device2.Set("name", "test_device2")
+	device2.Set("health_status", "healthy")
+	err = app.Save(device2)
+	assert.Nil(t, err)
+
+	device3 := core.NewRecord(devicecollection)
+	device3.Set("name", "test_device3")
+	device3.Set("health_status", "healthy")
+	err = app.Save(device3)
+	assert.Nil(t, err)
+
+	w3 := core.NewRecord(wificollection)
+	w3.Set("ssid", "shared_ssid")
+	w3.Set("key", "shared_key")
+	w3.Set("encryption", "psk2")
+	w3.Set("ieee80211r", true)
+	w3.Set("enabled", true)
+	err = app.Save(w3)
+	assert.Nil(t, err)
+	wr3 := WifiRecord{Record: w3}
+
+	// One record covers two devices and two SSIDs on band 2.4 only
+	ap2 := core.NewRecord(wifiapscollection)
+	ap2.Set("device", []string{device2.Id, device3.Id})
+	ap2.Set("wifi", []string{w2.Id, w3.Id})
+	ap2.Set("band", []string{"2.4"})
+	err = app.Save(ap2)
+	assert.Nil(t, err)
+
+	// Both devices can see both SSIDs on 2.4
+	assert.True(t, isWifiEnabledOnBand(wr2, "2.4", device2, app))
+	assert.True(t, isWifiEnabledOnBand(wr3, "2.4", device2, app))
+	assert.True(t, isWifiEnabledOnBand(wr2, "2.4", device3, app))
+	assert.True(t, isWifiEnabledOnBand(wr3, "2.4", device3, app))
+
+	// Band 5 is not in the record
+	assert.False(t, isWifiEnabledOnBand(wr2, "5", device2, app))
+	assert.False(t, isWifiEnabledOnBand(wr3, "5", device3, app))
+
+	// device (the original one) is not in this record, so it cannot see w2/w3 via ap2
+	assert.False(t, isWifiEnabledOnBand(wr2, "2.4", device, app))
+	assert.False(t, isWifiEnabledOnBand(wr3, "2.4", device, app))
 }
 
 func TestGenerateWifiConfigsRadioNotInCollection(t *testing.T) {

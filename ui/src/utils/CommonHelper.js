@@ -1301,8 +1301,9 @@ export default class CommonHelper {
                 return "ri-lightbulb-line"
 	    case "client_steering":
                 return "ri-steering-2-line"
-            case "devices":
-		return "ri-router-line";
+        case "wifi_aps":
+        case "devices":
+		    return "ri-router-line";
 	    case "connected_clients":
 		return "ri-wifi-line";
 	    case "disconnected_clients":

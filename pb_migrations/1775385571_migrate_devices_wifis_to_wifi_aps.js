@@ -18,8 +18,8 @@ migrate((app) => {
   const devices = app.findAllRecords("devices")
 
   for (const device of devices) {
-    const aps = app.findRecordsByFilter("wifi_aps", "device = {:deviceId}", "", 0, 0, {"deviceId": device.id})
-    const wifiIds = [...new Set(aps.map(ap => ap.get("wifi")))]
+    const aps = app.findRecordsByFilter("wifi_aps", "device ~ {:deviceId}", "", 0, 0, {"deviceId": device.id})
+    const wifiIds = [...new Set(aps.flatMap(ap => ap.get("wifi")))]
     device.set("wifis", wifiIds)
     app.save(device)
   }

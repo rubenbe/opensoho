@@ -77,8 +77,8 @@ Enable monitoring — OpenSOHO deduces OpenWRT settings from monitoring data.
 1. Wait for OpenWRT devices to self-register using the shared secret.
 2. Set the device `Enabled` flag to `true`.
 3. Set `numradios` to the correct value (e.g., `2` for 2.4 + 5 GHz).
-4. Set up a Wifi access point (SSID + KEY).
-5. Attach the Wifi access point to a device.
+4. Set up a Wifi access point (SSID + KEY) via the `Wifi SSIDs`.
+5. Attach the Wifi access point to a device via the `Wifi APs`.
 
 OpenSOHO is accessible at `http://ipaddress:8090/_/`
 
@@ -96,7 +96,6 @@ Connected OpenWRT devices.
 * **Enabled/Disabled** — disables configuration updates while keeping monitoring active.
 * **Health status** — `healthy` means the device checked in within the last minute.
 * **Numradios** — number of radios on the device; must be set manually.
-* **Wifis** — select SSIDs to apply on this device.
 
 ### Radios
 

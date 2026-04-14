@@ -1521,6 +1521,40 @@ export default class CommonHelper {
     }
 
     /**
+     * Groups and orders collections according to a config array.
+     *
+     * Config format: [{name: "Group label", items: ["col_name", ...]}, ...]
+     * Groups and items within groups appear in config order.
+     * Collections not listed in the config are appended ungrouped at the end.
+     *
+     * @param  {Array} collections
+     * @param  {Array} config
+     * @return {Array} [{group: string, items: Array}]
+     */
+    static groupCollectionsByConfig(collections = [], config = []) {
+        const byName = Object.fromEntries(collections.map((c) => [c.name, c]));
+        const used = new Set();
+
+        const groups = config
+            .map(({ name, items }) => ({
+                group: name,
+                items: items.map((n) => byName[n]).filter(Boolean),
+            }))
+            .filter(({ items }) => items.length > 0);
+
+        for (const { items } of groups) {
+            for (const c of items) used.add(c.name);
+        }
+
+        const rest = collections.filter((c) => !used.has(c.name));
+        if (rest.length) {
+            groups.push({ group: "", items: rest });
+        }
+
+        return groups;
+    }
+
+    /**
      * Returns an expand list with the presentable nested relation fields (e.g. [base.sub1.sub11, base.sub2]).
      *
      * @param  {Object} baseRelField

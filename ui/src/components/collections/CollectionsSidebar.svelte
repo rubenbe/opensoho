@@ -2,6 +2,8 @@
     import PageSidebar from "@/components/base/PageSidebar.svelte";
     import CollectionSidebarItem from "@/components/collections/CollectionSidebarItem.svelte";
     import CollectionUpsertPanel from "@/components/collections/CollectionUpsertPanel.svelte";
+    import CommonHelper from "@/utils/CommonHelper";
+    import collectionsConfig from "@/collectionsConfig";
     import { hideControls } from "@/stores/app";
     import { activeCollection, collections, isCollectionsLoading } from "@/stores/collections";
 
@@ -37,6 +39,8 @@
     $: unpinnedRegularCollections = filtered.filter((c) => !c.system && !pinnedIds.includes(c.id));
 
     $: unpinnedSystemCollections = filtered.filter((c) => c.system && !pinnedIds.includes(c.id));
+
+    $: groupedRegular = CommonHelper.groupCollectionsByConfig(unpinnedRegularCollections, collectionsConfig);
 
     $: if ($activeCollection?.id && oldCollectionId != $activeCollection.id) {
         oldCollectionId = $activeCollection.id;
@@ -112,8 +116,13 @@
             {#if pinnedCollections.length}
                 <div class="sidebar-title">Others</div>
             {/if}
-            {#each unpinnedRegularCollections as collection (collection.id)}
-                <CollectionSidebarItem {collection} bind:pinnedIds />
+            {#each groupedRegular as { group, items } (group)}
+                {#if groupedRegular.length > 1}
+                    <div class="sidebar-title txt-xs">{group}</div>
+                {/if}
+                {#each items as collection (collection.id)}
+                    <CollectionSidebarItem {collection} bind:pinnedIds />
+                {/each}
             {/each}
         {/if}
 

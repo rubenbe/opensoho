@@ -676,7 +676,7 @@ func generateHostnameConfig(device *core.Record) string {
 	output := fmt.Sprintf(`
 config system 'system'
         option hostname '%[1]s'
-`, device.GetString("name"))
+`, normalizeHostname(device.GetString("name")))
 
 	return output
 }
@@ -2049,6 +2049,20 @@ table.table > thead > tr > th > div.col-header-content > span.txt
 		return e.Next()
 	})
 
+	app.OnRecordCreateRequest("devices").BindFunc(func(e *core.RecordRequestEvent) error {
+		if err := validateDevice(e.Record); err != nil {
+			return err
+		}
+		return e.Next()
+	})
+
+	app.OnRecordUpdateRequest("devices").BindFunc(func(e *core.RecordRequestEvent) error {
+		if err := validateDevice(e.Record); err != nil {
+			return err
+		}
+		return e.Next()
+	})
+
 	app.OnRecordUpdateRequest("settings").BindFunc(func(e *core.RecordRequestEvent) error {
 		err := validateSetting(e.Record)
 		if err != nil {
@@ -2073,6 +2087,17 @@ table.table > thead > tr > th > div.col-header-content > span.txt
 	if err := app.Start(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func validateDevice(record *core.Record) error {
+	errs := validation.Errors{}
+	if !isValidHostname(record.GetString("name")) {
+		errs["name"] = validation.NewError("validation_invalid_hostname", "Name cannot be converted into a valid hostname.")
+	}
+	if len(errs) > 0 {
+		return apis.NewBadRequestError("Failed to save record.", errs)
+	}
+	return nil
 }
 
 func validateSetting(record *core.Record) error {

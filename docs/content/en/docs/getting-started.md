@@ -96,6 +96,7 @@ Connected OpenWRT devices.
 * **Enabled/Disabled** — disables configuration updates while keeping monitoring active.
 * **Health status** — `healthy` means the device checked in within the last minute.
 * **Numradios** — number of radios on the device; must be set manually.
+* **Name** — a human-friendly label (e.g. `Office Router`). It is automatically rewritten to a valid hostname in the uci config (spaces and underscores become hyphens, Unicode is transliterated to ASCII (e.g. `büro` → `buro`).
 
 ### Radios
 

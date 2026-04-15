@@ -840,6 +840,42 @@ func TestValidateSetting(t *testing.T) {
 	assert.Error(t, validateSetting(s))
 }
 
+func TestValidateDevice(t *testing.T) {
+	app, err := tests.NewTestApp()
+	assert.Nil(t, err)
+	defer app.Cleanup()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+
+	d := core.NewRecord(devicecollection)
+
+	d.Set("name", "router")
+	assert.Nil(t, validateDevice(d))
+
+	d.Set("name", "my-device")
+	assert.Nil(t, validateDevice(d))
+
+	d.Set("name", "my_device")
+	assert.Nil(t, validateDevice(d))
+
+	d.Set("name", "My Device")
+	assert.Nil(t, validateDevice(d))
+
+	d.Set("name", "büro") // normalizes to "buro"
+	assert.Nil(t, validateDevice(d))
+
+	d.Set("name", "")
+	assert.Error(t, validateDevice(d))
+
+	d.Set("name", "---")
+	assert.Error(t, validateDevice(d))
+
+	d.Set("name", strings.Repeat("a", 64))
+	assert.Error(t, validateDevice(d))
+}
+
 // Test making a full map with the port tagging config
 func TestGenerateFullTaggingMap(t *testing.T) {
 	app, _ := tests.NewTestApp()
@@ -2205,19 +2241,20 @@ func TestGenerateHostnameConfig(t *testing.T) {
 	wificollection := setupWifiCollection(t, app, vlancollection)
 	devicecollection := setupDeviceCollection(t, app, wificollection)
 
-	// Add a device
-	d1 := core.NewRecord(devicecollection)
-	d1.Id = "a3qnbxklglw121g"
-	d1.Set("name", "the_device1")
-	d1.Set("health_status", "healthy")
-	d1.Set("config_status", "healthy")
-	d1.Set("key", "aaaabbbbccccddddaaaabbbbccccdddd")
-	err := app.Save(d1)
-	assert.Equal(t, nil, err)
-	assert.Equal(t, `
-config system 'system'
-        option hostname 'the_device1'
-`, generateHostnameConfig(d1))
+	d := core.NewRecord(devicecollection)
+
+	check := func(name, wantHostname string) {
+		t.Helper()
+		d.Set("name", name)
+		assert.Contains(t, generateHostnameConfig(d), "option hostname '"+wantHostname+"'")
+	}
+
+	check("the_device1", "the-device1") // underscores → hyphens
+	check("router", "router")
+	check("my-device", "my-device")
+	check("büro", "buro")           // Unicode → ASCII
+	check("My Router", "My-Router") // spaces → hyphens
+	check("-router-", "router")     // leading/trailing hyphens stripped
 }
 
 func TestGenerateOpenWispConfig(t *testing.T) {

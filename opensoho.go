@@ -1291,7 +1291,6 @@ func generateUsteerConfig(device *core.Record, app core.App) string {
 		return wifirecords[i].GetDateTime("created").Before(wifirecords[j].GetDateTime("created"))
 	})
 
-	numradios := uint(device.GetInt("numradios"))
 	radios, _ := getRadiosForDevice(device, app)
 
 	var interfaces []string
@@ -1299,18 +1298,11 @@ func generateUsteerConfig(device *core.Record, app core.App) string {
 		if !wifi.GetBool("ieee80211v_bss_transition") {
 			continue
 		}
-		for j := range numradios {
-			var radio *core.Record
-			for _, r := range radios {
-				if r.GetInt("radio") == int(j) {
-					radio = r
-					break
-				}
-			}
-			if radio != nil && !isWifiEnabledOnBand(WifiRecord{wifi}, radio.GetString("band"), device, app) {
+		for _, radio := range radios {
+			if !isWifiEnabledOnBand(WifiRecord{wifi}, radio.GetString("band"), device, app) {
 				continue
 			}
-			interfaces = append(interfaces, fmt.Sprintf("wifi_%d_radio%d", i, j))
+			interfaces = append(interfaces, fmt.Sprintf("wifi_%d_radio%d", i, radio.GetInt("radio")))
 		}
 	}
 

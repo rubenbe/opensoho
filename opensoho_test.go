@@ -2280,17 +2280,32 @@ func TestGenerateUsteerConfig(t *testing.T) {
 	vlancollection := setupVlanCollection(t, app)
 	wificollection := setupWifiCollection(t, app, vlancollection)
 	devicecollection := setupDeviceCollection(t, app, wificollection)
+	radiocollection := setupRadioCollection(t, app, devicecollection)
 	wifiapscollection := setupWifiApsCollection(t, app, devicecollection, wificollection)
 
 	device := core.NewRecord(devicecollection)
 	device.Set("name", "router")
 	device.Set("health_status", "healthy")
-	device.Set("numradios", 2)
 	err = app.Save(device)
 	assert.Nil(t, err)
 
 	// No BSS-transition SSIDs → empty
 	assert.Equal(t, "", generateUsteerConfig(device, app))
+
+	// Add two radios for the device
+	r0 := core.NewRecord(radiocollection)
+	r0.Set("device", device.Id)
+	r0.Set("radio", 0)
+	r0.Set("band", "2.4")
+	err = app.Save(r0)
+	assert.Nil(t, err)
+
+	r1 := core.NewRecord(radiocollection)
+	r1.Set("device", device.Id)
+	r1.Set("radio", 1)
+	r1.Set("band", "5")
+	err = app.Save(r1)
+	assert.Nil(t, err)
 
 	// Add a wifi SSID without BSS transition
 	wNoBss := core.NewRecord(wificollection)
@@ -2329,7 +2344,7 @@ func TestGenerateUsteerConfig(t *testing.T) {
 	err = app.Save(ap2)
 	assert.Nil(t, err)
 
-	// BSS-transition SSID is index 1 (sorted by created), on radios 0 and 1
+	// BSS-transition SSID is index 1 (sorted by created), enabled on both radios
 	assert.Equal(t, `
 config usteer
         list interfaces 'wifi_1_radio0'

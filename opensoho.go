@@ -1261,6 +1261,71 @@ func generateWifiRecordList(app core.App, device *core.Record) ([]*core.Record, 
 	return append(wifirecords, wifisteeringrecords...), err
 }
 
+func generateUsteerConfig(device *core.Record, app core.App) string {
+	wifiApRecords, err := app.FindRecordsByFilter(
+		"wifi_aps",
+		"device ~ {:device}",
+		"", 0, 0,
+		dbx.Params{"device": device.Id},
+	)
+	if err != nil {
+		return ""
+	}
+
+	wifiIDSet := map[string]struct{}{}
+	for _, ap := range wifiApRecords {
+		for _, id := range ap.GetStringSlice("wifi") {
+			wifiIDSet[id] = struct{}{}
+		}
+	}
+	wifiIDs := make([]string, 0, len(wifiIDSet))
+	for id := range wifiIDSet {
+		wifiIDs = append(wifiIDs, id)
+	}
+
+	wifirecords, err := app.FindRecordsByIds("wifi_ssids", wifiIDs)
+	if err != nil {
+		return ""
+	}
+	sort.Slice(wifirecords, func(i, j int) bool {
+		return wifirecords[i].GetDateTime("created").Before(wifirecords[j].GetDateTime("created"))
+	})
+
+	numradios := uint(device.GetInt("numradios"))
+	radios, _ := getRadiosForDevice(device, app)
+
+	var interfaces []string
+	for i, wifi := range wifirecords {
+		if !wifi.GetBool("ieee80211v_bss_transition") {
+			continue
+		}
+		for j := range numradios {
+			var radio *core.Record
+			for _, r := range radios {
+				if r.GetInt("radio") == int(j) {
+					radio = r
+					break
+				}
+			}
+			if radio != nil && !isWifiEnabledOnBand(WifiRecord{wifi}, radio.GetString("band"), device, app) {
+				continue
+			}
+			interfaces = append(interfaces, fmt.Sprintf("wifi_%d_radio%d", i, j))
+		}
+	}
+
+	if len(interfaces) == 0 {
+		return ""
+	}
+
+	output := "\nconfig usteer"
+	for _, iface := range interfaces {
+		output += fmt.Sprintf("\n        list interfaces '%s'", iface)
+	}
+	output += "\n"
+	return output
+}
+
 func generateDeviceConfig(app core.App, record *core.Record) ([]byte, string, error) {
 	configfiles := map[string]string{}
 	leds := record.Get("leds").([]string)
@@ -1348,6 +1413,12 @@ func generateDeviceConfig(app core.App, record *core.Record) ([]byte, string, er
 		fmt.Println(dhcpconfigs)
 		if len(dhcpconfigs) > 0 {
 			configfiles["etc/config/dhcp"] = dhcpconfigs
+		}
+	}
+	{
+		usteerconfig := generateUsteerConfig(record, app)
+		if len(usteerconfig) > 0 {
+			configfiles["etc/config/usteer"] = usteerconfig
 		}
 	}
 	configfiles["etc/hotplug.d/openwisp/opensoho"] = `#!/bin/sh

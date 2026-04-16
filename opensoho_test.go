@@ -2272,6 +2272,71 @@ config monitoring 'monitoring'
 `)
 }
 
+func TestGenerateUsteerConfig(t *testing.T) {
+	app, err := tests.NewTestApp()
+	assert.Nil(t, err)
+	defer app.Cleanup()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	wifiapscollection := setupWifiApsCollection(t, app, devicecollection, wificollection)
+
+	device := core.NewRecord(devicecollection)
+	device.Set("name", "router")
+	device.Set("health_status", "healthy")
+	device.Set("numradios", 2)
+	err = app.Save(device)
+	assert.Nil(t, err)
+
+	// No BSS-transition SSIDs → empty
+	assert.Equal(t, "", generateUsteerConfig(device, app))
+
+	// Add a wifi SSID without BSS transition
+	wNoBss := core.NewRecord(wificollection)
+	wNoBss.Set("ssid", "no-bss")
+	wNoBss.Set("key", "password1")
+	wNoBss.Set("encryption", "psk2+ccmp")
+	wNoBss.Set("ieee80211r", true)
+	wNoBss.Set("ieee80211v_bss_transition", false)
+	err = app.Save(wNoBss)
+	assert.Nil(t, err)
+
+	ap1 := core.NewRecord(wifiapscollection)
+	ap1.Set("device", []string{device.Id})
+	ap1.Set("wifi", wNoBss.Id)
+	ap1.Set("band", []string{"2.4", "5"})
+	err = app.Save(ap1)
+	assert.Nil(t, err)
+
+	assert.Equal(t, "", generateUsteerConfig(device, app))
+
+	// Add a wifi SSID with BSS transition
+	time.Sleep(1 * time.Millisecond) // ensure stable sort order
+	wBss := core.NewRecord(wificollection)
+	wBss.Set("ssid", "bss-enabled")
+	wBss.Set("key", "password2")
+	wBss.Set("encryption", "psk2+ccmp")
+	wBss.Set("ieee80211r", true)
+	wBss.Set("ieee80211v_bss_transition", true)
+	err = app.Save(wBss)
+	assert.Nil(t, err)
+
+	ap2 := core.NewRecord(wifiapscollection)
+	ap2.Set("device", []string{device.Id})
+	ap2.Set("wifi", wBss.Id)
+	ap2.Set("band", []string{"2.4", "5"})
+	err = app.Save(ap2)
+	assert.Nil(t, err)
+
+	// BSS-transition SSID is index 1 (sorted by created), on radios 0 and 1
+	assert.Equal(t, `
+config usteer
+        list interfaces 'wifi_1_radio0'
+        list interfaces 'wifi_1_radio1'
+`, generateUsteerConfig(device, app))
+}
+
 func TestSshKeyConfig1(t *testing.T) {
 	app, _ := tests.NewTestApp()
 	collection := setupSshKeyCollection(t, app)
@@ -2542,6 +2607,12 @@ func setupDeviceCollection(t *testing.T, app core.App, wificollection *core.Coll
 	devicecollection.Fields.Add(&core.TextField{
 		Name:     "system",
 		Required: false,
+	})
+	x := 0.0
+	devicecollection.Fields.Add(&core.NumberField{
+		Name:    "numradios",
+		Min:     &x,
+		OnlyInt: true,
 	})
 	err := app.Save(devicecollection)
 	assert.Equal(t, err, nil)

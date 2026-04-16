@@ -155,7 +155,7 @@ This view shows all wifi clients that are still connected within the previous 30
 
 ### Home Assistant integration
 
-OpenSOHO monitoring can be integrated with Home Assistant. [(More info)](doc/hass.md)
+OpenSOHO monitoring can be integrated with Home Assistant. [(More info)](https://opensoho.github.io/docs/home-assistant/)
 This REST API is designed for use with Home Assistant, but can also be integrated with other tools.
 
 ## Troubleshooting

@@ -2,6 +2,8 @@
     import { pageTitle } from "@/stores/app";
     import PageWrapper from "@/components/base/PageWrapper.svelte";
     import DeviceHealthChart from "@/components/dashboard/DeviceHealthChart.svelte";
+    import ClientsPerDeviceChart from "@/components/dashboard/ClientsPerDeviceChart.svelte";
+    import ClientsPerChannelChart from "@/components/dashboard/ClientsPerChannelChart.svelte";
 
     $pageTitle = "Dashboard";
 </script>
@@ -17,6 +19,14 @@
         <div class="dashboard-card">
             <h6 class="card-title">Device Health</h6>
             <DeviceHealthChart />
+        </div>
+        <div class="dashboard-card">
+            <h6 class="card-title">Clients per Device</h6>
+            <ClientsPerDeviceChart />
+        </div>
+        <div class="dashboard-card">
+            <h6 class="card-title">Clients per Channel</h6>
+            <ClientsPerChannelChart />
         </div>
     </div>
 </PageWrapper>

@@ -1,4 +1,5 @@
 import PageIndex from "@/components/PageIndex.svelte";
+import PageDashboard from "@/components/dashboard/PageDashboard.svelte";
 import PageLogs from "@/components/logs/PageLogs.svelte";
 import PageRecords from "@/components/records/PageRecords.svelte";
 import PageApplication from "@/components/settings/PageApplication.svelte";
@@ -38,6 +39,12 @@ const routes = {
         asyncComponent: () => import("@/components/superusers/PageSuperuserConfirmPasswordReset.svelte"),
         conditions: [(_) => !ApiClient.authStore.isValid],
         userData: { showAppSidebar: false },
+    }),
+
+    "/dashboard": wrap({
+        component: PageDashboard,
+        conditions: [(_) => ApiClient.authStore.isValid],
+        userData: { showAppSidebar: true },
     }),
 
     "/collections": wrap({

@@ -94,6 +94,16 @@
 
             <nav class="main-menu">
                 <a
+                    href="/dashboard"
+                    class="menu-item"
+                    aria-label="Dashboard"
+                    use:link
+                    use:active={{ path: "/dashboard", className: "current-route" }}
+                    use:tooltip={{ text: "Dashboard", position: "right" }}
+                >
+                    <i class="ri-dashboard-line" />
+                </a>
+                <a
                     href="/collections"
                     class="menu-item"
                     aria-label="Collections"

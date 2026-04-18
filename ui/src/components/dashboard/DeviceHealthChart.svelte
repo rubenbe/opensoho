@@ -3,6 +3,13 @@
     import { scale } from "svelte/transition";
     import ApiClient from "@/utils/ApiClient";
     import { Chart, ArcElement, PieController, Tooltip, Legend } from "chart.js";
+    import { push } from "svelte-spa-router";
+
+    const FILTERS = [
+        `health_status = "healthy"`,
+        `health_status = "unhealthy"`,
+        `health_status = ""`,
+    ];
 
     let chartCanvas;
     let chartInst;
@@ -53,6 +60,11 @@
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                onClick: (_, elements) => {
+                    if (!elements.length) return;
+                    const filter = FILTERS[elements[0].index];
+                    push(`/collections?collection=devices&filter=${encodeURIComponent(filter)}`);
+                },
                 plugins: {
                     legend: {
                         position: "bottom",
@@ -100,5 +112,8 @@
         left: 50%;
         transform: translate(-50%, -50%);
         z-index: 1;
+    }
+    .chart-canvas {
+        cursor: pointer;
     }
 </style>

@@ -3,6 +3,7 @@
     import { scale } from "svelte/transition";
     import ApiClient from "@/utils/ApiClient";
     import { Chart, ArcElement, PieController, Tooltip, Legend } from "chart.js";
+    import { push } from "svelte-spa-router";
 
     const PALETTE = [
         "#4e79a7", "#f28e2b", "#e15759", "#76b7b2", "#59a14f",
@@ -12,25 +13,30 @@
     let chartCanvas;
     let chartInst;
     let isLoading = false;
+    let deviceIds = [];
 
     async function load() {
         isLoading = true;
         try {
             const records = await ApiClient.collection("connected_clients").getFullList({
-                fields: "device,expand.device.name",
+                fields: "device,expand.device.name,expand.device.id",
                 expand: "device",
                 requestKey: "clients_per_device",
             });
 
             const counts = {};
+            const idByName = {};
             for (const r of records) {
                 const name = r.expand?.device?.name || r.device || "Unknown";
+                const id = r.expand?.device?.id || r.device || "";
                 counts[name] = (counts[name] || 0) + 1;
+                idByName[name] = id;
             }
 
             const labels = Object.keys(counts);
             const data = labels.map((l) => counts[l]);
             const colors = labels.map((_, i) => PALETTE[i % PALETTE.length]);
+            deviceIds = labels.map((l) => idByName[l]);
 
             if (chartInst) {
                 chartInst.data.labels = labels;
@@ -59,6 +65,13 @@
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                onClick: (_, elements) => {
+                    if (!elements.length) return;
+                    const id = deviceIds[elements[0].index];
+                    if (!id) return;
+                    const filter = `device = "${id}"`;
+                    push(`/collections?collection=connected_clients&filter=${encodeURIComponent(filter)}`);
+                },
                 plugins: {
                     legend: {
                         position: "bottom",
@@ -102,5 +115,8 @@
         left: 50%;
         transform: translate(-50%, -50%);
         z-index: 1;
+    }
+    .chart-canvas {
+        cursor: pointer;
     }
 </style>

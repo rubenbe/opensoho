@@ -3,6 +3,7 @@
     import { scale } from "svelte/transition";
     import ApiClient from "@/utils/ApiClient";
     import { Chart, ArcElement, PieController, Tooltip, Legend } from "chart.js";
+    import { push } from "svelte-spa-router";
 
     const PALETTE = [
         "#4e79a7", "#f28e2b", "#e15759", "#76b7b2", "#59a14f",
@@ -14,19 +15,32 @@
     let chart24;
     let chart5;
     let isLoading = false;
+    let channels24 = [];
+    let channels5 = [];
 
     function buildChartData(channelCounts) {
         const channels = Object.keys(channelCounts).map(Number).sort((a, b) => a - b);
         const labels = channels.map((c) => `Ch ${c}`);
         const data = channels.map((c) => channelCounts[c]);
         const colors = channels.map((_, i) => PALETTE[i % PALETTE.length]);
-        return { labels, data, colors };
+        return { channels, labels, data, colors };
     }
 
-    function makeChartOptions() {
+    function makeOnClick(band, getChannels) {
+        return (_, elements) => {
+            if (!elements.length) return;
+            const ch = getChannels()[elements[0].index];
+            if (ch == null) return;
+            const filter = `channel = ${ch} && band = "${band}"`;
+            push(`/collections?collection=connected_clients&filter=${encodeURIComponent(filter)}`);
+        };
+    }
+
+    function makeChartOptions(band, getChannels) {
         return {
             responsive: true,
             maintainAspectRatio: false,
+            onClick: makeOnClick(band, getChannels),
             plugins: {
                 legend: {
                     position: "bottom",
@@ -61,6 +75,7 @@
             }
 
             const d24 = buildChartData(counts24);
+            channels24 = d24.channels;
             if (chart24) {
                 chart24.data.labels = d24.labels;
                 chart24.data.datasets[0].data = d24.data;
@@ -69,6 +84,7 @@
             }
 
             const d5 = buildChartData(counts5);
+            channels5 = d5.channels;
             if (chart5) {
                 chart5.data.labels = d5.labels;
                 chart5.data.datasets[0].data = d5.data;
@@ -84,21 +100,21 @@
         }
     }
 
-    function initChart(canvas) {
+    function initChart(canvas, band, getChannels) {
         return new Chart(canvas, {
             type: "pie",
             data: {
                 labels: [],
                 datasets: [{ data: [], backgroundColor: [], borderWidth: 0 }],
             },
-            options: makeChartOptions(),
+            options: makeChartOptions(band, getChannels),
         });
     }
 
     onMount(() => {
         Chart.register(ArcElement, PieController, Tooltip, Legend);
-        chart24 = initChart(canvas24);
-        chart5 = initChart(canvas5);
+        chart24 = initChart(canvas24, "2.4", () => channels24);
+        chart5 = initChart(canvas5, "5", () => channels5);
 
         load();
 
@@ -156,6 +172,7 @@
         margin-bottom: 4px;
     }
     .chart-canvas {
+        cursor: pointer;
         flex: 1;
         min-height: 0;
     }

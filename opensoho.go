@@ -1310,11 +1310,10 @@ func generateUsteerConfig(device *core.Record, app core.App) string {
 		return ""
 	}
 
-	output := "\nconfig usteer"
+	output := "\nconfig usteer 'opensoho'\n"
 	for _, iface := range interfaces {
-		output += fmt.Sprintf("\n        list interfaces '%s'", iface)
+		output += fmt.Sprintf("        list interfaces '%s'\n", iface)
 	}
-	output += "\n"
 	return output
 }
 

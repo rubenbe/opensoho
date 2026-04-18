@@ -2346,7 +2346,7 @@ func TestGenerateUsteerConfig(t *testing.T) {
 
 	// BSS-transition SSID is index 1 (sorted by created), enabled on both radios
 	assert.Equal(t, `
-config usteer
+config usteer 'opensoho'
         list interfaces 'wifi_1_radio0'
         list interfaces 'wifi_1_radio1'
 `, generateUsteerConfig(device, app))

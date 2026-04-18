@@ -1291,28 +1291,37 @@ func generateUsteerConfig(device *core.Record, app core.App) string {
 		return wifirecords[i].GetDateTime("created").Before(wifirecords[j].GetDateTime("created"))
 	})
 
-	radios, _ := getRadiosForDevice(device, app)
-
-	var interfaces []string
-	for i, wifi := range wifirecords {
-		if !wifi.GetBool("ieee80211v_bss_transition") {
+	ssidSet := map[string]struct{}{}
+	for _, wifi := range wifirecords {
+		if !wifi.GetBool("usteer") {
 			continue
 		}
-		for _, radio := range radios {
-			if !isWifiEnabledOnBand(WifiRecord{wifi}, radio.GetString("band"), device, app) {
-				continue
-			}
-			interfaces = append(interfaces, fmt.Sprintf("wifi_%d_radio%d", i, radio.GetInt("radio")))
+		if name := wifi.GetString("ssid"); name != "" {
+			ssidSet[name] = struct{}{}
 		}
 	}
 
-	if len(interfaces) == 0 {
+	if len(ssidSet) == 0 {
 		return ""
 	}
 
-	output := "\nconfig usteer 'opensoho'\n"
-	for _, iface := range interfaces {
-		output += fmt.Sprintf("        list interfaces '%s'\n", iface)
+	ssids := make([]string, 0, len(ssidSet))
+	for name := range ssidSet {
+		ssids = append(ssids, name)
+	}
+	sort.Strings(ssids)
+
+	output := `
+config usteer 'usteer'
+        option debug_level '2'
+        option ipv6 '0'
+        option local_mode '0'
+        option network 'lan'
+        option syslog '1'
+
+`
+	for _, name := range ssids {
+		output += fmt.Sprintf("        list ssid_list '%s'\n", name)
 	}
 	return output
 }

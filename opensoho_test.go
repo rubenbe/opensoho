@@ -2280,7 +2280,6 @@ func TestGenerateUsteerConfig(t *testing.T) {
 	vlancollection := setupVlanCollection(t, app)
 	wificollection := setupWifiCollection(t, app, vlancollection)
 	devicecollection := setupDeviceCollection(t, app, wificollection)
-	radiocollection := setupRadioCollection(t, app, devicecollection)
 	wifiapscollection := setupWifiApsCollection(t, app, devicecollection, wificollection)
 
 	device := core.NewRecord(devicecollection)
@@ -2292,28 +2291,13 @@ func TestGenerateUsteerConfig(t *testing.T) {
 	// No BSS-transition SSIDs → empty
 	assert.Equal(t, "", generateUsteerConfig(device, app))
 
-	// Add two radios for the device
-	r0 := core.NewRecord(radiocollection)
-	r0.Set("device", device.Id)
-	r0.Set("radio", 0)
-	r0.Set("band", "2.4")
-	err = app.Save(r0)
-	assert.Nil(t, err)
-
-	r1 := core.NewRecord(radiocollection)
-	r1.Set("device", device.Id)
-	r1.Set("radio", 1)
-	r1.Set("band", "5")
-	err = app.Save(r1)
-	assert.Nil(t, err)
-
 	// Add a wifi SSID without BSS transition
 	wNoBss := core.NewRecord(wificollection)
 	wNoBss.Set("ssid", "no-bss")
 	wNoBss.Set("key", "password1")
 	wNoBss.Set("encryption", "psk2+ccmp")
 	wNoBss.Set("ieee80211r", true)
-	wNoBss.Set("ieee80211v_bss_transition", false)
+	wNoBss.Set("usteer", false)
 	err = app.Save(wNoBss)
 	assert.Nil(t, err)
 
@@ -2327,13 +2311,12 @@ func TestGenerateUsteerConfig(t *testing.T) {
 	assert.Equal(t, "", generateUsteerConfig(device, app))
 
 	// Add a wifi SSID with BSS transition
-	time.Sleep(1 * time.Millisecond) // ensure stable sort order
 	wBss := core.NewRecord(wificollection)
 	wBss.Set("ssid", "bss-enabled")
 	wBss.Set("key", "password2")
 	wBss.Set("encryption", "psk2+ccmp")
 	wBss.Set("ieee80211r", true)
-	wBss.Set("ieee80211v_bss_transition", true)
+	wBss.Set("usteer", true)
 	err = app.Save(wBss)
 	assert.Nil(t, err)
 
@@ -2344,11 +2327,15 @@ func TestGenerateUsteerConfig(t *testing.T) {
 	err = app.Save(ap2)
 	assert.Nil(t, err)
 
-	// BSS-transition SSID is index 1 (sorted by created), enabled on both radios
 	assert.Equal(t, `
-config usteer 'opensoho'
-        list interfaces 'wifi_1_radio0'
-        list interfaces 'wifi_1_radio1'
+config usteer 'usteer'
+        option debug_level '2'
+        option ipv6 '0'
+        option local_mode '0'
+        option network 'lan'
+        option syslog '1'
+
+        list ssid_list 'bss-enabled'
 `, generateUsteerConfig(device, app))
 }
 
@@ -2761,6 +2748,10 @@ func setupWifiCollection(t *testing.T, app core.App, vlancollection *core.Collec
 	})
 	wificollection.Fields.Add(&core.BoolField{
 		Name:     "enabled",
+		Required: false,
+	})
+	wificollection.Fields.Add(&core.BoolField{
+		Name:     "usteer",
 		Required: false,
 	})
 	wificollection.Fields.Add(&core.AutodateField{

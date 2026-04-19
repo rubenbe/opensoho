@@ -2270,18 +2270,6 @@ func generateWifiQr(wifi *core.Record) (*bytes.Buffer, error) {
 	return buf, nil
 }
 
-func generateHostApdPskConfigFilename(wifirecord *core.Record) string {
-	return fmt.Sprintf("etc/hostapd/%s.psk", wifirecord.GetString("ssid"))
-}
-
-//func generateHostApdPskConfigs(app core.App, wifistructs []WifiRecord) string {
-//	output := ""
-//	for _, wifistruct := range wifistructs {
-//		output += generateHostApdPskForWifi(app, wifistruct.record)
-//	}
-//	return output
-//}
-
 func generateHostApdPskForWifi(app core.App, wifi *core.Record, wifiname string) string {
 	records, err := app.FindAllRecords("wifi_client_psk",
 		dbx.NewExp("wifi = {:wifi}", dbx.Params{"wifi": wifi.Id}))

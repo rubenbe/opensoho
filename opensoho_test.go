@@ -877,6 +877,50 @@ func TestValidateDevice(t *testing.T) {
 	assert.Error(t, validateDevice(d))
 }
 
+func TestIsRandomizedMAC(t *testing.T) {
+	// Locally-administered (randomized) MACs: bit 1 of first octet is set.
+	// Second nibble of first byte is 2, 6, A, or E.
+	randomized := []string{
+		"02:00:00:00:00:00",
+		"06:aa:bb:cc:dd:ee",
+		"2e:1f:3a:4b:5c:6d",
+		"a2:b3:c4:d5:e6:f7",
+		"ee:ff:00:11:22:33",
+	}
+	for _, mac := range randomized {
+		assert.True(t, isRandomizedMAC(mac), "expected randomized: %s", mac)
+	}
+
+	// Globally-assigned MACs: bit 1 of first octet is clear.
+	global := []string{
+		"00:1A:2B:3C:4D:5E",
+		"ac:de:48:00:11:22",
+		"f4:db:e6:aa:bb:cc",
+		"00:00:0f:01:02:03",
+	}
+	for _, mac := range global {
+		assert.False(t, isRandomizedMAC(mac), "expected global: %s", mac)
+	}
+
+	// Invalid input returns false without panicking.
+	assert.False(t, isRandomizedMAC(""))
+	assert.False(t, isRandomizedMAC("invalid"))
+	assert.False(t, isRandomizedMAC("zz:00:00:00:00:00"))
+}
+
+func TestLookupVendor(t *testing.T) {
+	// Randomized MACs → no vendor lookup
+	assert.Equal(t, "randomized", lookupVendor("02:00:00:00:00:00"))
+	assert.Equal(t, "randomized", lookupVendor("a2:b3:c4:d5:e6:f7"))
+
+	// Known OUI: 00:00:0F is assigned to NeXT
+	vendor := lookupVendor("00:00:0f:01:02:03")
+	assert.NotEmpty(t, vendor)
+
+	// Broadcast/unresolvable OUI → empty string
+	assert.Equal(t, "", lookupVendor("f0:ff:ff:00:00:00"))
+}
+
 func TestValidateWifiUsteer(t *testing.T) {
 	app, err := tests.NewTestApp()
 	assert.Nil(t, err)

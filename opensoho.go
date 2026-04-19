@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/endobit/oui"
 	"github.com/go-ozzo/ozzo-validation/v4"
 	"github.com/google/uuid"
 	"github.com/pocketbase/dbx"
@@ -129,6 +130,25 @@ func frequencyToBand(frequency int) string {
 	default:
 		return "unknown"
 	}
+}
+
+func isRandomizedMAC(mac string) bool {
+	parts := strings.SplitN(mac, ":", 2)
+	if len(parts) == 0 {
+		return false
+	}
+	b, err := strconv.ParseUint(parts[0], 16, 8)
+	if err != nil {
+		return false
+	}
+	return b&0x02 != 0
+}
+
+func lookupVendor(mac string) string {
+	if isRandomizedMAC(mac) {
+		return "randomized"
+	}
+	return oui.Vendor(mac)
 }
 
 func maxInt(a int, b int) int {
@@ -1625,7 +1645,7 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 						cliententry = core.NewRecord(collection)
 					}
 					cliententry.Set("mac_address", client.MAC)
-					// TODO expand model
+					cliententry.Set("vendor", lookupVendor(client.MAC))
 					cliententry.Set("connected_to_hostname", iface.Name)
 					cliententry.Set("signal", client.Signal)
 					cliententry.Set("ssid", iface.Wireless.SSID)

@@ -2134,6 +2134,20 @@ table.table > thead > tr > th > div.col-header-content > span.txt
 		return e.Next()
 	})
 
+	app.OnRecordCreateRequest("wifi_ssids").BindFunc(func(e *core.RecordRequestEvent) error {
+		if err := validateWifiUsteer(e.Record); err != nil {
+			return err
+		}
+		return e.Next()
+	})
+
+	app.OnRecordUpdateRequest("wifi_ssids").BindFunc(func(e *core.RecordRequestEvent) error {
+		if err := validateWifiUsteer(e.Record); err != nil {
+			return err
+		}
+		return e.Next()
+	})
+
 	app.OnRecordUpdateRequest("settings").BindFunc(func(e *core.RecordRequestEvent) error {
 		err := validateSetting(e.Record)
 		if err != nil {
@@ -2158,6 +2172,28 @@ table.table > thead > tr > th > div.col-header-content > span.txt
 	if err := app.Start(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func validateWifiUsteer(record *core.Record) error {
+	errs := validation.Errors{}
+	if record.GetBool("usteer") {
+		if !record.GetBool("ieee80211v_bss_transition") {
+			errs["ieee80211v_bss_transition"] = validation.NewError(
+				"validation_required_for_usteer",
+				"Must be enabled when usteer is enabled.",
+			)
+		}
+		if !record.GetBool("ieee80211k") {
+			errs["ieee80211k"] = validation.NewError(
+				"validation_required_for_usteer",
+				"Must be enabled when usteer is enabled.",
+			)
+		}
+	}
+	if len(errs) > 0 {
+		return apis.NewBadRequestError("Failed to save record.", errs)
+	}
+	return nil
 }
 
 func validateDevice(record *core.Record) error {

@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"github.com/liyue201/goqr"
 	"github.com/rubenbe/pocketbase/core"
 	"github.com/rubenbe/pocketbase/tests"
@@ -874,6 +875,68 @@ func TestValidateDevice(t *testing.T) {
 
 	d.Set("name", strings.Repeat("a", 64))
 	assert.Error(t, validateDevice(d))
+}
+
+func TestValidateWifiUsteer(t *testing.T) {
+	app, err := tests.NewTestApp()
+	assert.Nil(t, err)
+	defer app.Cleanup()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+
+	newWifi := func(usteer, bss, k bool) *core.Record {
+		r := core.NewRecord(wificollection)
+		r.Set("ssid", "test")
+		r.Set("key", "password")
+		r.Set("encryption", "psk2+ccmp")
+		r.Set("ieee80211r", true)
+		r.Set("usteer", usteer)
+		r.Set("ieee80211v_bss_transition", bss)
+		r.Set("ieee80211k", k)
+		return r
+	}
+
+	// usteer disabled — no prerequisites required
+	assert.Nil(t, validateWifiUsteer(newWifi(false, false, false)))
+
+	// usteer enabled with both prerequisites — valid
+	assert.Nil(t, validateWifiUsteer(newWifi(true, true, true)))
+
+	assertFieldErrors := func(err error, present []string, absent []string) {
+		assert.Error(t, err)
+		var apiErr *router.ApiError
+		assert.True(t, errors.As(err, &apiErr))
+		errs, ok := apiErr.RawData().(validation.Errors)
+		assert.True(t, ok)
+		for _, f := range present {
+			assert.Contains(t, errs, f)
+		}
+		for _, f := range absent {
+			assert.NotContains(t, errs, f)
+		}
+	}
+
+	// usteer enabled but ieee80211v_bss_transition missing — error on that field only
+	assertFieldErrors(
+		validateWifiUsteer(newWifi(true, false, true)),
+		[]string{"ieee80211v_bss_transition"},
+		[]string{"ieee80211k"},
+	)
+
+	// usteer enabled but ieee80211k missing — error on that field only
+	assertFieldErrors(
+		validateWifiUsteer(newWifi(true, true, false)),
+		[]string{"ieee80211k"},
+		[]string{"ieee80211v_bss_transition"},
+	)
+
+	// usteer enabled with both prerequisites missing — errors on both fields
+	assertFieldErrors(
+		validateWifiUsteer(newWifi(true, false, false)),
+		[]string{"ieee80211v_bss_transition", "ieee80211k"},
+		[]string{},
+	)
 }
 
 // Test making a full map with the port tagging config
@@ -2748,6 +2811,10 @@ func setupWifiCollection(t *testing.T, app core.App, vlancollection *core.Collec
 	})
 	wificollection.Fields.Add(&core.BoolField{
 		Name:     "enabled",
+		Required: false,
+	})
+	wificollection.Fields.Add(&core.BoolField{
+		Name:     "ieee80211k",
 		Required: false,
 	})
 	wificollection.Fields.Add(&core.BoolField{

@@ -110,6 +110,18 @@ It is highly recommended to enable monitoring, since OpenSOHO deduces a lot of t
 * Optionally leds can also be turned on or off (only static config for now).
 * Configuring radio frequencies is supported now. OpenSOHO reads the current radio config once and makes it available under the radios config. It can take a minute or two before the radio config appears (the configuration and the monitoring steps need some time to complete).
 
+## Dashboard
+
+OpenSOHO comes with a basic dashboard. It is accessible via the button in the leftmost sidebar, right under the OpenSOHO logo.
+
+<p align="center">
+  <a href="https://raw.githubusercontent.com/opensoho/assets/636c6966e5bb33f6ef1fc0a7b0188307ad6865b6/dashboard.png" target="_blank">
+    <img src="https://raw.githubusercontent.com/opensoho/assets/636c6966e5bb33f6ef1fc0a7b0188307ad6865b6/dashboard.png" width="70%" />
+  </a>
+</p>
+
+Please note that this is not intended as a replacement for more advanced graphing tools, it is and will be kept basic on purpose.
+
 ## Configure
 
 OpenSoho can now be accessed via http://ipaddress:8090/_/

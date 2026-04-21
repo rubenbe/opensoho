@@ -4,6 +4,7 @@
     import DeviceHealthChart from "@/components/dashboard/DeviceHealthChart.svelte";
     import ClientsPerDeviceChart from "@/components/dashboard/ClientsPerDeviceChart.svelte";
     import ClientsPerChannelChart from "@/components/dashboard/ClientsPerChannelChart.svelte";
+    import ClientSignalQualityChart from "@/components/dashboard/ClientSignalQualityChart.svelte";
 
     $pageTitle = "Dashboard";
 </script>
@@ -27,6 +28,10 @@
         <div class="dashboard-card">
             <h6 class="card-title">Clients per Channel</h6>
             <ClientsPerChannelChart />
+        </div>
+        <div class="dashboard-card">
+            <h6 class="card-title">Client Signal Quality</h6>
+            <ClientSignalQualityChart />
         </div>
     </div>
 </PageWrapper>

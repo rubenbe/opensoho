@@ -2436,11 +2436,18 @@ func TestGenerateUsteerConfig(t *testing.T) {
 
 	assert.Equal(t, `
 config usteer 'usteer'
+        option enabled '1'
+        option network 'lan'
         option debug_level '2'
         option ipv6 '0'
         option local_mode '0'
-        option network 'lan'
         option syslog '1'
+        option roam_trigger '-70'
+        option min_signal '-78'
+        option roam_delta '10'
+        option probe_steering '1'
+        option deny_assoc '1'
+        option band_steering '1'
 
         list ssid_list 'bss-enabled'
 `, generateUsteerConfig(device, app))

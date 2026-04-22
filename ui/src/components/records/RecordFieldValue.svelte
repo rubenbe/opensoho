@@ -19,14 +19,14 @@
     function customColor(record) {
         if(record.collectionId === "pbc_3745276689"){
             const color = CommonHelper.getNetworkColor(record?.name)
-            return "background-color: " + color + ";"
+            return "background-color: " + color + "; color: #1a1a24;"
         }
         return "";
     }
 </script>
 {#if field.id === "text1579384326" && record.collectionId === "pbc_3745276689"}
     <!-- VLAN name should have a color -->
-    <div class="label" style="background-color: {CommonHelper.getNetworkColor(rawValue)};">
+    <div class="label" style="background-color: {CommonHelper.getNetworkColor(rawValue)}; color: #1a1a24;">
         <div class="txt txt-ellipsis">{rawValue}</div>
     </div>
 {:else if field.primaryKey}

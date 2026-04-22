@@ -73,6 +73,33 @@
 }
 
 
+@media (prefers-color-scheme: dark) {
+    :root {
+        --txtPrimaryColor:  #e2e8ed;
+        --txtHintColor:     #8c9fac;
+        --txtDisabledColor: #4e5c64;
+
+        --primaryColor: #e2e8ed;
+
+        --bodyColor: #0f1117;
+
+        --baseColor:     #1a1f27;
+        --baseAlt1Color: #252c38;
+        --baseAlt2Color: #2e3744;
+        --baseAlt3Color: #38424f;
+        --baseAlt4Color: #495864;
+
+        --infoAltColor:    #1a3a5c;
+        --successAltColor: #0f3326;
+        --dangerAltColor:  #4a1520;
+        --warningAltColor: #4a2810;
+
+        --shadowColor:  rgba(0, 0, 0, 0.25);
+        --overlayColor: rgba(10, 20, 40, 0.5);
+    }
+}
+
+
 // Maps
 // ----
 $colorsMap: (

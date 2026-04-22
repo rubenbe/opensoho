@@ -12,6 +12,7 @@
     import { superuser } from "@/stores/superuser";
     import ApiClient from "@/utils/ApiClient";
     import CommonHelper from "@/utils/CommonHelper";
+    import { theme } from "@/stores/theme";
     import Router, { link, replace } from "svelte-spa-router";
     import active from "svelte-spa-router/active";
     import routes from "./routes";
@@ -148,6 +149,36 @@
                         {$superuser.email}
                     </div>
                     <hr />
+                    <div class="theme-toggle" role="group" aria-label="Color theme">
+                        <button
+                            type="button"
+                            class="theme-btn"
+                            class:active={$theme === "light"}
+                            aria-label="Light mode"
+                            on:click={() => theme.set("light")}
+                        >
+                            <i class="ri-sun-line" />
+                        </button>
+                        <button
+                            type="button"
+                            class="theme-btn"
+                            class:active={$theme === "auto"}
+                            aria-label="Follow browser"
+                            on:click={() => theme.set("auto")}
+                        >
+                            <i class="ri-contrast-2-line" />
+                        </button>
+                        <button
+                            type="button"
+                            class="theme-btn"
+                            class:active={$theme === "dark"}
+                            aria-label="Dark mode"
+                            on:click={() => theme.set("dark")}
+                        >
+                            <i class="ri-moon-line" />
+                        </button>
+                    </div>
+                    <hr />
                     <a
                         href="/collections?collection=_superusers"
                         class="dropdown-item closable"
@@ -191,5 +222,34 @@
         padding: 10px;
         max-width: 200px;
         color: var(--txtHintColor);
+    }
+    .theme-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        padding: 6px 10px;
+    }
+    .theme-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 30px;
+        height: 28px;
+        border: 0;
+        border-radius: var(--baseRadius);
+        background: none;
+        color: var(--txtHintColor);
+        cursor: pointer;
+        font-size: 16px;
+        transition: color var(--baseAnimationSpeed), background var(--baseAnimationSpeed);
+    }
+    .theme-btn:hover {
+        color: var(--txtPrimaryColor);
+        background: var(--baseAlt1Color);
+    }
+    .theme-btn.active {
+        color: var(--txtPrimaryColor);
+        background: var(--baseAlt2Color);
     }
 </style>

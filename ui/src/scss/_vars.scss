@@ -73,31 +73,62 @@
 }
 
 
-@media (prefers-color-scheme: dark) {
-    :root {
-        --txtPrimaryColor:  #e2e8ed;
-        --txtHintColor:     #8c9fac;
-        --txtDisabledColor: #4e5c64;
+@mixin dark-theme {
+    --txtPrimaryColor:  #e2e8ed;
+    --txtHintColor:     #8c9fac;
+    --txtDisabledColor: #4e5c64;
 
-        --primaryColor: #e2e8ed;
+    --primaryColor: #e2e8ed;
 
-        --bodyColor: #0f1117;
+    --bodyColor: #0f1117;
 
-        --baseColor:     #1a1f27;
-        --baseAlt1Color: #252c38;
-        --baseAlt2Color: #2e3744;
-        --baseAlt3Color: #38424f;
-        --baseAlt4Color: #495864;
+    --baseColor:     #1a1f27;
+    --baseAlt1Color: #252c38;
+    --baseAlt2Color: #2e3744;
+    --baseAlt3Color: #38424f;
+    --baseAlt4Color: #495864;
 
-        --infoAltColor:    #1a3a5c;
-        --successAltColor: #0f3326;
-        --dangerAltColor:  #4a1520;
-        --warningAltColor: #4a2810;
+    --infoAltColor:    #1a3a5c;
+    --successAltColor: #0f3326;
+    --dangerAltColor:  #4a1520;
+    --warningAltColor: #4a2810;
 
-        --shadowColor:  rgba(0, 0, 0, 0.25);
-        --overlayColor: rgba(10, 20, 40, 0.5);
-    }
+    --shadowColor:  rgba(0, 0, 0, 0.25);
+    --overlayColor: rgba(10, 20, 40, 0.5);
 }
+
+@mixin light-theme {
+    --txtPrimaryColor:  #1a1a24;
+    --txtHintColor:     #617079;
+    --txtDisabledColor: #a0a6ac;
+
+    --primaryColor: #1a1a24;
+
+    --bodyColor: #f8f9fa;
+
+    --baseColor:     #ffffff;
+    --baseAlt1Color: #e3e8ed;
+    --baseAlt2Color: #d7dde3;
+    --baseAlt3Color: #c9d0da;
+    --baseAlt4Color: #a5b0c0;
+
+    --infoAltColor:    #cee2f8;
+    --successAltColor: #c4eedc;
+    --dangerAltColor:  #f7cad2;
+    --warningAltColor: #ffd4b8;
+
+    --shadowColor:  rgba(0, 0, 0, 0.06);
+    --overlayColor: rgba(53, 71, 104, 0.28);
+}
+
+// auto: follow OS preference
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme]) { @include dark-theme; }
+}
+
+// explicit overrides
+html[data-theme="dark"]  { @include dark-theme; }
+html[data-theme="light"] { @include light-theme; }
 
 
 // Maps

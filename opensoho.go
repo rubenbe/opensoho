@@ -1041,6 +1041,11 @@ func generateInterfaceVlanConfigInt(app core.App, bridgeConfig *core.Record, vla
 		fmt.Printf("failed to expand: %v", errs)
 		return ""
 	}
+	bridgename := bridgeConfig.GetString("name")
+	if bridgename == "" {
+		// TODO Maybe we actually want this to be an error
+		bridgename = "br-lan"
+	}
 	//mode := "t"
 	intfmode := "\n        option proto 'none'"
 
@@ -1067,13 +1072,33 @@ func generateInterfaceVlanConfigInt(app core.App, bridgeConfig *core.Record, vla
 	// TODO add ip address?
 	return fmt.Sprintf(`
 config interface '%[1]s'
-        option device 'br-lan.%[2]d'%[4]s
+        option device '%[5]s.%[2]d'%[4]s
 
 config bridge-vlan 'bridge_vlan_%[2]d'
-        option device 'br-lan'
+        option device '%[5]s'
         option vlan '%[2]d'
-%[3]s`, vlanname, vlanid, generatePortTaggingConfig(app, taggingConfig), intfmode)
+%[3]s`, vlanname, vlanid, generatePortTaggingConfig(app, taggingConfig), intfmode, bridgename)
 }
+
+// findBridgeForDevice picks the bridge OpenSOHO should attach VLAN config to.
+// If the device has exactly one bridge, that one is used regardless of its
+// name (covers routers without WiFi where the bridge may be called 'switch'
+// or similar). Otherwise it falls back to the conventional 'br-lan'.
+func findBridgeForDevice(app core.App, device *core.Record) (*core.Record, error) {
+	bridges, err := app.FindRecordsByFilter("bridges",
+		"device = {:device}", "", 0, 0,
+		dbx.Params{"device": device.Id})
+	if err != nil {
+		return nil, err
+	}
+	if len(bridges) == 1 {
+		return bridges[0], nil
+	}
+	return app.FindFirstRecordByFilter("bridges",
+		"name = 'br-lan' && device = {:device}",
+		dbx.Params{"device": device.Id})
+}
+
 func generateInterfacesConfig(app core.App, device *core.Record) string {
 	if false == IsFeatureApplied(device, "vlan") {
 		return ""
@@ -1082,8 +1107,7 @@ func generateInterfacesConfig(app core.App, device *core.Record) string {
 		        option device 'br-lan'
 		`*/
 	}
-	bridgeConfig, err := app.FindFirstRecordByFilter("bridges",
-		"name = 'br-lan' && device = {:device}", dbx.Params{"device": device.Id})
+	bridgeConfig, err := findBridgeForDevice(app, device)
 	if err != nil {
 		fmt.Println("INTERFACES ERROR", err)
 		return ""

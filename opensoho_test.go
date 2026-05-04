@@ -1771,6 +1771,162 @@ config bridge-vlan 'bridge_vlan_123'
 `, generateInterfacesConfig(app, d1))
 }
 
+// Some routers have a bridge called "switch" instead of "br-lan"
+// With only one bridge present, it should be used regardless of its name.
+func TestInterfacesConfigSwitchFallback(t *testing.T) {
+	app, _ := tests.NewTestApp()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	interfacescollection := setupInterfacesCollection(t, app)
+	porttaggingcollection := setupPortTaggingCollection(t, app, vlancollection)
+	ethernetcollection := setupEthernetCollection(t, app, devicecollection, porttaggingcollection)
+	bridgecollection := setupBridgesCollection(t, app, devicecollection, interfacescollection, ethernetcollection)
+
+	d1 := core.NewRecord(devicecollection)
+	d1.Id = "somethindevice1"
+	d1.Set("name", "the_device1")
+	d1.Set("health_status", "healthy")
+	d1.Set("apply", []string{"vlan"})
+	d1.Set("ip_address", "8.8.8.8")
+	err := app.Save(d1)
+	assert.Equal(t, nil, err)
+
+	lan := core.NewRecord(vlancollection)
+	lan.Set("name", "lan")
+	lan.Set("number", "1000")
+	err = app.Save(lan)
+	assert.Equal(t, nil, err)
+
+	e1 := core.NewRecord(ethernetcollection)
+	e1.Id = "somethindevice1"
+	e1.Set("name", "lan1")
+	e1.Set("speed", "1000F")
+	err = app.Save(e1)
+	assert.Equal(t, nil, err)
+
+	// Only a 'switch' bridge exists, no 'br-lan'
+	b1 := core.NewRecord(bridgecollection)
+	b1.Set("device", d1.Id)
+	b1.Set("name", "switch")
+	b1.Set("ethernet", []string{e1.Id})
+	err = app.Save(b1)
+	assert.Equal(t, nil, err)
+
+	assert.Equal(t, `
+config interface 'lan'
+        option device 'switch.1000'
+
+config bridge-vlan 'bridge_vlan_1000'
+        option device 'switch'
+        option vlan '1000'
+        list ports 'lan1:u*'
+`, generateInterfacesConfig(app, d1))
+}
+
+// When multiple bridges exist, 'br-lan' should be chosen.
+func TestInterfacesConfigMultipleBridgesPicksBrLan(t *testing.T) {
+	app, _ := tests.NewTestApp()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	interfacescollection := setupInterfacesCollection(t, app)
+	porttaggingcollection := setupPortTaggingCollection(t, app, vlancollection)
+	ethernetcollection := setupEthernetCollection(t, app, devicecollection, porttaggingcollection)
+	bridgecollection := setupBridgesCollection(t, app, devicecollection, interfacescollection, ethernetcollection)
+
+	d1 := core.NewRecord(devicecollection)
+	d1.Id = "somethindevice1"
+	d1.Set("name", "the_device1")
+	d1.Set("health_status", "healthy")
+	d1.Set("apply", []string{"vlan"})
+	d1.Set("ip_address", "8.8.8.8")
+	err := app.Save(d1)
+	assert.Equal(t, nil, err)
+
+	lan := core.NewRecord(vlancollection)
+	lan.Set("name", "lan")
+	lan.Set("number", "1000")
+	err = app.Save(lan)
+	assert.Equal(t, nil, err)
+
+	e1 := core.NewRecord(ethernetcollection)
+	e1.Id = "somethindevice1"
+	e1.Set("name", "lan1")
+	e1.Set("speed", "1000F")
+	err = app.Save(e1)
+	assert.Equal(t, nil, err)
+
+	// A non-default bridge plus 'br-lan' — br-lan should win.
+	bOther := core.NewRecord(bridgecollection)
+	bOther.Set("device", d1.Id)
+	bOther.Set("name", "br-guest")
+	err = app.Save(bOther)
+	assert.Equal(t, nil, err)
+
+	bLan := core.NewRecord(bridgecollection)
+	bLan.Set("device", d1.Id)
+	bLan.Set("name", "br-lan")
+	bLan.Set("ethernet", []string{e1.Id})
+	err = app.Save(bLan)
+	assert.Equal(t, nil, err)
+
+	assert.Equal(t, `
+config interface 'lan'
+        option device 'br-lan.1000'
+
+config bridge-vlan 'bridge_vlan_1000'
+        option device 'br-lan'
+        option vlan '1000'
+        list ports 'lan1:u*'
+`, generateInterfacesConfig(app, d1))
+}
+
+// When multiple bridges exist and none is named 'br-lan', no network config
+// should be generated.
+func TestInterfacesConfigMultipleBridgesNoMatch(t *testing.T) {
+	app, _ := tests.NewTestApp()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	interfacescollection := setupInterfacesCollection(t, app)
+	porttaggingcollection := setupPortTaggingCollection(t, app, vlancollection)
+	ethernetcollection := setupEthernetCollection(t, app, devicecollection, porttaggingcollection)
+	bridgecollection := setupBridgesCollection(t, app, devicecollection, interfacescollection, ethernetcollection)
+
+	d1 := core.NewRecord(devicecollection)
+	d1.Id = "somethindevice1"
+	d1.Set("name", "the_device1")
+	d1.Set("health_status", "healthy")
+	d1.Set("apply", []string{"vlan"})
+	d1.Set("ip_address", "8.8.8.8")
+	err := app.Save(d1)
+	assert.Equal(t, nil, err)
+
+	lan := core.NewRecord(vlancollection)
+	lan.Set("name", "lan")
+	lan.Set("number", "1000")
+	err = app.Save(lan)
+	assert.Equal(t, nil, err)
+
+	b1 := core.NewRecord(bridgecollection)
+	b1.Set("device", d1.Id)
+	b1.Set("name", "br-custom1")
+	err = app.Save(b1)
+	assert.Equal(t, nil, err)
+
+	b2 := core.NewRecord(bridgecollection)
+	b2.Set("device", d1.Id)
+	b2.Set("name", "br-custom2")
+	err = app.Save(b2)
+	assert.Equal(t, nil, err)
+
+	assert.Equal(t, ``, generateInterfacesConfig(app, d1))
+}
+
 func TestUpdateMonitoring(t *testing.T) {
 	json := `
 {

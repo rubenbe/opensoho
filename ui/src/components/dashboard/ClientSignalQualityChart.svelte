@@ -25,7 +25,7 @@
     let chartInst;
     let isLoading = false;
 
-    async function load() {
+    export async function load() {
         isLoading = true;
         try {
             const records = await ApiClient.collection("connected_clients").getFullList({

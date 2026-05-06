@@ -2,11 +2,37 @@ import ApiClient from "@/utils/ApiClient";
 import CommonHelper from "@/utils/CommonHelper";
 import { get, writable } from "svelte/store";
 
+const LAST_COLLECTION_KEY = "lastSelectedCollection";
+
+export function getStoredCollectionName() {
+    try {
+        return localStorage.getItem(LAST_COLLECTION_KEY) || "";
+    } catch (_) {
+        return "";
+    }
+}
+
+function setStoredCollectionName(name) {
+    try {
+        if (name) {
+            localStorage.setItem(LAST_COLLECTION_KEY, name);
+        }
+    } catch (_) {
+        // ignore (e.g. private mode quota errors)
+    }
+}
+
 export const collections = writable([]);
 export const activeCollection = writable({});
 export const isCollectionsLoading = writable(false);
 export const protectedFilesCollectionsCache = writable({});
 export const scaffolds = writable({});
+
+activeCollection.subscribe((c) => {
+    if (c?.id && c?.name) {
+        setStoredCollectionName(c.name);
+    }
+});
 
 let notifyChannel;
 

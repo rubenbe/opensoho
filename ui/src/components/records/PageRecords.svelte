@@ -18,6 +18,7 @@
         activeCollection,
         changeActiveCollectionByIdOrName,
         collections,
+        getStoredCollectionName,
         isCollectionsLoading,
         loadCollections,
     } from "@/stores/collections";
@@ -32,7 +33,10 @@
     let recordsCount;
     let filter = initialQueryParams.get("filter") || "";
     let sort = initialQueryParams.get("sort") || "-@rowid";
-    let selectedCollectionIdOrName = initialQueryParams.get("collection") || $activeCollection?.id;
+    let selectedCollectionIdOrName =
+        initialQueryParams.get("collection") ||
+        getStoredCollectionName() ||
+        "devices";
     let totalCount = 0; // used to manully change the count without the need of reloading the recordsCount component
     let showCollectionsSidebar = true;
     let viewUpdateInterval;

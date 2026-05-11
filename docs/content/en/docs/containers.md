@@ -17,7 +17,7 @@ A custom container image can be built using the `Dockerfile` in the repository.
 
 ```yaml
 opensoho:
-  image: ghcr.io/opensoho/opensoho:v0.9.0
+  image: ghcr.io/opensoho/opensoho:latest
   container_name: opensoho
   command: serve --http 0.0.0.0:8090
   environment:

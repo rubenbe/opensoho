@@ -1,5 +1,9 @@
 *Warning this is an early release, please read the release notes of ALL the releases until now*
 
+<p align="center">
+  <img src="logo.svg" alt="OpenSOHO logo" width="160" />
+</p>
+
 # About OpenSOHO
 <a href="https://www.buymeacoffee.com/rubenbe" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/default-orange.png" alt="Buy Me A Coffee" height="41" width="174"></a>
 

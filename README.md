@@ -133,6 +133,9 @@ There are several configuration collections:
 These are the clients connected to Wifi. This table is read-only, except for the alias.
 It can be used to give devices a human-readable name. This only works properly when the client does not randomize its mac-address.
 
+#### Connected clients
+Contains the list of clients that are currently connected to your wifi. In order to show the IP address of the device, OpenSOHO needs access to your DHCP leases. To do so, you need to have the openwisp monitoring daemon running on the device that contains the DHCP server. Devices with a static IP will not get an IP. This is a known limitation as of 0.12.0.
+
 ### Devices
 
 These are the connected devices.

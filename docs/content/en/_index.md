@@ -55,6 +55,13 @@ Fully open source on GitHub. Compatible with `openwisp-config` and `openwisp-mon
 {{% blocks/feature icon="fa-home" title="SOHO Focused" %}}
 Inspired by OpenWISP but designed for networks too small to need it. No templates, no multi-tenancy — just the features you actually need.
 {{% /blocks/feature %}}
+
+{{< blocks/feature icon="fa-book" title="Documentation" >}}
+<p>Installation, configuration, and troubleshooting guides — everything you need to run OpenSOHO.</p>
+<a class="btn btn-lg btn-primary mt-3" href="https://opensoho.github.io/docs/">
+  Read the Docs <i class="fas fa-arrow-alt-circle-right ms-2"></i>
+</a>
+{{< /blocks/feature >}}
 {{< /blocks/section >}}
 
 {{< blocks/section color="white" type="row" >}}

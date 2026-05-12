@@ -10,7 +10,7 @@ description: >
 
 * VLAN configuration is tricky to get right, so OpenSOHO applies its configuration in a way that limits possible connection loss.
 * VLAN tagging is only applied when a device's `apply` list contains `VLAN`. Removing `vlan` does **not** undo the configuration.
-* LAN remains untagged on all ports (configuring this per-port is a planned feature).
+* LAN remains untagged on all ports (configuring this per-port is explained below).
   The rationale is to keep the network functional when VLAN tagging is enabled.
 * CIDR settings on `lan` are ignored — forcing those would break the network.
   CIDR settings are applied on the selected gateway only. Interfaces on APs and switches should be configured with `option proto 'none'`.
@@ -47,3 +47,13 @@ description: >
 5. OpenSOHO does not configure DHCP or the firewall yet (planned). Use LuCI on the gateway for that.
    * See the [OpenWRT wiki guest wifi guide](https://openwrt.org/docs/guide-user/network/wifi/guestwifi/configuration_webinterface#firewall).
    * To avoid MTU problems, enable `MSS clamping` on the firewall zones on the gateway device.
+
+## Avoiding untagged access on ports
+By default the OpenSOHO puts the LAN vlan untagged on all ports.
+This can be modified by creating a custom `Port Tagging` configuration.
+* Name, OpenSOHO internal name
+* untagged: the VLAN which should be available untagged
+* trunk: if enabled it automatically adds all VLANs known by OpenSOHO as tagged.
+* tagged: adds the specified VLANs as tagged on the interface.
+
+Next go to `Ethernet` and set the `Config` of the port to the selected `Port Tagging` configuration.

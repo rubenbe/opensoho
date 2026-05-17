@@ -66,7 +66,7 @@ apk del wpad-basic-mbedtls && apk add wpad-mbedtls && service wpad restart
 ### Configure OpenWISP in LuCI
 
 * Set the `Server URL` and `Shared secret` only.
-  * Do **not** append a slash to the `Server URL`.
+  * Do **not** append a slash to the `Server URL`. An example URL: http://192.168.1.1:8090
   * The shared secret must match `OPENSOHO_SHARED_SECRET`.
 * Optionally lower the `Update Interval` to 30 seconds for faster updates.
 

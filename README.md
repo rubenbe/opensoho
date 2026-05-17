@@ -92,7 +92,7 @@ After wpad-mbedtls is installed, try `service restart wpad` first, otherwise a r
 ### Configure OpenWISP in LuCI:
 
 * Set the `Server URL` and the `Shared secret` only.
-  * Do *NOT* append a slash to the `Server URL`.
+  * Do *NOT* append a slash to the `Server URL`. An example URL: `http://192.168.1.1:8090`
   * The shared secret is the value you chose previously (`OPENSOHO_SHARED_SECRET`).
 * Optionally lower the `Update Interval` to 30 seconds for faster updates. (OpenSOHO does this for you if you don't)
 * OpenSOHO also enables monitoring and lowers the monitoring interval to 15 seconds for quicker updates of the network state.

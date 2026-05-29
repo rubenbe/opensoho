@@ -40,6 +40,8 @@ Setting up OpenSOHO requires a few simple steps, each detailed in the sections b
 * Download the latest OpenSOHO release (or use a docker container)
 
   [Releases](https://github.com/rubenbe/opensoho/releases)
+  
+  [Setup with Docker, Podman or Kubernetes](https://opensoho.github.io/docs/containers/)
 
 * Start OpenSOHO
 

@@ -35,3 +35,5 @@ Copy the contents of the `pb_data` directory when migrating.
 ## Kubernetes
 
 A Helm chart is available, provided by the community.
+
+It can be found [here](https://github.com/rubenbe/opensoho/tree/main/helm/opensoho).

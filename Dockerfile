@@ -45,5 +45,5 @@ USER appuser
 EXPOSE 8090
 
 # Run the application
-CMD ["./opensoho", "serve", "--http", "0.0.0.0:8090"]
+CMD ["./opensoho", "serve", "--http", "[::]:8090"]
 

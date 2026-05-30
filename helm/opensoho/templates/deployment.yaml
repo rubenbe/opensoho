@@ -44,7 +44,7 @@ spec:
             - name: {{ $key }}
               value: {{ $value | quote }}
             {{- end }}
-          args: ["serve", "--http=0.0.0.0:8090"]
+          args: ["serve", "--http=[::]:8090"]
           {{- if .Values.healthCheck.enabled }}
           readinessProbe:
             httpGet:

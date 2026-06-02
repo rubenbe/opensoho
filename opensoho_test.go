@@ -1,7 +1,9 @@
 package main
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"errors"
 	"fmt"
 	"image/png"
@@ -4923,4 +4925,46 @@ func TestGenerateWifiConfigsRadioNotInCollection(t *testing.T) {
 	output, _ := generateWifiConfigs([]WifiRecord{wr}, 1, app, device)
 	assert.NotEmpty(t, output)
 	assert.Contains(t, output, "wifi_0_radio0")
+}
+
+func TestCreateConfigTarHotplugScript(t *testing.T) {
+	// The embed must have populated the script.
+	assert.NotEmpty(t, dumpRadiosScript)
+	assert.True(t, strings.HasPrefix(dumpRadiosScript, "#!"))
+
+	const hotplugPath = "etc/hotplug.d/openwisp/opensoho"
+	files := map[string]string{
+		hotplugPath:           dumpRadiosScript,
+		"etc/config/openwisp": "config foo\n",
+	}
+
+	blob, checksum, err := createConfigTar(files)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, checksum)
+
+	gz, err := gzip.NewReader(bytes.NewReader(blob))
+	assert.NoError(t, err)
+	tr := tar.NewReader(gz)
+
+	modes := map[string]int64{}
+	contents := map[string]string{}
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		assert.NoError(t, err)
+		data, err := io.ReadAll(tr)
+		assert.NoError(t, err)
+		modes[hdr.Name] = hdr.Mode
+		contents[hdr.Name] = string(data)
+	}
+
+	// Hotplug script is present, executable, and byte-identical to the embed.
+	assert.Contains(t, modes, hotplugPath)
+	assert.Equal(t, int64(0755), modes[hotplugPath])
+	assert.Equal(t, dumpRadiosScript, contents[hotplugPath])
+
+	// Ordinary config files stay non-executable.
+	assert.Equal(t, int64(0644), modes["etc/config/openwisp"])
 }

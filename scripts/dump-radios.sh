@@ -1,6 +1,6 @@
 #!/bin/sh
 # OpenWISP hotplug script.
-# Deploy to /etc/hotplug.d/openwisp/dump-radios on the target.
+# Deploy to /etc/hotplug.d/openwisp/opensoho on the target.
 # On end-of-cycle, builds a JSON object (one entry per UCI wifi-device with
 # phy / disabled / iwinfo info / freqlist) and atomically writes it to
 # /tmp/openwisp/monitoring/000000_opensoho.json.gz. Skips the write when the

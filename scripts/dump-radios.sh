@@ -5,8 +5,16 @@
 # UCI wifi-device, each with name / phy / disabled / iwinfo info / freqlist)
 # and atomically writes it to /tmp/openwisp/monitoring/000000_opensoho.json.gz.
 # Skips the write when the payload is unchanged and the target file exists.
+#
+# Pass -d (or --debug / --stdout) to print the JSON payload to stdout and skip
+# the file write, for debugging. This also bypasses the ACTION check.
 
-[ "$ACTION" = "end-of-cycle" ] || exit 0
+debug=0
+case "$1" in
+	-d|--debug|--stdout) debug=1;;
+esac
+
+[ "$debug" = 1 ] || [ "$ACTION" = "end-of-cycle" ] || exit 0
 
 STATE_DIR=/tmp/opensoho
 OUT_DIR=/tmp/openwisp/monitoring
@@ -33,6 +41,11 @@ for cfg in $(uci -q show wireless | sed -n 's/^wireless\.\(radio[0-9]*\)=wifi-de
 	sep=","
 done
 payload="$payload]}"
+
+if [ "$debug" = 1 ]; then
+	printf '%s\n' "$payload"
+	exit 0
+fi
 
 new=$(printf '%s' "$payload" | md5sum | awk '{print $1}')
 old=$(cat "$SUM" 2>/dev/null)

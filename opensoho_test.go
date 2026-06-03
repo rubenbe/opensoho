@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"image/png"
@@ -2113,6 +2114,118 @@ func TestUpdateMonitoringEmptyBody(t *testing.T) {
 	assert.Equal(t, nil, err)
 	assert.Equal(t, 200, httpResponse.StatusCode)
 	assert.Equal(t, "", string(body))
+}
+
+// Verify the OpenSoho radio dump (scripts/dump-radios.sh) is accepted and
+// parsed by the monitoring endpoint.
+func TestUpdateMonitoringOpenSoho(t *testing.T) {
+	json := `
+{
+  "type": "OpenSoho",
+  "radios": [
+    {
+      "name": "radio0",
+      "phy": "phy0",
+      "disabled": 0,
+      "info": {
+        "channel": 36,
+        "frequency": 5180,
+        "txpower": 23,
+        "country": "BE",
+        "hwmodes": ["a", "n", "ac"],
+        "htmodes": ["HT20", "HT40", "VHT20", "VHT40", "VHT80"]
+      },
+      "freqlist": {
+        "results": [
+          {"channel": 36, "mhz": 5180, "restricted": false},
+          {"channel": 40, "mhz": 5200, "restricted": false}
+        ]
+      }
+    },
+    {
+      "name": "radio1",
+      "phy": "phy1",
+      "disabled": 1,
+      "info": {
+        "channel": 11,
+        "frequency": 2462,
+        "txpower": 20,
+        "country": "BE",
+        "hwmodes": ["b", "g", "n"],
+        "htmodes": ["HT20", "HT40"]
+      },
+      "freqlist": {
+        "results": [
+          {"channel": 1, "mhz": 2412, "restricted": false}
+        ]
+      }
+    }
+  ]
+}`
+	var err error
+	app, _ := tests.NewTestApp()
+	event := core.RequestEvent{}
+	event.Request, err = http.NewRequest("POST", "/api/v1/monitoring/device/", strings.NewReader(json))
+	assert.Equal(t, err, nil)
+	event.Request.SetPathValue("key", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	event.Request.Header.Set("content-type", "application/json")
+	event.App = app
+	rec := httptest.NewRecorder()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	clientcollection := setupClientsCollection(t, app)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+
+	// Add a device
+	d := core.NewRecord(devicecollection)
+	d.Set("name", "the_device1")
+	d.Set("health_status", "healthy")
+	err = app.Save(d)
+	assert.Equal(t, nil, err)
+
+	event.Response = rec
+
+	// The endpoint accepts the payload with an empty 200 response.
+	response, radios := handleMonitoring(&event, app, d, clientcollection)
+	assert.Equal(t, nil, response)
+	assert.NotEqual(t, radios, nil)
+	httpResponse := rec.Result()
+	defer httpResponse.Body.Close()
+	body, err := io.ReadAll(httpResponse.Body)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, 200, httpResponse.StatusCode)
+	assert.Equal(t, "", string(body))
+}
+
+// Verify the OpenSoho payload decodes into the expected struct shape.
+func TestParseOpenSohoData(t *testing.T) {
+	payload := `{"type":"OpenSoho","radios":[` +
+		`{"name":"radio0","phy":"phy0","disabled":0,` +
+		`"info":{"channel":36,"frequency":5180,"txpower":23,"country":"BE",` +
+		`"hwmodes":["a","n","ac"],"htmodes":["HT20","VHT80"]},` +
+		`"freqlist":{"results":[{"channel":36,"mhz":5180,"restricted":false},` +
+		`{"channel":52,"mhz":5260,"restricted":true}]}}]}`
+
+	var data OpenSohoData
+	err := json.Unmarshal([]byte(payload), &data)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, "OpenSoho", data.Type)
+	assert.Equal(t, 1, len(data.Radios))
+
+	r := data.Radios[0]
+	assert.Equal(t, "radio0", r.Name)
+	assert.Equal(t, "phy0", r.Phy)
+	assert.Equal(t, 0, r.Disabled)
+	assert.Equal(t, 36, r.Info.Channel)
+	assert.Equal(t, 5180, r.Info.Frequency)
+	assert.Equal(t, 23, r.Info.TxPower)
+	assert.Equal(t, "BE", r.Info.Country)
+	assert.Equal(t, []string{"a", "n", "ac"}, r.Info.HwModes)
+	assert.Equal(t, []string{"HT20", "VHT80"}, r.Info.HtModes)
+	assert.Equal(t, 2, len(r.FreqList.Results))
+	assert.Equal(t, 52, r.FreqList.Results[1].Channel)
+	assert.Equal(t, true, r.FreqList.Results[1].Restricted)
 }
 
 func TestUpdateInterface(t *testing.T) {

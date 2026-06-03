@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"embed"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"image/png"
@@ -372,6 +373,63 @@ type MonitoringData struct {
 	DNSServers []string    `json:"dns_servers"`
 	Neighbors  []Neighbor  `json:"neighbors"`
 	DHCPLeases []DHCPLease `json:"dhcp_leases,omitempty"`
+}
+
+// OpenSoho monitoring payload, produced by scripts/dump-radios.sh.
+// Shape: {"type":"OpenSoho","radios":[{"name":"radio0",...},...]} where each
+// entry mirrors a UCI wifi-device augmented with iwinfo info / freqlist.
+
+// IwinfoInfo holds the subset of `ubus call iwinfo info` we care about.
+type IwinfoInfo struct {
+	Channel   int      `json:"channel"`
+	Frequency int      `json:"frequency"`
+	TxPower   int      `json:"txpower"`
+	Country   string   `json:"country"`
+	HwModes   []string `json:"hwmodes"`
+	HtModes   []string `json:"htmodes"`
+}
+
+// IwinfoFreq is a single entry of `ubus call iwinfo freqlist`.
+type IwinfoFreq struct {
+	Channel    int  `json:"channel"`
+	MHz        int  `json:"mhz"`
+	Restricted bool `json:"restricted"`
+}
+
+// OpenSohoRadio is one wifi-device entry of the OpenSoho payload.
+type OpenSohoRadio struct {
+	Name     string     `json:"name"`
+	Phy      string     `json:"phy"`
+	Disabled int        `json:"disabled"`
+	Info     IwinfoInfo `json:"info"`
+	FreqList struct {
+		Results []IwinfoFreq `json:"results"`
+	} `json:"freqlist"`
+}
+
+// OpenSohoData is the decoded OpenSoho payload.
+type OpenSohoData struct {
+	Type   string          `json:"type"`
+	Radios []OpenSohoRadio `json:"radios"`
+}
+
+// handleOpenSohoMonitoring is the entry point for parsed OpenSoho radio dumps.
+// For now it only validates and logs what came in; persisting radio
+// capabilities to the radios collection is a later step.
+func handleOpenSohoMonitoring(app core.App, device *core.Record, data OpenSohoData) {
+	for _, radio := range data.Radios {
+		app.Logger().Info("OpenSoho radio dump",
+			"device", device.GetString("id"),
+			"radio", radio.Name,
+			"phy", radio.Phy,
+			"disabled", radio.Disabled,
+			"channel", radio.Info.Channel,
+			"frequency", radio.Info.Frequency,
+			"country", radio.Info.Country,
+			"htmodes", radio.Info.HtModes,
+			"freqs", len(radio.FreqList.Results),
+		)
+	}
 }
 
 type WifiRecord struct {
@@ -1630,14 +1688,38 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 		app.Logger().Info("Ignored empty monitoring request 1", "userIP", e.RealIP())
 		return e.Blob(200, "text/plain", []byte("")), radios
 	}
-	if err := e.BindBody(&payload); err != nil {
+	// Both DeviceMonitoring and OpenSoho payloads arrive at this endpoint, so
+	// read the body once and dispatch on the "type" discriminator.
+	body, err := io.ReadAll(e.Request.Body)
+	if err != nil {
+		fmt.Println(err)
+		return e.BadRequestError("Failed to read body", err), radios
+	}
+	var envelope struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(body, &envelope); err != nil {
 		fmt.Println(err)
 		return e.BadRequestError("Failed to parse json", err), radios
 	}
-	if payload.Type != "DeviceMonitoring" {
-		errormsg := fmt.Sprintf(`Invalid type '%s' in JSON`, payload.Type)
+	if envelope.Type == "OpenSoho" {
+		// Radio dump produced by scripts/dump-radios.sh.
+		var osd OpenSohoData
+		if err := json.Unmarshal(body, &osd); err != nil {
+			fmt.Println(err)
+			return e.BadRequestError("Failed to parse OpenSoho json", err), radios
+		}
+		handleOpenSohoMonitoring(app, device, osd)
+		return e.Blob(200, "text/plain", []byte("")), radios
+	}
+	if envelope.Type != "DeviceMonitoring" {
+		errormsg := fmt.Sprintf(`Invalid type '%s' in JSON`, envelope.Type)
 		fmt.Println(errormsg)
 		return e.BadRequestError(errormsg, ""), radios
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		fmt.Println(err)
+		return e.BadRequestError("Failed to parse json", err), radios
 	}
 	interfacecollection, _ := app.FindCollectionByNameOrId("interfaces")
 	wificollection, _ := app.FindCollectionByNameOrId("wifi_ssids")

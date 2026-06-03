@@ -2126,7 +2126,7 @@ func TestUpdateMonitoringOpenSoho(t *testing.T) {
     {
       "name": "radio0",
       "phy": "phy0",
-      "disabled": 0,
+      "disabled": "0",
       "info": {
         "channel": 36,
         "frequency": 5180,
@@ -2145,7 +2145,7 @@ func TestUpdateMonitoringOpenSoho(t *testing.T) {
     {
       "name": "radio1",
       "phy": "phy1",
-      "disabled": 1,
+      "disabled": "1",
       "info": {
         "channel": 11,
         "frequency": 2462,
@@ -2201,7 +2201,7 @@ func TestUpdateMonitoringOpenSoho(t *testing.T) {
 // Verify the OpenSoho payload decodes into the expected struct shape.
 func TestParseOpenSohoData(t *testing.T) {
 	payload := `{"type":"OpenSoho","radios":[` +
-		`{"name":"radio0","phy":"phy0","disabled":0,` +
+		`{"name":"radio0","phy":"phy0","disabled":"0",` +
 		`"info":{"channel":36,"frequency":5180,"txpower":23,"country":"BE",` +
 		`"hwmodes":["a","n","ac"],"htmodes":["HT20","VHT80"]},` +
 		`"freqlist":{"results":[{"channel":36,"mhz":5180,"restricted":false},` +
@@ -2216,7 +2216,7 @@ func TestParseOpenSohoData(t *testing.T) {
 	r := data.Radios[0]
 	assert.Equal(t, "radio0", r.Name)
 	assert.Equal(t, "phy0", r.Phy)
-	assert.Equal(t, 0, r.Disabled)
+	assert.Equal(t, "0", r.Disabled)
 	assert.Equal(t, 36, r.Info.Channel)
 	assert.Equal(t, 5180, r.Info.Frequency)
 	assert.Equal(t, 23, r.Info.TxPower)

@@ -29,7 +29,7 @@ for cfg in $(uci -q show wireless | sed -n 's/^wireless\.\(radio[0-9]*\)=wifi-de
 	info=$(ubus call iwinfo info "{\"device\":\"$phy\"}")
 	freqs=$(ubus call iwinfo freqlist "{\"device\":\"$phy\"}")
 	disabled=$(uci -q get wireless."$cfg".disabled || echo 0)
-	payload="$payload$sep{\"name\":\"$cfg\",\"phy\":\"$phy\",\"disabled\":$disabled,\"info\":$info,\"freqlist\":$freqs}"
+	payload="$payload$sep{\"name\":\"$cfg\",\"phy\":\"$phy\",\"disabled\":\"$disabled\",\"info\":$info,\"freqlist\":$freqs}"
 	sep=","
 done
 payload="$payload]}"

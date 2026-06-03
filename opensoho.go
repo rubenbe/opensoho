@@ -400,7 +400,7 @@ type IwinfoFreq struct {
 type OpenSohoRadio struct {
 	Name     string     `json:"name"`
 	Phy      string     `json:"phy"`
-	Disabled int        `json:"disabled"`
+	Disabled string     `json:"disabled"`
 	Info     IwinfoInfo `json:"info"`
 	FreqList struct {
 		Results []IwinfoFreq `json:"results"`

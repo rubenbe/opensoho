@@ -2,7 +2,8 @@
 # OpenWISP hotplug script.
 # Deploy to /etc/hotplug.d/openwisp/opensoho on the target.
 # On end-of-cycle, builds a JSON object with a "radios" array (one entry per
-# UCI wifi-device, each with name / phy / disabled / iwinfo info / freqlist)
+# UCI wifi-device, each with name / phy / disabled / iwinfo info / freqlist /
+# txpowerlist)
 # and atomically writes it to /tmp/openwisp/monitoring/000000_opensoho.json.gz.
 # Skips the write when the payload is unchanged and the target file exists.
 #
@@ -36,8 +37,9 @@ for cfg in $(uci -q show wireless | sed -n 's/^wireless\.\(radio[0-9]*\)=wifi-de
 	[ -n "$phy" ] || continue
 	info=$(ubus call iwinfo info "{\"device\":\"$phy\"}")
 	freqs=$(ubus call iwinfo freqlist "{\"device\":\"$phy\"}")
+	txpowers=$(ubus call iwinfo txpowerlist "{\"device\":\"$phy\"}")
 	disabled=$(uci -q get wireless."$cfg".disabled || echo 0)
-	payload="$payload$sep{\"name\":\"$cfg\",\"phy\":\"$phy\",\"disabled\":\"$disabled\",\"info\":$info,\"freqlist\":$freqs}"
+	payload="$payload$sep{\"name\":\"$cfg\",\"phy\":\"$phy\",\"disabled\":\"$disabled\",\"info\":$info,\"freqlist\":$freqs,\"txpowerlist\":$txpowers}"
 	sep=","
 done
 payload="$payload]}"

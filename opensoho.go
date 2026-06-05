@@ -396,6 +396,12 @@ type IwinfoFreq struct {
 	Restricted bool `json:"restricted"`
 }
 
+// IwinfoTxPower is a single entry of `ubus call iwinfo txpowerlist`.
+type IwinfoTxPower struct {
+	Dbm int `json:"dbm"`
+	Mw  int `json:"mw"`
+}
+
 // OpenSohoRadio is one wifi-device entry of the OpenSoho payload.
 type OpenSohoRadio struct {
 	Name     string     `json:"name"`
@@ -405,6 +411,9 @@ type OpenSohoRadio struct {
 	FreqList struct {
 		Results []IwinfoFreq `json:"results"`
 	} `json:"freqlist"`
+	TxPowerList struct {
+		Results []IwinfoTxPower `json:"results"`
+	} `json:"txpowerlist"`
 }
 
 // OpenSohoData is the decoded OpenSoho payload.
@@ -428,6 +437,7 @@ func handleOpenSohoMonitoring(app core.App, device *core.Record, data OpenSohoDa
 			"country", radio.Info.Country,
 			"htmodes", radio.Info.HtModes,
 			"freqs", len(radio.FreqList.Results),
+			"txpowers", len(radio.TxPowerList.Results),
 		)
 	}
 }

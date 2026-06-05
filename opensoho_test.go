@@ -2140,6 +2140,12 @@ func TestUpdateMonitoringOpenSoho(t *testing.T) {
           {"channel": 36, "mhz": 5180, "restricted": false},
           {"channel": 40, "mhz": 5200, "restricted": false}
         ]
+      },
+      "txpowerlist": {
+        "results": [
+          {"dbm": 0, "mw": 1},
+          {"dbm": 23, "mw": 199}
+        ]
       }
     },
     {
@@ -2157,6 +2163,12 @@ func TestUpdateMonitoringOpenSoho(t *testing.T) {
       "freqlist": {
         "results": [
           {"channel": 1, "mhz": 2412, "restricted": false}
+        ]
+      },
+      "txpowerlist": {
+        "results": [
+          {"dbm": 0, "mw": 1},
+          {"dbm": 20, "mw": 100}
         ]
       }
     }
@@ -2205,7 +2217,8 @@ func TestParseOpenSohoData(t *testing.T) {
 		`"info":{"channel":36,"frequency":5180,"txpower":23,"country":"BE",` +
 		`"hwmodes":["a","n","ac"],"htmodes":["HT20","VHT80"]},` +
 		`"freqlist":{"results":[{"channel":36,"mhz":5180,"restricted":false},` +
-		`{"channel":52,"mhz":5260,"restricted":true}]}}]}`
+		`{"channel":52,"mhz":5260,"restricted":true}]},` +
+		`"txpowerlist":{"results":[{"dbm":0,"mw":1},{"dbm":23,"mw":199}]}}]}`
 
 	var data OpenSohoData
 	err := json.Unmarshal([]byte(payload), &data)
@@ -2226,6 +2239,9 @@ func TestParseOpenSohoData(t *testing.T) {
 	assert.Equal(t, 2, len(r.FreqList.Results))
 	assert.Equal(t, 52, r.FreqList.Results[1].Channel)
 	assert.Equal(t, true, r.FreqList.Results[1].Restricted)
+	assert.Equal(t, 2, len(r.TxPowerList.Results))
+	assert.Equal(t, 23, r.TxPowerList.Results[1].Dbm)
+	assert.Equal(t, 199, r.TxPowerList.Results[1].Mw)
 }
 
 func TestUpdateInterface(t *testing.T) {

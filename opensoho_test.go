@@ -2244,6 +2244,30 @@ func TestParseOpenSohoData(t *testing.T) {
 	assert.Equal(t, 199, r.TxPowerList.Results[1].Mw)
 }
 
+func TestRadioBands(t *testing.T) {
+	// Mixed 2.4 GHz and 5 GHz frequencies collapse to the distinct, sorted bands.
+	var mixed OpenSohoRadio
+	mixed.FreqList.Results = []IwinfoFreq{
+		{Channel: 1, MHz: 2412},
+		{Channel: 36, MHz: 5180},
+		{Channel: 6, MHz: 2437},
+		{Channel: 52, MHz: 5260},
+	}
+	assert.Equal(t, []string{"2.4", "5"}, radioBands(mixed))
+
+	// Frequencies outside the known bands are excluded as "unknown".
+	var noisy OpenSohoRadio
+	noisy.FreqList.Results = []IwinfoFreq{
+		{Channel: 0, MHz: 0},
+		{Channel: 36, MHz: 5180},
+		{Channel: 0, MHz: 1234},
+	}
+	assert.Equal(t, []string{"5"}, radioBands(noisy))
+
+	// An empty frequency list yields an empty (non-nil) slice.
+	assert.Equal(t, []string{}, radioBands(OpenSohoRadio{}))
+}
+
 func TestUpdateInterface(t *testing.T) {
 	app, _ := tests.NewTestApp()
 	vlancollection := setupVlanCollection(t, app)

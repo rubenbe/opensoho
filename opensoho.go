@@ -422,11 +422,36 @@ type OpenSohoData struct {
 	Radios []OpenSohoRadio `json:"radios"`
 }
 
+// radioBands returns the distinct Wi-Fi bands a radio supports, derived from
+// its advertised frequency list. The result is sorted for deterministic output
+// and excludes the "unknown" sentinel from frequencyToBand.
+func radioBands(radio OpenSohoRadio) []string {
+	seen := map[string]struct{}{}
+	for _, freq := range radio.FreqList.Results {
+		band := frequencyToBand(freq.MHz)
+		if band == "unknown" {
+			continue
+		}
+		seen[band] = struct{}{}
+	}
+	bands := make([]string, 0, len(seen))
+	for band := range seen {
+		bands = append(bands, band)
+	}
+	sort.Strings(bands)
+	return bands
+}
+
 // handleOpenSohoMonitoring is the entry point for parsed OpenSoho radio dumps.
 // For now it only validates and logs what came in; persisting radio
 // capabilities to the radios collection is a later step.
 func handleOpenSohoMonitoring(app core.App, device *core.Record, data OpenSohoData) {
 	for _, radio := range data.Radios {
+		app.Logger().Info("OpenSoho radio bands",
+			"device", device.GetString("name"),
+			"radio", radio.Name,
+			"bands", radioBands(radio),
+		)
 		app.Logger().Info("OpenSoho radio dump",
 			"device", device.GetString("id"),
 			"radio", radio.Name,

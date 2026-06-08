@@ -105,6 +105,12 @@ func extractRadioNumber(s string) (int, error) {
 	return strconv.Atoi(match[1])
 }
 
+// parseRadioName extracts the radio index from an OpenSoho dump radio name
+// (the UCI wifi-device section name, e.g. "radio0" -> 0).
+func parseRadioName(name string) (int, error) {
+	return strconv.Atoi(strings.TrimPrefix(name, "radio"))
+}
+
 func updateDeviceHealth(app core.App, currenttime types.DateTime) {
 	oldesttime := currenttime.Add(-60 * time.Second)
 	_, err := app.DB().
@@ -391,9 +397,10 @@ type IwinfoInfo struct {
 
 // IwinfoFreq is a single entry of `ubus call iwinfo freqlist`.
 type IwinfoFreq struct {
-	Channel    int  `json:"channel"`
-	MHz        int  `json:"mhz"`
-	Restricted bool `json:"restricted"`
+	Channel    int      `json:"channel"`
+	MHz        int      `json:"mhz"`
+	Restricted bool     `json:"restricted"`
+	Flags      []string `json:"flags"`
 }
 
 // IwinfoTxPower is a single entry of `ubus call iwinfo txpowerlist`.
@@ -443,28 +450,83 @@ func radioBands(radio OpenSohoRadio) []string {
 }
 
 // handleOpenSohoMonitoring is the entry point for parsed OpenSoho radio dumps.
-// For now it only validates and logs what came in; persisting radio
-// capabilities to the radios collection is a later step.
+// It persists each radio's advertised frequency list into the
+// radio_frequencies collection, keyed by (device, radio index).
 func handleOpenSohoMonitoring(app core.App, device *core.Record, data OpenSohoData) {
-	for _, radio := range data.Radios {
-		app.Logger().Info("OpenSoho radio bands",
-			"device", device.GetString("name"),
-			"radio", radio.Name,
-			"bands", radioBands(radio),
-		)
-		app.Logger().Info("OpenSoho radio dump",
-			"device", device.GetString("id"),
-			"radio", radio.Name,
-			"phy", radio.Phy,
-			"disabled", radio.Disabled,
-			"channel", radio.Info.Channel,
-			"frequency", radio.Info.Frequency,
-			"country", radio.Info.Country,
-			"htmodes", radio.Info.HtModes,
-			"freqs", len(radio.FreqList.Results),
-			"txpowers", len(radio.TxPowerList.Results),
-		)
+	coll, err := app.FindCollectionByNameOrId("radio_frequencies")
+	if err != nil {
+		app.Logger().Error("Failed to find radio_frequencies collection", "error", err)
+		return
 	}
+
+	for _, radio := range data.Radios {
+		idx, err := parseRadioName(radio.Name)
+		if err != nil {
+			app.Logger().Error("Skipping radio with unparseable name",
+				"device", device.GetString("id"), "radio", radio.Name, "error", err)
+			continue
+		}
+
+		if err := syncRadioFrequencies(app, coll, device, idx, radio.FreqList.Results); err != nil {
+			app.Logger().Error("Failed to sync radio frequencies",
+				"device", device.GetString("id"), "radio", radio.Name, "error", err)
+			continue
+		}
+	}
+}
+
+// syncRadioFrequencies replaces the radio_frequencies rows for a single
+// (device, radio) with the supplied freqlist, so the stored set always
+// reflects the latest dump.
+func syncRadioFrequencies(app core.App, coll *core.Collection, device *core.Record, idx int, freqs []IwinfoFreq) error {
+	// The flags field is a select with a fixed set of accepted values; drop any
+	// flag the schema doesn't know about so an unexpected one doesn't fail the
+	// whole save.
+	var allowedFlags []string
+	if field, ok := coll.Fields.GetByName("flags").(*core.SelectField); ok {
+		allowedFlags = field.Values
+	}
+
+	return app.RunInTransaction(func(txApp core.App) error {
+		existing, err := txApp.FindAllRecords("radio_frequencies",
+			dbx.HashExp{"device": device.Id, "radio": idx})
+		if err != nil {
+			return err
+		}
+		for _, rec := range existing {
+			if err := txApp.Delete(rec); err != nil {
+				return err
+			}
+		}
+
+		for _, f := range freqs {
+			rec := core.NewRecord(coll)
+			rec.Set("device", device.Id)
+			rec.Set("radio", idx)
+			rec.Set("channel", f.Channel)
+			rec.Set("frequency", f.MHz)
+			rec.Set("flags", knownFlags(f.Flags, allowedFlags))
+			if err := txApp.Save(rec); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// knownFlags returns the subset of flags that appear in allowed, preserving
+// order. When allowed is empty no filtering is applied.
+func knownFlags(flags, allowed []string) []string {
+	if len(allowed) == 0 {
+		return flags
+	}
+	kept := make([]string, 0, len(flags))
+	for _, f := range flags {
+		if slices.Contains(allowed, f) {
+			kept = append(kept, f)
+		}
+	}
+	return kept
 }
 
 type WifiRecord struct {

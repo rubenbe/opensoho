@@ -20,6 +20,7 @@ import (
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"github.com/liyue201/goqr"
+	"github.com/pocketbase/dbx"
 	"github.com/rubenbe/pocketbase/core"
 	"github.com/rubenbe/pocketbase/tests"
 	"github.com/rubenbe/pocketbase/tools/router"
@@ -2244,6 +2245,40 @@ func TestParseOpenSohoData(t *testing.T) {
 	assert.Equal(t, 199, r.TxPowerList.Results[1].Mw)
 }
 
+func TestParseOpenSohoDataIgnoresUnknownFlags(t *testing.T) {
+	payload := `{"type":"OpenSoho",` +
+		`"radios":[{"name":"radio0","phy":"phy0","disabled":"0","mode":"AP",` +
+		`"info":{"channel":36,"frequency":5180,"txpower":23,"country":"BE"},` +
+		`"freqlist":{"results":[{"channel":36,"mhz":5180,"restricted":false,"active":true,` +
+		`"flags":["no_ir","monitor","no_160mhz","unknown"]}]},` +
+		`"txpowerlist":{"results":[{"dbm":23,"mw":199,"offset":0}]}}]}`
+
+	var data OpenSohoData
+	err := json.Unmarshal([]byte(payload), &data)
+	assert.Nil(t, err)
+	assert.Equal(t, "OpenSoho", data.Type)
+	assert.Equal(t, 1, len(data.Radios))
+
+	// Persisting the dump must keep the schema-known flags and drop the rest,
+	// rather than failing the save on an unrecognized flag.
+	app, err := tests.NewTestApp()
+	assert.Nil(t, err)
+	defer app.Cleanup()
+
+	devicecollection := core.NewBaseCollection("devices")
+	assert.Nil(t, app.Save(devicecollection))
+	setupRadioFrequenciesCollection(t, app, devicecollection)
+
+	d := core.NewRecord(devicecollection)
+	assert.Nil(t, app.Save(d))
+
+	handleOpenSohoMonitoring(app, d, data)
+
+	rec, err := app.FindFirstRecordByFilter("radio_frequencies", "frequency = 5180")
+	assert.Nil(t, err)
+	assert.ElementsMatch(t, []string{"no_ir", "no_160mhz"}, rec.GetStringSlice("flags"))
+}
+
 func TestRadioBands(t *testing.T) {
 	// Mixed 2.4 GHz and 5 GHz frequencies collapse to the distinct, sorted bands.
 	var mixed OpenSohoRadio
@@ -2266,6 +2301,50 @@ func TestRadioBands(t *testing.T) {
 
 	// An empty frequency list yields an empty (non-nil) slice.
 	assert.Equal(t, []string{}, radioBands(OpenSohoRadio{}))
+}
+
+func TestHandleOpenSohoMonitoring(t *testing.T) {
+	app, err := tests.NewTestApp()
+	assert.Nil(t, err)
+	defer app.Cleanup()
+
+	devicecollection := core.NewBaseCollection("devices")
+	assert.Nil(t, app.Save(devicecollection))
+	setupRadioFrequenciesCollection(t, app, devicecollection)
+
+	d := core.NewRecord(devicecollection)
+	assert.Nil(t, app.Save(d))
+
+	var radio0 OpenSohoRadio
+	radio0.Name = "radio0"
+	radio0.FreqList.Results = []IwinfoFreq{
+		{Channel: 1, MHz: 2412},
+		{Channel: 36, MHz: 5180, Flags: []string{"no_ir", "no_160mhz"}},
+	}
+	handleOpenSohoMonitoring(app, d, OpenSohoData{Type: "OpenSoho", Radios: []OpenSohoRadio{radio0}})
+
+	recs, err := app.FindAllRecords("radio_frequencies", dbx.HashExp{"device": d.Id, "radio": 0})
+	assert.Nil(t, err)
+	assert.Equal(t, 2, len(recs))
+
+	// The 5180 MHz entry keeps its channel, device, radio index and flags.
+	r5180, err := app.FindFirstRecordByFilter("radio_frequencies", "frequency = 5180")
+	assert.Nil(t, err)
+	assert.Equal(t, 36, r5180.GetInt("channel"))
+	assert.Equal(t, d.Id, r5180.GetString("device"))
+	assert.Equal(t, 0, r5180.GetInt("radio"))
+	assert.ElementsMatch(t, []string{"no_ir", "no_160mhz"}, r5180.GetStringSlice("flags"))
+
+	// Re-running with a changed freqlist replaces the previous rows.
+	radio0.FreqList.Results = []IwinfoFreq{
+		{Channel: 6, MHz: 2437},
+	}
+	handleOpenSohoMonitoring(app, d, OpenSohoData{Type: "OpenSoho", Radios: []OpenSohoRadio{radio0}})
+
+	recs, err = app.FindAllRecords("radio_frequencies", dbx.HashExp{"device": d.Id, "radio": 0})
+	assert.Nil(t, err)
+	assert.Equal(t, 1, len(recs))
+	assert.Equal(t, 2437, recs[0].GetInt("frequency"))
 }
 
 func TestUpdateInterface(t *testing.T) {
@@ -2965,6 +3044,39 @@ func setupRadioCollection(t *testing.T, app core.App, devicecollection *core.Col
 	assert.Equal(t, err, nil)
 	return radiocollection
 
+}
+func setupRadioFrequenciesCollection(t *testing.T, app core.App, devicecollection *core.Collection) *core.Collection {
+	col := core.NewBaseCollection("radio_frequencies")
+	x := 0.0
+	col.Fields.Add(&core.RelationField{
+		Name:         "device",
+		Required:     false,
+		MaxSelect:    1,
+		CollectionId: devicecollection.Id,
+	})
+	col.Fields.Add(&core.NumberField{
+		Name: "radio",
+		Min:  &x,
+	})
+	col.Fields.Add(&core.NumberField{
+		Name:     "channel",
+		Required: true,
+	})
+	col.Fields.Add(&core.NumberField{
+		Name:     "frequency",
+		Required: true,
+	})
+	col.Fields.Add(&core.SelectField{
+		Name:      "flags",
+		MaxSelect: 10,
+		Values: []string{
+			"indoor_only", "no_ht40-", "no_ht40+", "no_80mhz", "no_160mhz",
+			"no_320mhz", "no_10mhz", "no_20mhz", "no_he", "no_ir",
+		},
+	})
+	err := app.Save(col)
+	assert.Equal(t, nil, err)
+	return col
 }
 func setupDeviceCollection(t *testing.T, app core.App, wificollection *core.Collection) *core.Collection {
 	devicecollection := core.NewBaseCollection("devices")

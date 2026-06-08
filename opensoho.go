@@ -222,50 +222,37 @@ func validateRadioHtModeBandCombo(band string, htmode string) error {
 	return validation.NewError("validation_invalid_value", "HT mode does not match selected band")
 }
 
-func validateRadioFrequencyBandCombo(band string, frequency string) error {
-
-	validFrequencies := map[string][]string{
-		"2.4": {"2412", "2417", "2422", "2427", "2432", "2437", "2442", "2447", "2452", "2457", "2462", "2467", "2472"},
-		"5": {
-			"5180", "5200", "5220", "5240", "5260", "5280", "5300", "5320",
-			"5500", "5520", "5540", "5560", "5580", "5600", "5620", "5640", "5660", "5680", "5700",
-			"5720", "5745", "5765", "5785", "5805", "5825",
-		},
-		"6": {
-			"5955", "5975", "5995", "6015", "6035", "6055", "6075", "6095", "6115", "6135",
-			"6155", "6175", "6195", "6215", "6235", "6255", "6275", "6295", "6315", "6335",
-			"6355", "6375", "6395", "6415", "6435", "6455", "6475", "6495", "6515", "6535",
-			"6555", "6575", "6595", "6615", "6635", "6655", "6675", "6695", "6715", "6735",
-			"6755", "6775", "6795", "6815", "6835", "6855", "6875", "6895", "6915", "6935",
-			"6955", "6975",
-		},
-		"60": {"58320", "60480", "62640", "64800", "66960"},
+// validateRadioFrequency checks the user-set frequency against the frequencies
+// the device actually advertised in the radio_frequencies collection. If the
+// device hasn't reported a freqlist for this radio yet (no rows), validation is
+// skipped so the radio can still be configured.
+func validateRadioFrequency(app core.App, device string, radio int, frequency int) error {
+	freqs, err := app.FindAllRecords("radio_frequencies",
+		dbx.HashExp{"device": device, "radio": radio})
+	if err != nil {
+		return validation.NewError("validation_invalid_value", "Failed to look up supported frequencies")
 	}
-
-	freqs, ok := validFrequencies[band]
-	if !ok {
-		return validation.NewError("validation_invalid_value", "Invalid band")
+	if len(freqs) == 0 {
+		return nil
 	}
-
 	for _, f := range freqs {
-		if f == frequency {
+		if f.GetInt("frequency") == frequency {
 			return nil
 		}
 	}
-
-	return validation.NewError("validation_invalid_value", "Frequency does not match selected band")
+	return validation.NewError("validation_invalid_value", "Frequency is not supported by this radio")
 }
 
-func validateRadio(record *core.Record) error {
+func validateRadio(app core.App, record *core.Record) error {
 	errs := validation.Errors{}
-	band := record.GetString("band")
-	frequency := record.GetString("frequency")
+	frequency := record.GetInt("frequency")
 
-	err := validateRadioFrequencyBandCombo(band, frequency)
+	err := validateRadioFrequency(app, record.GetString("device"), record.GetInt("radio"), frequency)
 	if err != nil {
 		errs["frequency"] = err
 	}
 
+	band := frequencyToBand(frequency)
 	htmode := record.GetString("htmode")
 
 	err = validateRadioHtModeBandCombo(band, htmode)
@@ -593,7 +580,6 @@ func updateRadios(device *core.Record, app core.App, newradios map[int]Radio) {
 		record.Set("mac_address", radio.MAC)
 		record.Set("radio", numradio)
 		record.Set("channel", radio.Channel)
-		record.Set("band", frequencyToBand(radio.Frequency))
 		record.Set("frequency", radio.Frequency)
 		record.Set("enabled", true)
 		err := app.Save(record)
@@ -904,7 +890,7 @@ func generateWifiConfigs(wifis []WifiRecord, numradios uint, app core.App, devic
 					break
 				}
 			}
-			if radio != nil && !isWifiEnabledOnBand(wifi, radio.GetString("band"), device, app) {
+			if radio != nil && !isWifiEnabledOnBand(wifi, frequencyToBand(radio.GetInt("frequency")), device, app) {
 				continue
 			}
 			config_output, has_vlan_config := generateWifiConfig(wifi, i, j, app, device)
@@ -2335,7 +2321,7 @@ table.table > thead > tr > th > div.col-header-content > span.txt
 	})
 
 	app.OnRecordUpdateRequest("radios").BindFunc(func(e *core.RecordRequestEvent) error {
-		err := validateRadio(e.Record)
+		err := validateRadio(e.App, e.Record)
 		if err != nil {
 			return err
 		}

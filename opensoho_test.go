@@ -756,20 +756,6 @@ func TestGetPortTagConfigForVlan(t *testing.T) {
 	assert.Equal(t, "t", getPortTagConfigForVlan(iot_vlan.Id, defaultSettings))
 }
 
-func TestValidateRadioFrequencyBandCombo(t *testing.T) {
-	// Valid combinations
-	assert.Nil(t, validateRadioFrequencyBandCombo("2.4", "2412"))
-	assert.Nil(t, validateRadioFrequencyBandCombo("5", "5180"))
-	assert.Nil(t, validateRadioFrequencyBandCombo("6", "5995"))
-	// Invalid combinations
-	assert.Error(t, validateRadioFrequencyBandCombo("5", "2180"))
-	assert.Error(t, validateRadioFrequencyBandCombo("2.4", "5955"))
-
-	// Invalid input
-	assert.Error(t, validateRadioFrequencyBandCombo("7", "5955"))
-	assert.Error(t, validateRadioFrequencyBandCombo("5", "1000"))
-}
-
 func TestValidateRadioHtModeBandCombo(t *testing.T) {
 	// Valid combinations
 	assert.Nil(t, validateRadioHtModeBandCombo("2.4", "HT20"))
@@ -808,22 +794,46 @@ func TestValidateRadio(t *testing.T) {
 	wificollection := setupWifiCollection(t, app, vlancollection)
 	devicecollection := setupDeviceCollection(t, app, wificollection)
 	radiocollection := setupRadioCollection(t, app, devicecollection)
+	freqcollection := setupRadioFrequenciesCollection(t, app, devicecollection)
+
+	device := core.NewRecord(devicecollection)
+	device.Set("health_status", "healthy")
+	assert.Nil(t, app.Save(device))
+
+	// radio 0 advertised 2412 and 5180; nothing reported for radio 1.
+	for _, freq := range []int{2412, 5180} {
+		f := core.NewRecord(freqcollection)
+		f.Set("device", device.Id)
+		f.Set("radio", 0)
+		f.Set("channel", 1)
+		f.Set("frequency", freq)
+		assert.Nil(t, app.Save(f))
+	}
 
 	r := core.NewRecord(radiocollection)
-	r.Set("frequency", "2412")
-	r.Set("band", "2.4")
+	r.Set("device", device.Id)
+	r.Set("radio", 0)
+	r.Set("frequency", 2412)
 	r.Set("htmode", "HT40")
 
-	assert.Nil(t, validateRadio(r))
+	// Advertised frequency with an htmode valid for its band.
+	assert.Nil(t, validateRadio(app, r))
 
+	// htmode that doesn't match the (frequency-derived) 2.4 band.
 	r.Set("htmode", "VHT40")
-	assert.Error(t, validateRadio(r))
+	assert.Error(t, validateRadio(app, r))
 
-	r.Set("frequency", "5180")
-	assert.Error(t, validateRadio(r))
+	// Another advertised frequency, htmode valid for the 5 band.
+	r.Set("frequency", 5180)
+	assert.Nil(t, validateRadio(app, r))
 
-	r.Set("band", "5")
-	assert.Nil(t, validateRadio(r))
+	// Frequency absent from a non-empty advertised list.
+	r.Set("frequency", 5200)
+	assert.Error(t, validateRadio(app, r))
+
+	// radio 1 reported no frequencies: validation is skipped (lenient).
+	r.Set("radio", 1)
+	assert.Nil(t, validateRadio(app, r))
 }
 
 func TestValidateSetting(t *testing.T) {
@@ -2578,7 +2588,6 @@ func TestUpdateRadios(t *testing.T) {
 		assert.Equal(t, r.GetInt("radio"), 0)
 		assert.Equal(t, r.GetInt("frequency"), 2412)
 		assert.Equal(t, r.GetInt("channel"), 1)
-		assert.Equal(t, r.GetString("band"), "2.4")
 		assert.Equal(t, r.GetBool("enabled"), true)
 		assert.Equal(t, r.GetString("device"), d.GetString("id"))
 	}
@@ -2588,7 +2597,6 @@ func TestUpdateRadios(t *testing.T) {
 		assert.Equal(t, r.GetInt("radio"), 1)
 		assert.Equal(t, r.GetInt("frequency"), 5200)
 		assert.Equal(t, r.GetInt("channel"), 40)
-		assert.Equal(t, r.GetString("band"), "5")
 		assert.Equal(t, r.GetBool("enabled"), true)
 		assert.Equal(t, r.GetString("device"), d.GetString("id"))
 	}
@@ -2607,7 +2615,6 @@ func TestUpdateRadios(t *testing.T) {
 		assert.Equal(t, r.GetInt("frequency"), 2412)
 		assert.Equal(t, r.GetInt("channel"), 1)
 		assert.Equal(t, r.GetBool("enabled"), true)
-		assert.Equal(t, r.GetString("band"), "2.4")
 	}
 	{
 		r, err := app.FindFirstRecordByData("radios", "radio", "1")
@@ -2616,7 +2623,6 @@ func TestUpdateRadios(t *testing.T) {
 		assert.Equal(t, r.GetInt("frequency"), 5200)
 		assert.Equal(t, r.GetInt("channel"), 40)
 		assert.Equal(t, r.GetBool("enabled"), true)
-		assert.Equal(t, r.GetString("band"), "5")
 	}
 	{
 		r, err := app.FindFirstRecordByData("radios", "radio", "2")
@@ -2625,7 +2631,6 @@ func TestUpdateRadios(t *testing.T) {
 		assert.Equal(t, r.GetInt("frequency"), 5955)
 		assert.Equal(t, r.GetInt("channel"), 100)
 		assert.Equal(t, r.GetBool("enabled"), true)
-		assert.Equal(t, r.GetString("band"), "6")
 	}
 
 	radios2 := make(map[int]Radio)
@@ -2644,7 +2649,6 @@ func TestUpdateRadios(t *testing.T) {
 		assert.Equal(t, r.GetInt("frequency"), 2412)
 		assert.Equal(t, r.GetInt("channel"), 1)
 		assert.Equal(t, r.GetBool("enabled"), true)
-		assert.Equal(t, r.GetString("band"), "2.4")
 	}
 	{
 		r, err := app.FindFirstRecordByData("radios", "radio", "1")
@@ -2653,7 +2657,6 @@ func TestUpdateRadios(t *testing.T) {
 		assert.Equal(t, r.GetInt("frequency"), 5200)
 		assert.Equal(t, r.GetInt("channel"), 40)
 		assert.Equal(t, r.GetBool("enabled"), false)
-		assert.Equal(t, r.GetString("band"), "5")
 	}
 	{
 		r, err := app.FindFirstRecordByData("radios", "radio", "2")
@@ -2662,7 +2665,6 @@ func TestUpdateRadios(t *testing.T) {
 		assert.Equal(t, r.GetInt("frequency"), 5955)
 		assert.Equal(t, r.GetInt("channel"), 100)
 		assert.Equal(t, r.GetBool("enabled"), true)
-		assert.Equal(t, r.GetString("band"), "6")
 	}
 
 	fmt.Println("---------------")
@@ -2678,7 +2680,6 @@ func TestUpdateRadios(t *testing.T) {
 		assert.Equal(t, r.GetInt("frequency"), 2412)
 		assert.Equal(t, r.GetInt("channel"), 1)
 		assert.Equal(t, r.GetBool("enabled"), true)
-		assert.Equal(t, r.GetString("band"), "2.4")
 	}
 	{
 		r, err := app.FindFirstRecordByData("radios", "radio", "1")
@@ -2687,7 +2688,6 @@ func TestUpdateRadios(t *testing.T) {
 		assert.Equal(t, r.GetInt("frequency"), 5200)
 		assert.Equal(t, r.GetInt("channel"), 40)
 		assert.Equal(t, r.GetBool("enabled"), true)
-		assert.Equal(t, r.GetString("band"), "5")
 	}
 	{
 		r, err := app.FindFirstRecordByData("radios", "radio", "2")
@@ -2696,7 +2696,6 @@ func TestUpdateRadios(t *testing.T) {
 		assert.Equal(t, r.GetInt("frequency"), 5955)
 		assert.Equal(t, r.GetInt("channel"), 100)
 		assert.Equal(t, r.GetBool("enabled"), true)
-		assert.Equal(t, r.GetString("band"), "6")
 	}
 }
 
@@ -3023,10 +3022,6 @@ func setupRadioCollection(t *testing.T, app core.App, devicecollection *core.Col
 		Required: false,
 		Min:      &x,
 		OnlyInt:  true,
-	})
-	radiocollection.Fields.Add(&core.TextField{
-		Name:     "band",
-		Required: false,
 	})
 	radiocollection.Fields.Add(&core.TextField{
 		Name:     "htmode",

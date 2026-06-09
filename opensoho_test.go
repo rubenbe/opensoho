@@ -834,6 +834,80 @@ func TestValidateRadio(t *testing.T) {
 	// radio 1 reported no frequencies: validation is skipped (lenient).
 	r.Set("radio", 1)
 	assert.Nil(t, validateRadio(app, r))
+
+	// Flag the 5180 row so 40 MHz is impossible (both directions blocked).
+	f5180, err := app.FindFirstRecordByFilter("radio_frequencies",
+		"device = {:device} && radio = 0 && frequency = 5180",
+		dbx.Params{"device": device.Id})
+	assert.Nil(t, err)
+	f5180.Set("flags", []string{"no_ht40-", "no_ht40+"})
+	assert.Nil(t, app.Save(f5180))
+
+	r.Set("radio", 0)
+	r.Set("frequency", 5180)
+	// Width forbidden by the channel flags is rejected end-to-end.
+	r.Set("htmode", "VHT40")
+	assert.Error(t, validateRadio(app, r))
+	// A permitted width on the same channel still passes.
+	r.Set("htmode", "VHT80")
+	assert.Nil(t, validateRadio(app, r))
+}
+
+func TestValidateRadioHtModeFlags(t *testing.T) {
+	app, err := tests.NewTestApp()
+	assert.Nil(t, err)
+	defer app.Cleanup()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	freqcollection := setupRadioFrequenciesCollection(t, app, devicecollection)
+
+	device := core.NewRecord(devicecollection)
+	device.Set("health_status", "healthy")
+	assert.Nil(t, app.Save(device))
+
+	// Helper: create a radio_frequencies row with the given flags.
+	addFreq := func(frequency int, flags []string) {
+		f := core.NewRecord(freqcollection)
+		f.Set("device", device.Id)
+		f.Set("radio", 0)
+		f.Set("channel", 1)
+		f.Set("frequency", frequency)
+		f.Set("flags", flags)
+		assert.Nil(t, app.Save(f))
+	}
+
+	// 5180: 40 MHz impossible (both directions blocked).
+	addFreq(5180, []string{"no_ht40-", "no_ht40+"})
+	// 5200: only one direction blocked, 40 MHz still possible.
+	addFreq(5200, []string{"no_ht40+"})
+	// 5220: 80 MHz blocked.
+	addFreq(5220, []string{"no_80mhz"})
+	// 5240: 160 MHz blocked.
+	addFreq(5240, []string{"no_160mhz"})
+
+	// Both no_ht40 flags: 40 MHz rejected, narrower/wider widths fine.
+	assert.Error(t, validateRadioHtModeFlags(app, device.Id, 0, 5180, "VHT40"))
+	assert.Error(t, validateRadioHtModeFlags(app, device.Id, 0, 5180, "HT40"))
+	assert.Error(t, validateRadioHtModeFlags(app, device.Id, 0, 5180, "HE40"))
+	assert.Nil(t, validateRadioHtModeFlags(app, device.Id, 0, 5180, "VHT20"))
+	assert.Nil(t, validateRadioHtModeFlags(app, device.Id, 0, 5180, "VHT80"))
+
+	// Only one direction blocked: 40 MHz still allowed.
+	assert.Nil(t, validateRadioHtModeFlags(app, device.Id, 0, 5200, "VHT40"))
+
+	// no_80mhz: 80 MHz rejected, 40 MHz fine.
+	assert.Error(t, validateRadioHtModeFlags(app, device.Id, 0, 5220, "VHT80"))
+	assert.Error(t, validateRadioHtModeFlags(app, device.Id, 0, 5220, "HE80"))
+	assert.Nil(t, validateRadioHtModeFlags(app, device.Id, 0, 5220, "VHT40"))
+
+	// no_160mhz: 160 MHz rejected.
+	assert.Error(t, validateRadioHtModeFlags(app, device.Id, 0, 5240, "VHT160"))
+	assert.Error(t, validateRadioHtModeFlags(app, device.Id, 0, 5240, "HE160"))
+
+	// No matching row: validation is skipped (lenient).
+	assert.Nil(t, validateRadioHtModeFlags(app, device.Id, 0, 9999, "VHT40"))
 }
 
 func TestValidateSetting(t *testing.T) {

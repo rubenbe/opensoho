@@ -243,6 +243,41 @@ func validateRadioFrequency(app core.App, device string, radio int, frequency in
 	return validation.NewError("validation_invalid_value", "Frequency is not supported by this radio")
 }
 
+// validateRadioHtModeFlags rejects channel widths the device flagged as unusable on the configured channel.
+// If the device hasn't a row for this frequency, validation is skipped  As such the radio can still be configured.
+func validateRadioHtModeFlags(app core.App, device string, radio int, frequency int, htmode string) error {
+	rows, err := app.FindAllRecords("radio_frequencies",
+		dbx.HashExp{"device": device, "radio": radio, "frequency": frequency})
+	if err != nil {
+		return validation.NewError("validation_invalid_value", "Failed to look up supported frequencies")
+	}
+	if len(rows) == 0 {
+		return nil
+	}
+	flags := rows[0].GetStringSlice("flags")
+
+	switch {
+	case strings.HasSuffix(htmode, "40"):
+		if slices.Contains(flags, "no_ht40-") && slices.Contains(flags, "no_ht40+") {
+			// A 40 MHz width needs an adjacent secondary channel, so it is not allowed when both no_ht40- and no_ht40+ are set
+			return validation.NewError("validation_invalid_value", "40 MHz width not allowed on this channel")
+		}
+	case strings.HasSuffix(htmode, "320"):
+		if slices.Contains(flags, "no_320mhz") {
+			return validation.NewError("validation_invalid_value", "320 MHz width not allowed on this channel")
+		}
+	case strings.HasSuffix(htmode, "160"):
+		if slices.Contains(flags, "no_160mhz") {
+			return validation.NewError("validation_invalid_value", "160 MHz width not allowed on this channel")
+		}
+	case strings.HasSuffix(htmode, "80"):
+		if slices.Contains(flags, "no_80mhz") {
+			return validation.NewError("validation_invalid_value", "80 MHz width not allowed on this channel")
+		}
+	}
+	return nil
+}
+
 func validateRadio(app core.App, record *core.Record) error {
 	errs := validation.Errors{}
 	frequency := record.GetInt("frequency")
@@ -256,8 +291,9 @@ func validateRadio(app core.App, record *core.Record) error {
 	htmode := record.GetString("htmode")
 
 	err = validateRadioHtModeBandCombo(band, htmode)
-
 	if err != nil {
+		errs["htmode"] = err
+	} else if err = validateRadioHtModeFlags(app, record.GetString("device"), record.GetInt("radio"), frequency, htmode); err != nil {
 		errs["htmode"] = err
 	}
 	if len(errs) > 0 {

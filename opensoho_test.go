@@ -2418,17 +2418,34 @@ func TestHandleOpenSohoMonitoring(t *testing.T) {
 	assert.Equal(t, d.Id, r5180.GetString("device"))
 	assert.Equal(t, 0, r5180.GetInt("radio"))
 	assert.ElementsMatch(t, []string{"no_ir", "no_160mhz"}, r5180.GetStringSlice("flags"))
+	id5180 := r5180.Id
 
-	// Re-running with a changed freqlist replaces the previous rows.
+	// Re-running with a still-present 5180 MHz adjusts its row in place rather
+	// than deleting and re-creating it: the record ID is preserved while the
+	// changed channel/flags are applied. The dropped 2412 MHz row is deleted and
+	// the new 5200 MHz row is inserted.
 	radio0.FreqList.Results = []IwinfoFreq{
-		{Channel: 6, MHz: 2437},
+		{Channel: 40, MHz: 5180, Flags: []string{"no_ir"}},
+		{Channel: 44, MHz: 5200},
 	}
 	handleOpenSohoMonitoring(app, d, OpenSohoData{Type: "OpenSoho", Radios: []OpenSohoRadio{radio0}})
 
 	recs, err = app.FindAllRecords("radio_frequencies", dbx.HashExp{"device": d.Id, "radio": 0})
 	assert.Nil(t, err)
-	assert.Equal(t, 1, len(recs))
-	assert.Equal(t, 2437, recs[0].GetInt("frequency"))
+	assert.Equal(t, 2, len(recs))
+
+	r5180, err = app.FindFirstRecordByFilter("radio_frequencies", "frequency = 5180")
+	assert.Nil(t, err)
+	assert.Equal(t, id5180, r5180.Id, "5180 MHz row must be updated in place, not re-created")
+	assert.Equal(t, 40, r5180.GetInt("channel"))
+	assert.ElementsMatch(t, []string{"no_ir"}, r5180.GetStringSlice("flags"))
+
+	_, err = app.FindFirstRecordByFilter("radio_frequencies", "frequency = 2412")
+	assert.NotNil(t, err, "dropped 2412 MHz row should be deleted")
+
+	r5200, err := app.FindFirstRecordByFilter("radio_frequencies", "frequency = 5200")
+	assert.Nil(t, err)
+	assert.Equal(t, 44, r5200.GetInt("channel"))
 }
 
 func TestUpdateInterface(t *testing.T) {

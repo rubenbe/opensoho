@@ -498,9 +498,11 @@ func handleOpenSohoMonitoring(app core.App, device *core.Record, data OpenSohoDa
 	}
 }
 
-// syncRadioFrequencies replaces the radio_frequencies rows for a single
-// (device, radio) with the supplied freqlist, so the stored set always
-// reflects the latest dump.
+// syncRadioFrequencies reconciles the radio_frequencies rows for a single
+// (device, radio) with the supplied freqlist. Rows are matched by frequency and
+// adjusted in place; only newly advertised frequencies are inserted and only
+// dropped frequencies are deleted, so the stored set always reflects the latest
+// dump without churning unchanged rows.
 func syncRadioFrequencies(app core.App, coll *core.Collection, device *core.Record, idx int, freqs []IwinfoFreq) error {
 	// The flags field is a select with a fixed set of accepted values; drop any
 	// flag the schema doesn't know about so an unexpected one doesn't fail the
@@ -516,20 +518,37 @@ func syncRadioFrequencies(app core.App, coll *core.Collection, device *core.Reco
 		if err != nil {
 			return err
 		}
+		// Index the existing rows by frequency. Together with the (device, radio)
+		// scope of the query above this is the (device, radio, frequency) key we
+		// upsert against, so unchanged frequencies keep their row instead of being
+		// deleted and re-created.
+		byFreq := make(map[int]*core.Record, len(existing))
 		for _, rec := range existing {
-			if err := txApp.Delete(rec); err != nil {
+			byFreq[rec.GetInt("frequency")] = rec
+		}
+
+		for _, f := range freqs {
+			rec, ok := byFreq[f.MHz]
+			if ok {
+				// Adjust the existing row in place and remove it from the map so it
+				// isn't treated as stale below.
+				delete(byFreq, f.MHz)
+			} else {
+				rec = core.NewRecord(coll)
+				rec.Set("device", device.Id)
+				rec.Set("radio", idx)
+				rec.Set("frequency", f.MHz)
+			}
+			rec.Set("channel", f.Channel)
+			rec.Set("flags", knownFlags(f.Flags, allowedFlags))
+			if err := txApp.Save(rec); err != nil {
 				return err
 			}
 		}
 
-		for _, f := range freqs {
-			rec := core.NewRecord(coll)
-			rec.Set("device", device.Id)
-			rec.Set("radio", idx)
-			rec.Set("channel", f.Channel)
-			rec.Set("frequency", f.MHz)
-			rec.Set("flags", knownFlags(f.Flags, allowedFlags))
-			if err := txApp.Save(rec); err != nil {
+		// Whatever frequencies remain are no longer advertised; drop them.
+		for _, rec := range byFreq {
+			if err := txApp.Delete(rec); err != nil {
 				return err
 			}
 		}

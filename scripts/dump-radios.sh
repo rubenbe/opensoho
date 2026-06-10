@@ -5,7 +5,7 @@
 # UCI wifi-device, each with name / phy / disabled / iwinfo info / freqlist /
 # txpowerlist)
 # and atomically writes it to /tmp/openwisp/monitoring/000000_opensoho.json.gz.
-# Skips the write when the payload is unchanged and the target file exists.
+# Skips the write when the payload checksum is unchanged.
 #
 # Pass -d (or --debug / --stdout) to print the JSON payload to stdout and skip
 # the file write, for debugging. This also bypasses the ACTION check.
@@ -52,7 +52,7 @@ fi
 new=$(printf '%s' "$payload" | md5sum | awk '{print $1}')
 old=$(cat "$SUM" 2>/dev/null)
 
-if [ "$new" = "$old" ] && [ -f "$OUT" ]; then
+if [ "$new" = "$old" ]; then
 	exit 0
 fi
 

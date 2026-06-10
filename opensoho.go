@@ -1580,7 +1580,7 @@ config usteer 'usteer'
 
 func generateDeviceConfig(app core.App, record *core.Record) ([]byte, string, error) {
 	configfiles := map[string]string{}
-	leds := record.Get("leds").([]string)
+	leds := record.GetStringSlice("leds")
 	fmt.Println(leds)
 	ledrecords, err := app.FindRecordsByIds("leds", leds)
 	if err != nil {

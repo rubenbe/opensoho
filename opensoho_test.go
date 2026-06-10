@@ -159,6 +159,54 @@ func TestReportStatusEndpoint(t *testing.T) {
 	assert.Equal(t, "", record.GetString("error_reason"))
 }
 
+func TestRegenerateAllDeviceConfigs(t *testing.T) {
+	app, _ := tests.NewTestApp()
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	clientcollection := setupClientsCollection(t, app)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	// generateDeviceConfig queries all of these; any missing collection cancels
+	// the db context and makes the subsequent config save fail silently.
+	setupWifiApsCollection(t, app, devicecollection, wificollection)
+	setupClientSteeringCollection(t, app, clientcollection, devicecollection, wificollection)
+	setupRadioCollection(t, app, devicecollection)
+	setupSettingsCollection(t, app)
+	setupSshKeyCollection(t, app)
+	ledscollection := core.NewBaseCollection("leds")
+	ledscollection.Fields.Add(&core.TextField{Name: "name"})
+	assert.Nil(t, app.Save(ledscollection))
+
+	// A device whose stored config is empty: regeneration must produce a
+	// config and flip config_status to "modified".
+	d1 := core.NewRecord(devicecollection)
+	d1.Id = "somethindevice1"
+	d1.Set("name", "the_device1")
+	d1.Set("health_status", "healthy")
+	d1.Set("config_status", "applied")
+	assert.Nil(t, app.Save(d1))
+
+	regenerateAllDeviceConfigs(app)
+
+	record, err := app.FindRecordById("devices", d1.Id)
+	assert.Nil(t, err)
+	assert.Equal(t, "modified", record.GetString("config_status"))
+	assert.NotEmpty(t, record.GetString("config"))
+
+	// The checksum is now stored. Mark the device "applied" again and
+	// regenerate: the generated output is unchanged, so saveDeviceConfig must
+	// skip the write and leave config_status untouched (no spurious "modified").
+	storedConfig := record.GetString("config")
+	record.Set("config_status", "applied")
+	assert.Nil(t, app.Save(record))
+
+	regenerateAllDeviceConfigs(app)
+
+	record, err = app.FindRecordById("devices", d1.Id)
+	assert.Nil(t, err)
+	assert.Equal(t, "applied", record.GetString("config_status"))
+	assert.Equal(t, storedConfig, record.GetString("config"))
+}
+
 func TestRegisterEndpoint(t *testing.T) {
 	// setup the test ApiScenario app instance
 	setupTestApp := func(t testing.TB) *tests.TestApp {
@@ -3198,7 +3246,7 @@ func setupDeviceCollection(t *testing.T, app core.App, wificollection *core.Coll
 		Name:      "config",
 		Required:  false,
 		Protected: true,
-		MimeTypes: []string{"application/x-tar"},
+		MimeTypes: []string{"application/gzip"},
 		Hidden:    true,
 	})
 	devicecollection.Fields.Add(&core.TextField{

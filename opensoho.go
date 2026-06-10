@@ -2159,6 +2159,10 @@ func bindAppHooks(app core.App, shared_secret string, enableNewDevices bool) {
 			updateRadios(device, app, radios)
 			return err
 		})
+
+		// Regenerate all configs to have a correct "modified" flag
+		regenerateAllDeviceConfigs(se.App)
+
 		return se.Next()
 	})
 }
@@ -2494,6 +2498,19 @@ func updateAndStoreDeviceConfig(app core.App, record *core.Record) error {
 	}
 	saveDeviceConfig(app, record, data, checksum)
 	return nil
+}
+
+func regenerateAllDeviceConfigs(app core.App) {
+	records, err := app.FindAllRecords("devices")
+	if err != nil {
+		fmt.Println("regenerateAllDeviceConfigs: failed to fetch devices", err)
+		return
+	}
+	for _, record := range records {
+		if err := updateAndStoreDeviceConfig(app, record); err != nil {
+			fmt.Println("regenerateAllDeviceConfigs: failed for", record.GetString("name"), err)
+		}
+	}
 }
 
 func apiGenerateDeviceStatus(e *core.RequestEvent) error {

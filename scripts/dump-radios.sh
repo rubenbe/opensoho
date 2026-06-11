@@ -1,11 +1,14 @@
 #!/bin/sh
-# OpenWISP hotplug script.
-# Deploy to /etc/hotplug.d/openwisp/opensoho on the target.
+# OpenWISP hotplug script, deployed to /etc/hotplug.d/openwisp/opensoho on the target.
 # On end-of-cycle, builds a JSON object with a "radios" array (one entry per
-# UCI wifi-device, each with name / phy / disabled / iwinfo info / freqlist /
-# txpowerlist)
-# and atomically writes it to /tmp/openwisp/monitoring/000000_opensoho.json.gz.
-# Skips the write when the payload checksum is unchanged.
+# UCI wifi-device, each with name / phy / disabled and the raw iwinfo info /
+# freqlist / txpowerlist) and atomically writes it to
+# /tmp/openwisp/monitoring/000000_opensoho.json.gz.
+#
+# The raw ubus outputs are embedded verbatim (the server ignores fields it
+# doesn't know). To avoid rewriting the file when only runtime values change,
+# the checksum is computed over a "signature" built from the stable capability
+# fields only, not over the full payload.
 #
 # Pass -d (or --debug / --stdout) to print the JSON payload to stdout and skip
 # the file write, for debugging. This also bypasses the ACTION check.
@@ -17,11 +20,6 @@ esac
 
 [ "$debug" = 1 ] || [ "$ACTION" = "end-of-cycle" ] || exit 0
 
-# newline-separated tokens on stdin -> JSON string array: ["a","b"]
-json_str_array() {
-	awk 'BEGIN{printf "["} {printf "%s\"%s\"", (NR>1?",":""), $0} END{print "]"}'
-}
-
 STATE_DIR=/tmp/opensoho
 OUT_DIR=/tmp/openwisp/monitoring
 OUT=$OUT_DIR/000000_opensoho.json.gz
@@ -30,6 +28,7 @@ SUM=$STATE_DIR/dump-radios.md5
 mkdir -p "$STATE_DIR" "$OUT_DIR"
 
 payload='{"type":"OpenSoho","radios":['
+sig=""
 sep=""
 for cfg in $(uci -q show wireless | sed -n 's/^wireless\.\(radio[0-9]*\)=wifi-device$/\1/p'); do
 	cpath=$(uci -q get wireless."$cfg".path)
@@ -45,38 +44,16 @@ for cfg in $(uci -q show wireless | sed -n 's/^wireless\.\(radio[0-9]*\)=wifi-de
 	txpowers=$(ubus call iwinfo txpowerlist "{\"device\":\"$phy\"}")
 	disabled=$(uci -q get wireless."$cfg".disabled || echo 0)
 
-	# info: keep only static capability fields
-	country=$(echo "$info" | jsonfilter -e '@.country')
-	hwmodes=$(echo "$info" | jsonfilter -e '@.hwmodes[*]' | json_str_array)
-	htmodes=$(echo "$info" | jsonfilter -e '@.htmodes[*]' | json_str_array)
-	info_out="{\"country\":\"$country\",\"hwmodes\":$hwmodes,\"htmodes\":$htmodes}"
-
-	# freqlist: drop runtime "active" (and unused "band")
-	n=$(echo "$freqs" | jsonfilter -e '@.results[*].mhz' | wc -l)
-	fl=""; fsep=""; i=0
-	while [ "$i" -lt "$n" ]; do
-		ch=$(echo "$freqs" | jsonfilter -e "@.results[$i].channel")
-		mhz=$(echo "$freqs" | jsonfilter -e "@.results[$i].mhz")
-		restr=$(echo "$freqs" | jsonfilter -e "@.results[$i].restricted")
-		flags=$(echo "$freqs" | jsonfilter -e "@.results[$i].flags[*]" | json_str_array)
-		fl="$fl$fsep{\"channel\":$ch,\"mhz\":$mhz,\"restricted\":$restr,\"flags\":$flags}"
-		fsep=","; i=$((i + 1))
-	done
-	freqlist_out="{\"results\":[$fl]}"
-
-	# txpowerlist: drop runtime "active"
-	tn=$(echo "$txpowers" | jsonfilter -e '@.results[*].dbm' | wc -l)
-	tp=""; tsep=""; i=0
-	while [ "$i" -lt "$tn" ]; do
-		dbm=$(echo "$txpowers" | jsonfilter -e "@.results[$i].dbm")
-		mw=$(echo "$txpowers" | jsonfilter -e "@.results[$i].mw")
-		tp="$tp$tsep{\"dbm\":$dbm,\"mw\":$mw}"
-		tsep=","; i=$((i + 1))
-	done
-	txpowerlist_out="{\"results\":[$tp]}"
-
-	payload="$payload$sep{\"name\":\"$cfg\",\"phy\":\"$phy\",\"disabled\":\"$disabled\",\"info\":$info_out,\"freqlist\":$freqlist_out,\"txpowerlist\":$txpowerlist_out}"
+	# Embed the raw ubus outputs verbatim; the server ignores unknown fields.
+	payload="$payload$sep{\"name\":\"$cfg\",\"phy\":\"$phy\",\"disabled\":\"$disabled\",\"info\":$info,\"freqlist\":$freqs,\"txpowerlist\":$txpowers}"
 	sep=","
+
+	# Signature: only the stable capability fields, so runtime values
+	# (info.channel/txpower, results[].active, ...) don't trigger a rewrite.
+	sig="$sig|$cfg|$disabled"
+	sig="$sig|$(echo "$info" | jsonfilter -e '@.country' -e '@.hwmodes[*]' -e '@.htmodes[*]')"
+	sig="$sig|$(echo "$freqs" | jsonfilter -e '@.results[*].channel' -e '@.results[*].mhz' -e '@.results[*].restricted' -e '@.results[*].flags[*]')"
+	sig="$sig|$(echo "$txpowers" | jsonfilter -e '@.results[*].dbm' -e '@.results[*].mw')"
 done
 payload="$payload]}"
 
@@ -85,7 +62,7 @@ if [ "$debug" = 1 ]; then
 	exit 0
 fi
 
-new=$(printf '%s' "$payload" | md5sum | awk '{print $1}')
+new=$(printf '%s' "$sig" | md5sum | awk '{print $1}')
 old=$(cat "$SUM" 2>/dev/null)
 
 if [ "$new" = "$old" ]; then

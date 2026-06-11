@@ -481,6 +481,11 @@ func handleOpenSohoMonitoring(app core.App, device *core.Record, data OpenSohoDa
 		app.Logger().Error("Failed to find radio_frequencies collection", "error", err)
 		return
 	}
+	txColl, err := app.FindCollectionByNameOrId("radio_tx_powers")
+	if err != nil {
+		app.Logger().Error("Failed to find radio_tx_powers collection", "error", err)
+		return
+	}
 
 	for _, radio := range data.Radios {
 		idx, err := parseRadioName(radio.Name)
@@ -492,6 +497,12 @@ func handleOpenSohoMonitoring(app core.App, device *core.Record, data OpenSohoDa
 
 		if err := syncRadioFrequencies(app, coll, device, idx, radio.FreqList.Results); err != nil {
 			app.Logger().Error("Failed to sync radio frequencies",
+				"device", device.GetString("id"), "radio", radio.Name, "error", err)
+			continue
+		}
+
+		if err := syncRadioTxPowers(app, txColl, device, idx, radio.TxPowerList.Results); err != nil {
+			app.Logger().Error("Failed to sync radio tx powers",
 				"device", device.GetString("id"), "radio", radio.Name, "error", err)
 			continue
 		}
@@ -548,6 +559,46 @@ func syncRadioFrequencies(app core.App, coll *core.Collection, device *core.Reco
 
 		// Whatever frequencies remain are no longer advertised; drop them.
 		for _, rec := range byFreq {
+			if err := txApp.Delete(rec); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+func syncRadioTxPowers(app core.App, coll *core.Collection, device *core.Record, idx int, powers []IwinfoTxPower) error {
+	return app.RunInTransaction(func(txApp core.App) error {
+		existing, err := txApp.FindAllRecords("radio_tx_powers",
+			dbx.HashExp{"device": device.Id, "radio": idx})
+		if err != nil {
+			return err
+		}
+		byDbm := make(map[int]*core.Record, len(existing))
+		for _, rec := range existing {
+			byDbm[rec.GetInt("dbm")] = rec
+		}
+
+		for _, p := range powers {
+			rec, ok := byDbm[p.Dbm]
+			if ok {
+				// Adjust the existing row in place and remove it from the map so it
+				// isn't treated as stale below.
+				delete(byDbm, p.Dbm)
+			} else {
+				rec = core.NewRecord(coll)
+				rec.Set("device", device.Id)
+				rec.Set("radio", idx)
+				rec.Set("dbm", p.Dbm)
+			}
+			rec.Set("mw", p.Mw)
+			if err := txApp.Save(rec); err != nil {
+				return err
+			}
+		}
+
+		// Whatever power levels remain are no longer advertised; drop them.
+		for _, rec := range byDbm {
 			if err := txApp.Delete(rec); err != nil {
 				return err
 			}

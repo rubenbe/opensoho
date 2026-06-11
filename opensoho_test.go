@@ -2400,6 +2400,7 @@ func TestParseOpenSohoDataIgnoresUnknownFlags(t *testing.T) {
 	devicecollection := core.NewBaseCollection("devices")
 	assert.Nil(t, app.Save(devicecollection))
 	setupRadioFrequenciesCollection(t, app, devicecollection)
+	setupRadioTxPowersCollection(t, app, devicecollection)
 
 	d := core.NewRecord(devicecollection)
 	assert.Nil(t, app.Save(d))
@@ -2443,6 +2444,7 @@ func TestHandleOpenSohoMonitoring(t *testing.T) {
 	devicecollection := core.NewBaseCollection("devices")
 	assert.Nil(t, app.Save(devicecollection))
 	setupRadioFrequenciesCollection(t, app, devicecollection)
+	setupRadioTxPowersCollection(t, app, devicecollection)
 
 	d := core.NewRecord(devicecollection)
 	assert.Nil(t, app.Save(d))
@@ -2452,6 +2454,10 @@ func TestHandleOpenSohoMonitoring(t *testing.T) {
 	radio0.FreqList.Results = []IwinfoFreq{
 		{Channel: 1, MHz: 2412},
 		{Channel: 36, MHz: 5180, Flags: []string{"no_ir", "no_160mhz"}},
+	}
+	radio0.TxPowerList.Results = []IwinfoTxPower{
+		{Dbm: 0, Mw: 1},
+		{Dbm: 23, Mw: 199},
 	}
 	handleOpenSohoMonitoring(app, d, OpenSohoData{Type: "OpenSoho", Radios: []OpenSohoRadio{radio0}})
 
@@ -2468,6 +2474,18 @@ func TestHandleOpenSohoMonitoring(t *testing.T) {
 	assert.ElementsMatch(t, []string{"no_ir", "no_160mhz"}, r5180.GetStringSlice("flags"))
 	id5180 := r5180.Id
 
+	// The advertised tx powers are persisted with their device, radio index and mw.
+	txrecs, err := app.FindAllRecords("radio_tx_powers", dbx.HashExp{"device": d.Id, "radio": 0})
+	assert.Nil(t, err)
+	assert.Equal(t, 2, len(txrecs))
+
+	tp23, err := app.FindFirstRecordByFilter("radio_tx_powers", "dbm = 23")
+	assert.Nil(t, err)
+	assert.Equal(t, 199, tp23.GetInt("mw"))
+	assert.Equal(t, d.Id, tp23.GetString("device"))
+	assert.Equal(t, 0, tp23.GetInt("radio"))
+	id23 := tp23.Id
+
 	// Re-running with a still-present 5180 MHz adjusts its row in place rather
 	// than deleting and re-creating it: the record ID is preserved while the
 	// changed channel/flags are applied. The dropped 2412 MHz row is deleted and
@@ -2475,6 +2493,12 @@ func TestHandleOpenSohoMonitoring(t *testing.T) {
 	radio0.FreqList.Results = []IwinfoFreq{
 		{Channel: 40, MHz: 5180, Flags: []string{"no_ir"}},
 		{Channel: 44, MHz: 5200},
+	}
+	// Tx powers reconcile the same way: dbm 23 stays (row reused, mw refreshed),
+	// dbm 0 is dropped and dbm 20 is added.
+	radio0.TxPowerList.Results = []IwinfoTxPower{
+		{Dbm: 23, Mw: 200},
+		{Dbm: 20, Mw: 100},
 	}
 	handleOpenSohoMonitoring(app, d, OpenSohoData{Type: "OpenSoho", Radios: []OpenSohoRadio{radio0}})
 
@@ -2494,6 +2518,22 @@ func TestHandleOpenSohoMonitoring(t *testing.T) {
 	r5200, err := app.FindFirstRecordByFilter("radio_frequencies", "frequency = 5200")
 	assert.Nil(t, err)
 	assert.Equal(t, 44, r5200.GetInt("channel"))
+
+	txrecs, err = app.FindAllRecords("radio_tx_powers", dbx.HashExp{"device": d.Id, "radio": 0})
+	assert.Nil(t, err)
+	assert.Equal(t, 2, len(txrecs))
+
+	tp23, err = app.FindFirstRecordByFilter("radio_tx_powers", "dbm = 23")
+	assert.Nil(t, err)
+	assert.Equal(t, id23, tp23.Id, "dbm 23 row must be updated in place, not re-created")
+	assert.Equal(t, 200, tp23.GetInt("mw"))
+
+	_, err = app.FindFirstRecordByFilter("radio_tx_powers", "dbm = 0")
+	assert.NotNil(t, err, "dropped dbm 0 row should be deleted")
+
+	tp20, err := app.FindFirstRecordByFilter("radio_tx_powers", "dbm = 20")
+	assert.Nil(t, err)
+	assert.Equal(t, 100, tp20.GetInt("mw"))
 }
 
 func TestUpdateInterface(t *testing.T) {
@@ -3207,6 +3247,29 @@ func setupRadioFrequenciesCollection(t *testing.T, app core.App, devicecollectio
 			"indoor_only", "no_ht40-", "no_ht40+", "no_80mhz", "no_160mhz",
 			"no_320mhz", "no_10mhz", "no_20mhz", "no_he", "no_ir",
 		},
+	})
+	err := app.Save(col)
+	assert.Equal(t, nil, err)
+	return col
+}
+func setupRadioTxPowersCollection(t *testing.T, app core.App, devicecollection *core.Collection) *core.Collection {
+	col := core.NewBaseCollection("radio_tx_powers")
+	x := 0.0
+	col.Fields.Add(&core.RelationField{
+		Name:         "device",
+		Required:     false,
+		MaxSelect:    1,
+		CollectionId: devicecollection.Id,
+	})
+	col.Fields.Add(&core.NumberField{
+		Name: "radio",
+		Min:  &x,
+	})
+	col.Fields.Add(&core.NumberField{
+		Name: "dbm",
+	})
+	col.Fields.Add(&core.NumberField{
+		Name: "mw",
 	})
 	err := app.Save(col)
 	assert.Equal(t, nil, err)

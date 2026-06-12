@@ -243,6 +243,43 @@ func validateRadioFrequency(app core.App, device string, radio int, frequency in
 	return validation.NewError("validation_invalid_value", "Frequency is not supported by this radio")
 }
 
+// lookupTxPowerDbm returns the highest advertised dBm whose mW value equals mw,
+// for the given device+radio. found is false when the device has no matching
+// radio_tx_powers row (or none at all).
+func lookupTxPowerDbm(app core.App, device string, radio int, mw int) (int, bool, error) {
+	rows, err := app.FindAllRecords("radio_tx_powers",
+		dbx.HashExp{"device": device, "radio": radio, "mw": mw})
+	if err != nil {
+		return 0, false, err
+	}
+	best, found := 0, false
+	for _, r := range rows {
+		if d := r.GetInt("dbm"); !found || d > best {
+			best, found = d, true
+		}
+	}
+	return best, found, nil
+}
+
+// validateRadioTxPower checks a mW-mode tx_power against the device's advertised
+// radio_tx_powers table. Any value without a matching row (including when the
+// device has reported no power levels at all) is rejected. dBm and auto modes
+// need no lookup.
+func validateRadioTxPower(app core.App, device string, radio int, mode string, txpower int) error {
+	if mode != "mW" {
+		return nil
+	}
+	_, found, err := lookupTxPowerDbm(app, device, radio, txpower)
+	if err != nil {
+		return validation.NewError("validation_invalid_value", "Failed to look up supported tx powers")
+	}
+	if !found {
+		return validation.NewError("validation_invalid_value",
+			fmt.Sprintf("%d mW is not a supported tx power for this radio", txpower))
+	}
+	return nil
+}
+
 // validateRadioHtModeFlags rejects channel widths the device flagged as unusable on the configured channel.
 // If the device hasn't a row for this frequency, validation is skipped  As such the radio can still be configured.
 func validateRadioHtModeFlags(app core.App, device string, radio int, frequency int, htmode string) error {
@@ -295,6 +332,11 @@ func validateRadio(app core.App, record *core.Record) error {
 		errs["htmode"] = err
 	} else if err = validateRadioHtModeFlags(app, record.GetString("device"), record.GetInt("radio"), frequency, htmode); err != nil {
 		errs["htmode"] = err
+	}
+
+	if err := validateRadioTxPower(app, record.GetString("device"), record.GetInt("radio"),
+		record.GetString("tx_power_mode"), record.GetInt("tx_power")); err != nil {
+		errs["tx_power"] = err
 	}
 	if len(errs) > 0 {
 		return apis.NewBadRequestError("Failed to create record.", errs)
@@ -705,7 +747,7 @@ config led 'led_%s'
 `, strings.ToLower(name), name, led.GetString("led_name"), led.GetString("trigger"))
 }
 
-func generateRadioConfig(radio *core.Record, country_code string) string {
+func generateRadioConfig(app core.App, radio *core.Record, country_code string) string {
 	frequency := radio.GetInt("frequency")
 	channel, ok := frequencyToChannel(frequency)
 	if ok == false {
@@ -727,10 +769,23 @@ func generateRadioConfig(radio *core.Record, country_code string) string {
 		country_txt = fmt.Sprintf("        option country '%[1]s'\n", country_code)
 	}
 
+	// txpower in UCI is always dBm. mW mode is translated via the device's
+	// advertised radio_tx_powers table; anything else falls back to auto.
+	txpower_txt := "        option txpower 'auto'\n"
+	switch radio.GetString("tx_power_mode") {
+	case "dBm":
+		txpower_txt = fmt.Sprintf("        option txpower '%d'\n", radio.GetInt("tx_power"))
+	case "mW":
+		if dbm, found, _ := lookupTxPowerDbm(app, radio.GetString("device"),
+			radio.GetInt("radio"), radio.GetInt("tx_power")); found {
+			txpower_txt = fmt.Sprintf("        option txpower '%d'\n", dbm)
+		}
+	}
+
 	return fmt.Sprintf(`
 config wifi-device 'radio%[1]d'
         option channel '%[2]s'
-%[3]s%[4]s`, radio.GetInt("radio"), frequency_txt, country_txt, htmode_txt)
+%[3]s%[4]s%[5]s`, radio.GetInt("radio"), frequency_txt, country_txt, htmode_txt, txpower_txt)
 }
 
 func getRadiosForDevice(device *core.Record, app core.App) ([]*core.Record, error) {
@@ -752,7 +807,7 @@ func generateRadioConfigs(device *core.Record, app core.App) string {
 		return ""
 	}
 	for _, record := range records {
-		output += generateRadioConfig(record, country)
+		output += generateRadioConfig(app, record, country)
 
 	}
 	return output

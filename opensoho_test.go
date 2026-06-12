@@ -3058,28 +3058,119 @@ func TestGenerateRadioConfig(t *testing.T) {
 	record.Set("radio", "3")
 	record.Set("channel", "5")
 	record.Set("frequency", "5200")
-	assert.Equal(t, generateRadioConfig(record, ""), `
+	// With no tx_power_mode set the radio defaults to auto power.
+	assert.Equal(t, generateRadioConfig(app, record, ""), `
 config wifi-device 'radio3'
         option channel '40'
+        option txpower 'auto'
 `)
 
 	record.Set("auto_frequency", true)
-	assert.Equal(t, generateRadioConfig(record, ""), `
+	assert.Equal(t, generateRadioConfig(app, record, ""), `
 config wifi-device 'radio3'
         option channel 'auto'
+        option txpower 'auto'
 `)
 	record.Set("htmode", "VHT20")
-	assert.Equal(t, generateRadioConfig(record, ""), `
+	assert.Equal(t, generateRadioConfig(app, record, ""), `
 config wifi-device 'radio3'
         option channel 'auto'
         option htmode 'VHT20'
+        option txpower 'auto'
 `)
-	assert.Equal(t, generateRadioConfig(record, "FR"), `
+	assert.Equal(t, generateRadioConfig(app, record, "FR"), `
 config wifi-device 'radio3'
         option channel 'auto'
         option country 'FR'
         option htmode 'VHT20'
+        option txpower 'auto'
 `)
+
+	// dBm mode writes the configured value verbatim.
+	record.Set("tx_power_mode", "dBm")
+	record.Set("tx_power", 17)
+	assert.Equal(t, generateRadioConfig(app, record, "FR"), `
+config wifi-device 'radio3'
+        option channel 'auto'
+        option country 'FR'
+        option htmode 'VHT20'
+        option txpower '17'
+`)
+}
+
+func TestGenerateRadioConfigTxPowerMilliWatt(t *testing.T) {
+	app, _ := tests.NewTestApp()
+
+	devicecollection := core.NewBaseCollection("devices")
+	assert.Nil(t, app.Save(devicecollection))
+	txcollection := setupRadioTxPowersCollection(t, app, devicecollection)
+	radiocollection := setupRadioCollection(t, app, devicecollection)
+
+	d := core.NewRecord(devicecollection)
+	assert.Nil(t, app.Save(d))
+
+	// Two advertised power levels map to the same mW value; the highest dBm wins.
+	for _, p := range []struct{ dbm, mw int }{{22, 158}, {23, 158}, {20, 100}} {
+		rec := core.NewRecord(txcollection)
+		rec.Set("device", d.Id)
+		rec.Set("radio", 0)
+		rec.Set("dbm", p.dbm)
+		rec.Set("mw", p.mw)
+		assert.Nil(t, app.Save(rec))
+	}
+
+	record := core.NewRecord(radiocollection)
+	record.Set("device", d.Id)
+	record.Set("radio", 0)
+	record.Set("frequency", 2412)
+	record.Set("tx_power_mode", "mW")
+	record.Set("tx_power", 158)
+	assert.Equal(t, generateRadioConfig(app, record, ""), `
+config wifi-device 'radio0'
+        option channel '1'
+        option txpower '23'
+`)
+
+	// A mW value the device never advertised falls back to auto in the config
+	// (saving such a record is rejected separately by validateRadioTxPower).
+	record.Set("tx_power", 200)
+	assert.Equal(t, generateRadioConfig(app, record, ""), `
+config wifi-device 'radio0'
+        option channel '1'
+        option txpower 'auto'
+`)
+}
+
+func TestValidateRadioTxPower(t *testing.T) {
+	app, _ := tests.NewTestApp()
+
+	devicecollection := core.NewBaseCollection("devices")
+	assert.Nil(t, app.Save(devicecollection))
+	txcollection := setupRadioTxPowersCollection(t, app, devicecollection)
+
+	d := core.NewRecord(devicecollection)
+	assert.Nil(t, app.Save(d))
+
+	rec := core.NewRecord(txcollection)
+	rec.Set("device", d.Id)
+	rec.Set("radio", 0)
+	rec.Set("dbm", 23)
+	rec.Set("mw", 199)
+	assert.Nil(t, app.Save(rec))
+
+	// dBm and auto modes never consult the table.
+	assert.Nil(t, validateRadioTxPower(app, d.Id, 0, "dBm", 12345))
+	assert.Nil(t, validateRadioTxPower(app, d.Id, 0, "auto", 12345))
+	assert.Nil(t, validateRadioTxPower(app, d.Id, 0, "", 12345))
+
+	// mW with a matching advertised value passes.
+	assert.Nil(t, validateRadioTxPower(app, d.Id, 0, "mW", 199))
+
+	// mW with rows present but no match is rejected.
+	assert.Error(t, validateRadioTxPower(app, d.Id, 0, "mW", 200))
+
+	// mW with no rows at all for this radio is rejected too.
+	assert.Error(t, validateRadioTxPower(app, d.Id, 1, "mW", 199))
 }
 func TestGenerateRadioConfigs(t *testing.T) {
 	radios := make(map[int]Radio)
@@ -3140,9 +3231,11 @@ func TestGenerateRadioConfigs(t *testing.T) {
 	assert.Equal(t, `
 config wifi-device 'radio0'
         option channel '1'
+        option txpower 'auto'
 
 config wifi-device 'radio1'
         option channel '40'
+        option txpower 'auto'
 `, generateRadioConfigs(d, app))
 
 	country := core.NewRecord(settingscollection)
@@ -3154,10 +3247,12 @@ config wifi-device 'radio1'
 config wifi-device 'radio0'
         option channel '1'
         option country 'DE'
+        option txpower 'auto'
 
 config wifi-device 'radio1'
         option channel '40'
         option country 'DE'
+        option txpower 'auto'
 `, generateRadioConfigs(d, app))
 
 }

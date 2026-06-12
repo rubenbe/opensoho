@@ -261,23 +261,63 @@ func lookupTxPowerDbm(app core.App, device string, radio int, mw int) (int, bool
 	return best, found, nil
 }
 
-// validateRadioTxPower checks a mW-mode tx_power against the device's advertised
-// radio_tx_powers table. Any value without a matching row (including when the
-// device has reported no power levels at all) is rejected. dBm and auto modes
-// need no lookup.
+// nearestTxPower scans radio_tx_powers for device+radio and reports whether
+// value exactly matches the field column ("mw" or "dbm"), plus the row whose
+// field value is closest to it. closest is nil only when the radio has no rows.
+// Distance is compared as the squared difference: tx power values are
+// non-negative but v-value is not, and squaring avoids an abs helper while
+// giving the same nearest result.
+func nearestTxPower(app core.App, device string, radio int, field string, value int) (bool, *core.Record, error) {
+	rows, err := app.FindAllRecords("radio_tx_powers",
+		dbx.HashExp{"device": device, "radio": radio})
+	if err != nil {
+		return false, nil, err
+	}
+	exact := false
+	var closest *core.Record
+	bestDist := 0
+	for _, r := range rows {
+		v := r.GetInt(field)
+		if v == value {
+			exact = true
+		}
+		if dist := (v - value) * (v - value); closest == nil || dist < bestDist {
+			closest, bestDist = r, dist
+		}
+	}
+	return exact, closest, nil
+}
+
+// validateRadioTxPower checks a mW- or dBm-mode tx_power against the device's
+// advertised radio_tx_powers table. Any value without a matching row is
+// rejected, with a hint at the closest supported level (or a note that the
+// radio has reported none). auto/empty modes need no lookup.
 func validateRadioTxPower(app core.App, device string, radio int, mode string, txpower int) error {
-	if mode != "mW" {
+	var field string
+	switch mode {
+	case "mW":
+		field = "mw"
+	case "dBm":
+		field = "dbm"
+	default: // auto / empty — no lookup
 		return nil
 	}
-	_, found, err := lookupTxPowerDbm(app, device, radio, txpower)
+
+	exact, closest, err := nearestTxPower(app, device, radio, field, txpower)
 	if err != nil {
 		return validation.NewError("validation_invalid_value", "Failed to look up supported tx powers")
 	}
-	if !found {
-		return validation.NewError("validation_invalid_value",
-			fmt.Sprintf("%d mW is not a supported tx power for this radio", txpower))
+	if exact {
+		return nil
 	}
-	return nil
+	if closest == nil {
+		return validation.NewError("validation_invalid_value", fmt.Sprintf(
+			"%d %s is not a supported tx power; this radio has not reported any supported power levels yet",
+			txpower, mode))
+	}
+	return validation.NewError("validation_invalid_value", fmt.Sprintf(
+		"%d %s is not a supported tx power for this radio; closest supported value is %d mW (%d dBm)",
+		txpower, mode, closest.GetInt("mw"), closest.GetInt("dbm")))
 }
 
 // validateRadioHtModeFlags rejects channel widths the device flagged as unusable on the configured channel.

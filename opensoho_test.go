@@ -3141,9 +3141,9 @@ config wifi-device 'radio0'
 `)
 }
 
-func TestValidateRadioTxPower(t *testing.T) {
-	app, _ := tests.NewTestApp()
-
+// seedTxPowers creates radio_tx_powers rows for device+radio 0 from (dbm, mw)
+// pairs and returns the device id. Radio 1 is intentionally left empty.
+func seedTxPowers(t *testing.T, app core.App, levels [][2]int) string {
 	devicecollection := core.NewBaseCollection("devices")
 	assert.Nil(t, app.Save(devicecollection))
 	txcollection := setupRadioTxPowersCollection(t, app, devicecollection)
@@ -3151,26 +3151,91 @@ func TestValidateRadioTxPower(t *testing.T) {
 	d := core.NewRecord(devicecollection)
 	assert.Nil(t, app.Save(d))
 
-	rec := core.NewRecord(txcollection)
-	rec.Set("device", d.Id)
-	rec.Set("radio", 0)
-	rec.Set("dbm", 23)
-	rec.Set("mw", 199)
-	assert.Nil(t, app.Save(rec))
+	for _, l := range levels {
+		rec := core.NewRecord(txcollection)
+		rec.Set("device", d.Id)
+		rec.Set("radio", 0)
+		rec.Set("dbm", l[0])
+		rec.Set("mw", l[1])
+		assert.Nil(t, app.Save(rec))
+	}
+	return d.Id
+}
 
-	// dBm and auto modes never consult the table.
-	assert.Nil(t, validateRadioTxPower(app, d.Id, 0, "dBm", 12345))
-	assert.Nil(t, validateRadioTxPower(app, d.Id, 0, "auto", 12345))
-	assert.Nil(t, validateRadioTxPower(app, d.Id, 0, "", 12345))
+func TestNearestTxPower(t *testing.T) {
+	app, _ := tests.NewTestApp()
+	device := seedTxPowers(t, app, [][2]int{{23, 199}, {20, 100}})
 
-	// mW with a matching advertised value passes.
-	assert.Nil(t, validateRadioTxPower(app, d.Id, 0, "mW", 199))
+	// Exact mW match.
+	exact, closest, err := nearestTxPower(app, device, 0, "mw", 199)
+	assert.Nil(t, err)
+	assert.True(t, exact)
+	assert.Equal(t, 23, closest.GetInt("dbm"))
 
-	// mW with rows present but no match is rejected.
-	assert.Error(t, validateRadioTxPower(app, d.Id, 0, "mW", 200))
+	// Exact dBm match.
+	exact, _, err = nearestTxPower(app, device, 0, "dbm", 20)
+	assert.Nil(t, err)
+	assert.True(t, exact)
 
-	// mW with no rows at all for this radio is rejected too.
-	assert.Error(t, validateRadioTxPower(app, d.Id, 1, "mW", 199))
+	// mW miss reports the nearest level (200 -> 199 mW / 23 dBm); value unchanged.
+	exact, closest, err = nearestTxPower(app, device, 0, "mw", 200)
+	assert.Nil(t, err)
+	assert.False(t, exact)
+	assert.Equal(t, 199, closest.GetInt("mw"))
+	assert.Equal(t, 23, closest.GetInt("dbm"))
+
+	// dBm miss reports the nearest level (22 -> 23 dBm); value unchanged.
+	exact, closest, err = nearestTxPower(app, device, 0, "dbm", 22)
+	assert.Nil(t, err)
+	assert.False(t, exact)
+	assert.Equal(t, 23, closest.GetInt("dbm"))
+
+	// Nearest selection on both sides of the 100/199 midpoint (149.5).
+	_, closest, err = nearestTxPower(app, device, 0, "mw", 149) // 49 vs 50 -> 100
+	assert.Nil(t, err)
+	assert.Equal(t, 100, closest.GetInt("mw"))
+	_, closest, err = nearestTxPower(app, device, 0, "mw", 150) // 50 vs 49 -> 199
+	assert.Nil(t, err)
+	assert.Equal(t, 199, closest.GetInt("mw"))
+
+	// A radio with no advertised levels: no exact, no closest, no error.
+	exact, closest, err = nearestTxPower(app, device, 1, "mw", 199)
+	assert.Nil(t, err)
+	assert.False(t, exact)
+	assert.Nil(t, closest)
+}
+
+func TestValidateRadioTxPower(t *testing.T) {
+	app, _ := tests.NewTestApp()
+	device := seedTxPowers(t, app, [][2]int{{23, 199}, {20, 100}})
+
+	// auto/empty modes never consult the table.
+	assert.Nil(t, validateRadioTxPower(app, device, 0, "auto", 12345))
+	assert.Nil(t, validateRadioTxPower(app, device, 0, "", 12345))
+
+	// Exact matches pass in both modes.
+	assert.Nil(t, validateRadioTxPower(app, device, 0, "mW", 199))
+	assert.Nil(t, validateRadioTxPower(app, device, 0, "dBm", 23))
+
+	// mW miss hints the nearest supported level.
+	err := validateRadioTxPower(app, device, 0, "mW", 200)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "200 mW is not a supported tx power")
+	assert.Contains(t, err.Error(), "closest supported value is 199 mW (23 dBm)")
+
+	// dBm miss (22 is nearer 23 than 20) hints the same level.
+	err = validateRadioTxPower(app, device, 0, "dBm", 22)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "22 dBm is not a supported tx power")
+	assert.Contains(t, err.Error(), "closest supported value is 199 mW (23 dBm)")
+
+	// A radio with no advertised levels reports that, in either mode.
+	err = validateRadioTxPower(app, device, 1, "mW", 199)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "has not reported any supported power levels")
+	err = validateRadioTxPower(app, device, 1, "dBm", 23)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "has not reported any supported power levels")
 }
 func TestGenerateRadioConfigs(t *testing.T) {
 	radios := make(map[int]Radio)

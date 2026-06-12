@@ -3058,32 +3058,29 @@ func TestGenerateRadioConfig(t *testing.T) {
 	record.Set("radio", "3")
 	record.Set("channel", "5")
 	record.Set("frequency", "5200")
-	// With no tx_power_mode set the radio defaults to auto power.
+	// With no tx_power_mode set the txpower option is omitted ("auto" is not
+	// a valid UCI value; the driver chooses the power when unset).
 	assert.Equal(t, generateRadioConfig(app, record, ""), `
 config wifi-device 'radio3'
         option channel '40'
-        option txpower 'auto'
 `)
 
 	record.Set("auto_frequency", true)
 	assert.Equal(t, generateRadioConfig(app, record, ""), `
 config wifi-device 'radio3'
         option channel 'auto'
-        option txpower 'auto'
 `)
 	record.Set("htmode", "VHT20")
 	assert.Equal(t, generateRadioConfig(app, record, ""), `
 config wifi-device 'radio3'
         option channel 'auto'
         option htmode 'VHT20'
-        option txpower 'auto'
 `)
 	assert.Equal(t, generateRadioConfig(app, record, "FR"), `
 config wifi-device 'radio3'
         option channel 'auto'
         option country 'FR'
         option htmode 'VHT20'
-        option txpower 'auto'
 `)
 
 	// dBm mode writes the configured value verbatim.
@@ -3131,13 +3128,12 @@ config wifi-device 'radio0'
         option txpower '23'
 `)
 
-	// A mW value the device never advertised falls back to auto in the config
+	// A mW value the device never advertised omits the txpower option
 	// (saving such a record is rejected separately by validateRadioTxPower).
 	record.Set("tx_power", 200)
 	assert.Equal(t, generateRadioConfig(app, record, ""), `
 config wifi-device 'radio0'
         option channel '1'
-        option txpower 'auto'
 `)
 }
 
@@ -3296,11 +3292,9 @@ func TestGenerateRadioConfigs(t *testing.T) {
 	assert.Equal(t, `
 config wifi-device 'radio0'
         option channel '1'
-        option txpower 'auto'
 
 config wifi-device 'radio1'
         option channel '40'
-        option txpower 'auto'
 `, generateRadioConfigs(d, app))
 
 	country := core.NewRecord(settingscollection)
@@ -3312,12 +3306,10 @@ config wifi-device 'radio1'
 config wifi-device 'radio0'
         option channel '1'
         option country 'DE'
-        option txpower 'auto'
 
 config wifi-device 'radio1'
         option channel '40'
         option country 'DE'
-        option txpower 'auto'
 `, generateRadioConfigs(d, app))
 
 }

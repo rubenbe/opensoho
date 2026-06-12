@@ -810,8 +810,9 @@ func generateRadioConfig(app core.App, radio *core.Record, country_code string) 
 	}
 
 	// txpower in UCI is always dBm. mW mode is translated via the device's
-	// advertised radio_tx_powers table; anything else falls back to auto.
-	txpower_txt := "        option txpower 'auto'\n"
+	// advertised radio_tx_powers table; anything else omits the option so the
+	// driver picks the power ("auto" is not a valid UCI value).
+	txpower_txt := ""
 	switch radio.GetString("tx_power_mode") {
 	case "dBm":
 		txpower_txt = fmt.Sprintf("        option txpower '%d'\n", radio.GetInt("tx_power"))

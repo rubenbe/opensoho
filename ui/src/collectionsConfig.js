@@ -30,4 +30,8 @@ export default [
         name: "System",
         items: ["ssh_keys", "client_steering", "leds", "settings", "api_users"],
     },
+    {
+        name: "Capabilities",
+        items: ["radio_frequencies", "radio_tx_powers"],
+    },
 ];

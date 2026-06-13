@@ -2897,6 +2897,24 @@ func TestUpdateRadiosTxPower(t *testing.T) {
 		assert.Equal(t, 23, r.GetInt("tx_power"))
 	}
 
+	// Rows created before tx_power_mode became required hold an empty value that
+	// fails validation on save. Force that stale state and verify updateRadios
+	// self-heals it to auto and still stores the reported power.
+	{
+		r, err := app.FindFirstRecordByData("radios", "radio", "0")
+		assert.Equal(t, nil, err)
+		_, err = app.DB().NewQuery("UPDATE radios SET tx_power_mode = '' WHERE id = {:id}").
+			Bind(dbx.Params{"id": r.Id}).Execute()
+		assert.Equal(t, nil, err)
+	}
+	updateRadios(d, app, map[int]Radio{0: {Frequency: 2412, Channel: 1, TxPower: 23}})
+	{
+		r, err := app.FindFirstRecordByData("radios", "radio", "0")
+		assert.Equal(t, nil, err)
+		assert.Equal(t, "auto", r.GetString("tx_power_mode"))
+		assert.Equal(t, 23, r.GetInt("tx_power"))
+	}
+
 	// A later report in auto mode updates tx_power to the new value.
 	updateRadios(d, app, map[int]Radio{0: {Frequency: 2412, Channel: 1, TxPower: 20}})
 	{
@@ -3427,6 +3445,7 @@ func setupRadioCollection(t *testing.T, app core.App, devicecollection *core.Col
 	})
 	radiocollection.Fields.Add(&core.SelectField{
 		Name:      "tx_power_mode",
+		Required:  true,
 		MaxSelect: 1,
 		Values:    []string{"auto", "dBm", "mW"},
 	})

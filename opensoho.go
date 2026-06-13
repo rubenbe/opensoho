@@ -733,12 +733,20 @@ func updateRadios(device *core.Record, app core.App, newradios map[int]Radio) {
 				oldradio.Set("mac_address", newradio.MAC)
 				dirty = true
 			}
+			// tx_power_mode is a required field; rows created before it existed
+			// hold an empty value that fails validation on save. Normalise the
+			// empty value (which means auto) so the record can be saved again.
+			mode := oldradio.GetString("tx_power_mode")
+			if mode == "" {
+				oldradio.Set("tx_power_mode", "auto")
+				mode = "auto"
+				dirty = true
+			}
 			// In auto mode the txpower option is omitted and the driver picks the
 			// power; record the value it reports so tx_power reflects what the
 			// radio is actually transmitting at. Never overwrite a value the user
 			// pinned in dBm/mW mode.
-			mode := oldradio.GetString("tx_power_mode")
-			if (mode == "auto" || mode == "") && newradio.TxPower > 0 &&
+			if mode == "auto" && newradio.TxPower > 0 &&
 				oldradio.GetInt("tx_power") != newradio.TxPower {
 				oldradio.Set("tx_power", newradio.TxPower)
 				dirty = true

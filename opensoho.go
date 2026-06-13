@@ -724,18 +724,28 @@ func updateRadios(device *core.Record, app core.App, newradios map[int]Radio) {
 		if newradio, ok := newradios[oldradionum]; ok {
 			// Old radio exists within the updated list (newradios)
 			fmt.Println("EXISTS", newradio, oldradio, oldradio.GetString("mac_address"))
+			dirty := false
 			if oldradio.GetBool("enabled") == false {
 				oldradio.Set("enabled", true)
-				err := app.Save(oldradio)
-				if err != nil {
-					fmt.Println("Failed to mark radio as enabled:", err)
-				}
+				dirty = true
 			}
 			if len(oldradio.GetString("mac_address")) == 0 {
 				oldradio.Set("mac_address", newradio.MAC)
-				err = app.Save(oldradio)
-				if err != nil {
-					fmt.Println("Failed to update radio with mac", err)
+				dirty = true
+			}
+			// In auto mode the txpower option is omitted and the driver picks the
+			// power; record the value it reports so tx_power reflects what the
+			// radio is actually transmitting at. Never overwrite a value the user
+			// pinned in dBm/mW mode.
+			mode := oldradio.GetString("tx_power_mode")
+			if (mode == "auto" || mode == "") && newradio.TxPower > 0 &&
+				oldradio.GetInt("tx_power") != newradio.TxPower {
+				oldradio.Set("tx_power", newradio.TxPower)
+				dirty = true
+			}
+			if dirty {
+				if err := app.Save(oldradio); err != nil {
+					fmt.Println("Failed to update radio:", err)
 				}
 			}
 			delete(newradios, oldradionum)
@@ -770,6 +780,12 @@ func updateRadios(device *core.Record, app core.App, newradios map[int]Radio) {
 		record.Set("channel", radio.Channel)
 		record.Set("frequency", radio.Frequency)
 		record.Set("enabled", true)
+		// New radios default to auto power; store the reported value (in dBm) so
+		// tx_power reflects what the driver chose.
+		record.Set("tx_power_mode", "auto")
+		if radio.TxPower > 0 {
+			record.Set("tx_power", radio.TxPower)
+		}
 		err := app.Save(record)
 		if err != nil {
 			fmt.Println("Failed to save radio config")

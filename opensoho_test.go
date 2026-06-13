@@ -2878,6 +2878,65 @@ func TestUpdateRadios(t *testing.T) {
 	}
 }
 
+func TestUpdateRadiosTxPower(t *testing.T) {
+	app, _ := tests.NewTestApp()
+
+	devicecollection := core.NewBaseCollection("devices")
+	assert.Equal(t, nil, app.Save(devicecollection))
+	setupRadioCollection(t, app, devicecollection)
+
+	d := core.NewRecord(devicecollection)
+	assert.Equal(t, nil, app.Save(d))
+
+	// A new radio records the reported dBm and defaults to auto mode.
+	updateRadios(d, app, map[int]Radio{0: {Frequency: 2412, Channel: 1, TxPower: 23}})
+	{
+		r, err := app.FindFirstRecordByData("radios", "radio", "0")
+		assert.Equal(t, nil, err)
+		assert.Equal(t, "auto", r.GetString("tx_power_mode"))
+		assert.Equal(t, 23, r.GetInt("tx_power"))
+	}
+
+	// A later report in auto mode updates tx_power to the new value.
+	updateRadios(d, app, map[int]Radio{0: {Frequency: 2412, Channel: 1, TxPower: 20}})
+	{
+		r, err := app.FindFirstRecordByData("radios", "radio", "0")
+		assert.Equal(t, nil, err)
+		assert.Equal(t, 20, r.GetInt("tx_power"))
+	}
+
+	// A radio the user pinned in dBm mode is never overwritten by monitoring.
+	{
+		r, err := app.FindFirstRecordByData("radios", "radio", "0")
+		assert.Equal(t, nil, err)
+		r.Set("tx_power_mode", "dBm")
+		r.Set("tx_power", 14)
+		assert.Equal(t, nil, app.Save(r))
+	}
+	updateRadios(d, app, map[int]Radio{0: {Frequency: 2412, Channel: 1, TxPower: 30}})
+	{
+		r, err := app.FindFirstRecordByData("radios", "radio", "0")
+		assert.Equal(t, nil, err)
+		assert.Equal(t, "dBm", r.GetString("tx_power_mode"))
+		assert.Equal(t, 14, r.GetInt("tx_power"))
+	}
+
+	// A radio reporting no power (0) leaves the stored value untouched.
+	{
+		r, err := app.FindFirstRecordByData("radios", "radio", "0")
+		assert.Equal(t, nil, err)
+		r.Set("tx_power_mode", "auto")
+		r.Set("tx_power", 18)
+		assert.Equal(t, nil, app.Save(r))
+	}
+	updateRadios(d, app, map[int]Radio{0: {Frequency: 2412, Channel: 1, TxPower: 0}})
+	{
+		r, err := app.FindFirstRecordByData("radios", "radio", "0")
+		assert.Equal(t, nil, err)
+		assert.Equal(t, 18, r.GetInt("tx_power"))
+	}
+}
+
 func TestFrequencyToChannel(t *testing.T) {
 	tests := []struct {
 		freq            int
@@ -3364,6 +3423,15 @@ func setupRadioCollection(t *testing.T, app core.App, devicecollection *core.Col
 	})
 	radiocollection.Fields.Add(&core.BoolField{
 		Name:     "enabled",
+		Required: false,
+	})
+	radiocollection.Fields.Add(&core.SelectField{
+		Name:      "tx_power_mode",
+		MaxSelect: 1,
+		Values:    []string{"auto", "dBm", "mW"},
+	})
+	radiocollection.Fields.Add(&core.NumberField{
+		Name:     "tx_power",
 		Required: false,
 	})
 	err := app.Save(radiocollection)

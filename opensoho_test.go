@@ -2740,6 +2740,28 @@ func TestFrequencyToBand(t *testing.T) {
 	}
 }
 
+func TestFrequencyToUciBand(t *testing.T) {
+	tests := []struct {
+		input    int
+		expected string
+	}{
+		{2412, "2g"},
+		{2472, "2g"},
+		{5180, "5g"},
+		{5825, "5g"},
+		{5955, "6g"},
+		{6975, "6g"},
+		{58320, "60g"},
+		{66960, "60g"},
+		{1000, ""},
+	}
+
+	for _, tt := range tests {
+		result := frequencyToUciBand(tt.input)
+		assert.Equal(t, result, tt.expected)
+	}
+}
+
 func TestUpdateRadios(t *testing.T) {
 	radios := make(map[int]Radio)
 	radios[0] = Radio{Frequency: 2412, Channel: 1, HTmode: "HT20", TxPower: 23}
@@ -3171,6 +3193,47 @@ config wifi-device 'radio3'
         option htmode 'VHT20'
         option txpower '17'
 `)
+}
+
+// TestGenerateRadioConfigBand checks that a specific (non-auto) frequency emits
+// the matching UCI "band" option for every band, while an auto frequency omits
+// it entirely.
+func TestGenerateRadioConfigBand(t *testing.T) {
+	app, _ := tests.NewTestApp()
+	radiocollection := core.NewBaseCollection("radios")
+	assert.Nil(t, app.Save(radiocollection))
+
+	bands := []struct {
+		frequency int
+		channel   string
+		band      string
+	}{
+		{2412, "1", "2g"},
+		{5180, "36", "5g"},
+		{5955, "1", "6g"},
+		{58320, "1", "60g"},
+	}
+
+	for _, b := range bands {
+		record := core.NewRecord(radiocollection)
+		record.Set("device", "something")
+		record.Set("radio", "0")
+		record.Set("frequency", b.frequency)
+
+		// A specific frequency emits the band matching that frequency.
+		assert.Equal(t, fmt.Sprintf(`
+config wifi-device 'radio0'
+        option channel '%s'
+        option band '%s'
+`, b.channel, b.band), generateRadioConfig(app, record, ""))
+
+		// auto_frequency uses channel 'auto' and omits the band option.
+		record.Set("auto_frequency", true)
+		assert.Equal(t, `
+config wifi-device 'radio0'
+        option channel 'auto'
+`, generateRadioConfig(app, record, ""))
+	}
 }
 
 func TestGenerateRadioConfigTxPowerMilliWatt(t *testing.T) {

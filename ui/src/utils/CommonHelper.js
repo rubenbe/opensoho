@@ -1296,6 +1296,8 @@ export default class CommonHelper {
 	    case "interfaces":
 		return "ri-base-station-line"
 	    case "radios":
+	    case "radio_frequencies":
+	    case "radio_tx_powers":
                 return "ri-broadcast-line"
 	    case "leds":
                 return "ri-lightbulb-line"

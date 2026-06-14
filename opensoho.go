@@ -144,6 +144,23 @@ func frequencyToBand(frequency int) string {
 	}
 }
 
+// frequencyToUciBand maps a frequency to the value UCI expects for the
+// wifi-device "band" option (e.g. 2412 -> "2g"). Returns "" for unknown bands.
+func frequencyToUciBand(frequency int) string {
+	switch frequencyToBand(frequency) {
+	case "2.4":
+		return "2g"
+	case "5":
+		return "5g"
+	case "6":
+		return "6g"
+	case "60":
+		return "60g"
+	default:
+		return ""
+	}
+}
+
 func isRandomizedMAC(mac string) bool {
 	parts := strings.SplitN(mac, ":", 2)
 	if len(parts) == 0 {
@@ -820,8 +837,14 @@ func generateRadioConfig(app core.App, radio *core.Record, country_code string) 
 	}
 
 	frequency_txt := "auto"
+	band_txt := ""
 	if radio.GetBool("auto_frequency") != true {
 		frequency_txt = fmt.Sprintf("%d", channel)
+		// A specific frequency pins the band; emit it so the driver picks
+		// the right radio band (e.g. option band '2g').
+		if band := frequencyToUciBand(frequency); len(band) > 0 {
+			band_txt = fmt.Sprintf("        option band '%[1]s'\n", band)
+		}
 	}
 	htmode_txt := ""
 	if htmode := radio.GetString("htmode"); len(htmode) > 0 {
@@ -850,7 +873,7 @@ func generateRadioConfig(app core.App, radio *core.Record, country_code string) 
 	return fmt.Sprintf(`
 config wifi-device 'radio%[1]d'
         option channel '%[2]s'
-%[3]s%[4]s%[5]s`, radio.GetInt("radio"), frequency_txt, country_txt, htmode_txt, txpower_txt)
+%[6]s%[3]s%[4]s%[5]s`, radio.GetInt("radio"), frequency_txt, country_txt, htmode_txt, txpower_txt, band_txt)
 }
 
 func getRadiosForDevice(device *core.Record, app core.App) ([]*core.Record, error) {

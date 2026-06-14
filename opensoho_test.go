@@ -3140,6 +3140,7 @@ func TestGenerateRadioConfig(t *testing.T) {
 	assert.Equal(t, generateRadioConfig(app, record, ""), `
 config wifi-device 'radio3'
         option channel '40'
+        option band '5g'
 `)
 
 	record.Set("auto_frequency", true)
@@ -3202,6 +3203,7 @@ func TestGenerateRadioConfigTxPowerMilliWatt(t *testing.T) {
 	assert.Equal(t, generateRadioConfig(app, record, ""), `
 config wifi-device 'radio0'
         option channel '1'
+        option band '2g'
         option txpower '23'
 `)
 
@@ -3211,6 +3213,7 @@ config wifi-device 'radio0'
 	assert.Equal(t, generateRadioConfig(app, record, ""), `
 config wifi-device 'radio0'
         option channel '1'
+        option band '2g'
 `)
 }
 
@@ -3369,9 +3372,11 @@ func TestGenerateRadioConfigs(t *testing.T) {
 	assert.Equal(t, `
 config wifi-device 'radio0'
         option channel '1'
+        option band '2g'
 
 config wifi-device 'radio1'
         option channel '40'
+        option band '5g'
 `, generateRadioConfigs(d, app))
 
 	country := core.NewRecord(settingscollection)
@@ -3382,10 +3387,12 @@ config wifi-device 'radio1'
 	assert.Equal(t, `
 config wifi-device 'radio0'
         option channel '1'
+        option band '2g'
         option country 'DE'
 
 config wifi-device 'radio1'
         option channel '40'
+        option band '5g'
         option country 'DE'
 `, generateRadioConfigs(d, app))
 

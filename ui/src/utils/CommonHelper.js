@@ -1198,6 +1198,8 @@ export default class CommonHelper {
         case "ethernet":
         case "interfaces":
         case "radios":
+        case "radio_frequencies":
+        case "radio_tx_powers":
         return true;
             default:
                 return false;

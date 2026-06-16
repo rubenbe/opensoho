@@ -140,14 +140,17 @@ func TestBuildOverviewAggregateAnyDeviceSupports(t *testing.T) {
 	assert.Equal(t, "available", gLow.State)
 	assert.Equal(t, []string{"AP-A"}, refNames(gLow.SupportedBy))
 	assert.Equal(t, "A", gLow.SupportedBy[0].Id)
+	assert.Equal(t, []string{"AP-B"}, refNames(gLow.UnsupportedBy)) // B has rows but not 36-48
 
 	gHigh := blockAt(tier80, 20) // 149-161
 	assert.Equal(t, "available", gHigh.State)
 	assert.Equal(t, []string{"AP-B"}, refNames(gHigh.SupportedBy))
+	assert.Equal(t, []string{"AP-A"}, refNames(gHigh.UnsupportedBy))
 
 	gMid := blockAt(tier80, 8) // 100-112, supported by neither
 	assert.Equal(t, "invalid", gMid.State)
 	assert.Empty(t, gMid.SupportedBy)
+	assert.Equal(t, []string{"AP-A", "AP-B"}, refNames(gMid.UnsupportedBy))
 }
 
 func TestBuildOverviewAggregateFlagRescuedByOtherDevice(t *testing.T) {
@@ -165,6 +168,7 @@ func TestBuildOverviewAggregateFlagRescuedByOtherDevice(t *testing.T) {
 	g80 := blockAt(findTier(b5, 80), 0) // 36-48: A forbidden, B supports
 	assert.Equal(t, "available", g80.State)
 	assert.Equal(t, []string{"AP-B"}, refNames(g80.SupportedBy))
+	assert.Equal(t, []string{"AP-A"}, refNames(g80.UnsupportedBy))
 
 	g40 := blockAt(findTier(b5, 40), 0) // 36-40: 40 MHz allowed for both
 	assert.Equal(t, "available", g40.State)
@@ -185,6 +189,7 @@ func TestBuildOverviewUnknownCapabilityDevicePreventsGreying(t *testing.T) {
 	g80 := blockAt(findTier(findBand(ov, "5"), 80), 8) // 100-112
 	assert.Equal(t, "available", g80.State)
 	assert.Empty(t, g80.SupportedBy)
+	assert.Equal(t, []string{"AP-A"}, refNames(g80.UnsupportedBy)) // A known-but-missing; B unknown, not listed
 }
 
 func TestBuildOverviewSkipsEmptyBand(t *testing.T) {

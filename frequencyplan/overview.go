@@ -27,14 +27,15 @@ type DeviceRef struct {
 
 // Block is one rendered block in a width tier.
 type Block struct {
-	StartIndex  int         `json:"startIndex"`
-	Span        int         `json:"span"`
-	State       string      `json:"state"` // "used" | "available" | "invalid"
-	Label       string      `json:"label"`
-	Channels    []int       `json:"channels"`
-	Frequencies []int       `json:"frequencies"`
-	Devices     []DeviceRef `json:"devices"`     // devices that have this mode configured (in use)
-	SupportedBy []DeviceRef `json:"supportedBy"` // devices whose capabilities support this mode
+	StartIndex    int         `json:"startIndex"`
+	Span          int         `json:"span"`
+	State         string      `json:"state"` // "used" | "available" | "invalid"
+	Label         string      `json:"label"`
+	Channels      []int       `json:"channels"`
+	Frequencies   []int       `json:"frequencies"`
+	Devices       []DeviceRef `json:"devices"`       // devices that have this mode configured (in use)
+	SupportedBy   []DeviceRef `json:"supportedBy"`   // devices whose capabilities support this mode
+	UnsupportedBy []DeviceRef `json:"unsupportedBy"` // known-capability devices that don't support it
 }
 
 // Tier is one channel-width row within a band.
@@ -141,9 +142,10 @@ func buildBand(band string, radios []Radio, freqs []Frequency, deviceNames map[s
 			// validateRadioHtModeFlags). Such devices are not listed in
 			// SupportedBy but still keep the block from greying out.
 			anySupport := false
-			supporters := map[string]bool{} // set(device id)
+			supporters := map[string]bool{}    // set(device id) with confirmed support
+			notSupporters := map[string]bool{} // set(device id), known-capability but no support
 			for d := range scopeDevices {
-				if deviceFreqs[d] == nil { // unknown capabilities
+				if deviceFreqs[d] == nil { // unknown capabilities — claim neither way
 					anySupport = true
 					continue
 				}
@@ -160,6 +162,8 @@ func buildBand(band string, radios []Radio, freqs []Frequency, deviceNames map[s
 				if advertisesAll && !WidthForbidden(width, sortedKeys(devFlags)) {
 					anySupport = true
 					supporters[d] = true
+				} else {
+					notSupporters[d] = true
 				}
 			}
 
@@ -194,14 +198,15 @@ func buildBand(band string, radios []Radio, freqs []Frequency, deviceNames map[s
 			}
 
 			blocks = append(blocks, Block{
-				StartIndex:  g.StartIndex,
-				Span:        g.Span,
-				State:       state,
-				Label:       label,
-				Channels:    channels,
-				Frequencies: g.Frequencies,
-				Devices:     deviceRefs(devs, deviceNames),
-				SupportedBy: deviceRefs(supporters, deviceNames),
+				StartIndex:    g.StartIndex,
+				Span:          g.Span,
+				State:         state,
+				Label:         label,
+				Channels:      channels,
+				Frequencies:   g.Frequencies,
+				Devices:       deviceRefs(devs, deviceNames),
+				SupportedBy:   deviceRefs(supporters, deviceNames),
+				UnsupportedBy: deviceRefs(notSupporters, deviceNames),
 			})
 		}
 		tiers = append(tiers, Tier{Width: width, Groups: blocks})

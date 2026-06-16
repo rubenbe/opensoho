@@ -165,6 +165,12 @@
                     </span>
                 </div>
             {/if}
+            {#if tip.block.unsupportedBy?.length}
+                <div class="tip-row">
+                    <span class="tip-label">Unsupported</span>
+                    <span>{tip.block.unsupportedBy.map((d) => d.name).join(", ")}</span>
+                </div>
+            {/if}
         </div>
     {/if}
 </div>

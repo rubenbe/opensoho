@@ -36,6 +36,7 @@ import (
 	"github.com/rubenbe/pocketbase/core"
 	//"github.com/rubenbe/pocketbase/plugins/ghupdate"
 	"github.com/reugn/wifiqr"
+	"github.com/rubenbe/opensoho/frequencyplan"
 	"github.com/rubenbe/opensoho/ui"
 	"github.com/rubenbe/pocketbase/plugins/jsvm"
 	"github.com/rubenbe/pocketbase/plugins/migratecmd"
@@ -130,18 +131,7 @@ func updateLastSeen(e *core.RequestEvent, record *core.Record) error {
 }
 
 func frequencyToBand(frequency int) string {
-	switch {
-	case frequency >= 2400 && frequency <= 2500:
-		return "2.4"
-	case frequency >= 5170 && frequency <= 5835:
-		return "5"
-	case frequency >= 5925 && frequency <= 7125:
-		return "6"
-	case frequency >= 57000 && frequency <= 71000:
-		return "60"
-	default:
-		return "unknown"
-	}
+	return frequencyplan.FrequencyToBand(frequency)
 }
 
 // frequencyToUciBand maps a frequency to the value UCI expects for the
@@ -189,33 +179,7 @@ func maxInt(a int, b int) int {
 }
 
 func frequencyToChannel(freqMHz int) (int, bool) {
-	switch {
-	// 2.4 GHz band: Channels 1–14
-	case freqMHz >= 2412 && freqMHz <= 2484:
-		if freqMHz == 2484 {
-			return 14, true
-		}
-		return (freqMHz - 2407) / 5, true
-
-	// 5 GHz band: Channels 36–165
-	case freqMHz >= 5180 && freqMHz <= 5825:
-		return (freqMHz - 5000) / 5, true
-
-	// 6 GHz band: Channels 1–233 (starting at 5955 MHz, 5 MHz spacing)
-	case freqMHz >= 5955 && freqMHz <= 7115:
-		return (freqMHz - 5950) / 5, true
-
-	// 60 GHz band (WiGig): Channels 1–6 (center freqs: 58320 + 2160 × (n − 1))
-	case freqMHz >= 58320 && freqMHz <= 70200:
-		ch := ((freqMHz - 58320) / 2160) + 1
-		if ch >= 1 && ch <= 6 {
-			return ch, true
-		}
-		return 0, false
-
-	default:
-		return 0, false
-	}
+	return frequencyplan.FrequencyToChannel(freqMHz)
 }
 
 func validateRadioHtModeBandCombo(band string, htmode string) error {
@@ -2567,6 +2531,7 @@ table.table > thead > tr > th > div.col-header-content > span.txt
 			})
 
 			e.Router.GET("/api/v1/devicestatus/{mac_address}", apiGenerateDeviceStatus).Bind(apis.RequireAuth())
+			e.Router.GET("/api/v1/frequency-overview", apiFrequencyOverview).Bind(apis.RequireAuth())
 
 			return e.Next()
 		},
@@ -2722,6 +2687,91 @@ func apiGenerateDeviceStatus(e *core.RequestEvent) error {
 	fmt.Println("HASS health status", mac_address, health_status, sensor_status)
 
 	return e.String(200, sensor_status)
+}
+
+// apiFrequencyOverview builds the dashboard's per-band channel-bonding overview.
+// The scope query param selects which devices are aggregated:
+//
+//	"healthy" (default) -> only devices with health_status == "healthy"
+//	"all"               -> every device
+//	<device id>         -> that single device
+func apiFrequencyOverview(e *core.RequestEvent) error {
+	scope := e.Request.URL.Query().Get("scope")
+	if scope == "" {
+		scope = "healthy"
+	}
+
+	deviceRecords, err := e.App.FindAllRecords("devices")
+	if err != nil {
+		return e.InternalServerError("Failed to load devices", err)
+	}
+
+	deviceNames := map[string]string{}
+	allowed := map[string]bool{}
+	allowAll := scope == "all"
+	for _, d := range deviceRecords {
+		deviceNames[d.Id] = d.GetString("name")
+		switch {
+		case scope == "healthy":
+			if d.GetString("health_status") == "healthy" {
+				allowed[d.Id] = true
+			}
+		case !allowAll: // a specific device id
+			if d.Id == scope {
+				allowed[d.Id] = true
+			}
+		}
+	}
+	inScope := func(device string) bool { return allowAll || allowed[device] }
+
+	radioRecords, err := e.App.FindAllRecords("radios")
+	if err != nil {
+		return e.InternalServerError("Failed to load radios", err)
+	}
+	freqRecords, err := e.App.FindAllRecords("radio_frequencies")
+	if err != nil {
+		return e.InternalServerError("Failed to load radio frequencies", err)
+	}
+
+	var radios []frequencyplan.Radio
+	for _, r := range radioRecords {
+		if !inScope(r.GetString("device")) {
+			continue
+		}
+		radios = append(radios, frequencyplan.Radio{
+			Device:    r.GetString("device"),
+			Frequency: r.GetInt("frequency"),
+			Htmode:    r.GetString("htmode"),
+		})
+	}
+	var freqs []frequencyplan.Frequency
+	for _, f := range freqRecords {
+		if !inScope(f.GetString("device")) {
+			continue
+		}
+		freqs = append(freqs, frequencyplan.Frequency{
+			Device:    f.GetString("device"),
+			Frequency: f.GetInt("frequency"),
+			Flags:     f.GetStringSlice("flags"),
+		})
+	}
+
+	// Device list for the selector, sorted by name.
+	type deviceOption struct {
+		Id   string `json:"id"`
+		Name string `json:"name"`
+	}
+	devices := make([]deviceOption, 0, len(deviceRecords))
+	for _, d := range deviceRecords {
+		devices = append(devices, deviceOption{Id: d.Id, Name: d.GetString("name")})
+	}
+	sort.Slice(devices, func(i, j int) bool { return devices[i].Name < devices[j].Name })
+
+	return e.JSON(200, map[string]any{
+		"scope":   scope,
+		"devices": devices,
+		"bands":   frequencyplan.BuildOverview(radios, freqs, deviceNames),
+	})
 }
 
 func generateWifiQr(wifi *core.Record) (*bytes.Buffer, error) {

@@ -2,152 +2,38 @@
     import { onMount } from "svelte";
     import { scale } from "svelte/transition";
     import ApiClient from "@/utils/ApiClient";
-    import {
-        BANDS,
-        BAND_LABELS,
-        BAND_WIDTHS,
-        STANDARD_CHANNELS,
-        bondingGroups,
-        frequencyToBand,
-        frequencyToChannel,
-        htmodeWidth,
-    } from "@/utils/frequencies";
 
     let isLoading = false;
     let selectedScope = "healthy"; // "healthy" | "all" | <device id>
     let devices = [];
-    let bands = []; // processed render model, see buildBand()
+    let bands = []; // server-computed render model (see /api/v1/frequency-overview)
 
-    // Does `flags` forbid the given channel width? Mirrors validateRadioHtModeFlags in opensoho.go.
-    function widthForbidden(width, flags) {
-        if (!flags) return false;
-        switch (width) {
-            case 40:
-                return flags.has("no_ht40-") && flags.has("no_ht40+");
-            case 80:
-                return flags.has("no_80mhz");
-            case 160:
-                return flags.has("no_160mhz");
-            case 20:
-                return flags.has("no_20mhz");
-            default:
-                return false;
+    // Compose the hover tooltip from a block's structured fields.
+    function blockTitle(width, g) {
+        const chans = (g.channels || []).join("+");
+        const freqs = (g.frequencies || []).join("/");
+        let t = `${width} MHz · ch ${chans} · ${freqs} MHz`;
+        if (g.devices?.length) {
+            t += ` · in use: ${g.devices.join(", ")}`;
+        } else if (g.state === "invalid") {
+            t += " · invalid";
         }
-    }
-
-    // Returns the render model for one band, or null when there is nothing to show.
-    function buildBand(band, radios, freqRows, deviceNameById) {
-        // Hardware-advertised frequencies (union across scope) + merged flags per frequency.
-        const validFreqs = new Set();
-        const flagsByFreq = {};
-        for (const r of freqRows) {
-            if (frequencyToBand(r.frequency) !== band) continue;
-            validFreqs.add(r.frequency);
-            const flags = flagsByFreq[r.frequency] || (flagsByFreq[r.frequency] = new Set());
-            for (const f of r.flags || []) flags.add(f);
+        if (g.flags?.length) {
+            t += ` · flags: ${g.flags.join(", ")}`;
         }
-        const hasFreqData = validFreqs.size > 0;
-
-        // Configured radios: widths in use per frequency + which devices use them (for tooltips).
-        const usedWidths = {}; // freq -> Set(width)
-        const usedDevices = {}; // `${freq}:${width}` -> Set(device name)
-        let hasRadios = false;
-        for (const radio of radios) {
-            if (frequencyToBand(radio.frequency) !== band) continue;
-            hasRadios = true;
-            const width = htmodeWidth(radio.htmode);
-            if (width == null) continue;
-            (usedWidths[radio.frequency] || (usedWidths[radio.frequency] = new Set())).add(width);
-            const key = `${radio.frequency}:${width}`;
-            const name = deviceNameById[radio.device] || radio.device || "?";
-            (usedDevices[key] || (usedDevices[key] = new Set())).add(name);
-        }
-
-        // Skip bands with nothing configured and no advertised frequencies (keeps e.g. an empty
-        // 6 GHz plan from cluttering the card).
-        if (!hasRadios && !hasFreqData) return null;
-
-        const tiers = (BAND_WIDTHS[band] || []).map((width) => {
-            const groups = bondingGroups(band, width).map((g) => {
-                const channels = g.frequencies.map((f) => frequencyToChannel(f));
-                const mergedFlags = new Set();
-                for (const f of g.frequencies) for (const fl of flagsByFreq[f] || []) mergedFlags.add(fl);
-
-                const used = g.frequencies.some((f) => usedWidths[f]?.has(width));
-                const missing = hasFreqData && g.frequencies.some((f) => !validFreqs.has(f));
-                const invalid = !g.complete || missing || widthForbidden(width, mergedFlags);
-
-                const state = used ? "used" : invalid ? "invalid" : "available";
-                const label =
-                    g.span === 1
-                        ? `${channels[0]}`
-                        : `${channels[0]}–${channels[channels.length - 1]}`;
-
-                const devs = new Set();
-                for (const f of g.frequencies) {
-                    for (const d of usedDevices[`${f}:${width}`] || []) devs.add(d);
-                }
-                const flagList = Array.from(mergedFlags);
-                const title =
-                    `${width} MHz · ch ${channels.join("+")} · ${g.frequencies.join("/")} MHz` +
-                    (devs.size ? ` · in use: ${Array.from(devs).join(", ")}` : invalid ? " · invalid" : "") +
-                    (flagList.length ? ` · flags: ${flagList.join(", ")}` : "");
-
-                return {
-                    key: `${width}:${g.startIndex}`,
-                    startIndex: g.startIndex,
-                    span: g.span,
-                    state,
-                    label,
-                    title,
-                };
-            });
-            return { width, groups };
-        });
-
-        return {
-            band,
-            label: BAND_LABELS[band] || band,
-            cols: (STANDARD_CHANNELS[band] || []).length,
-            tiers,
-        };
+        return t;
     }
 
     export async function load() {
         isLoading = true;
         try {
-            const [deviceRows, radios, freqRows] = await Promise.all([
-                ApiClient.collection("devices").getFullList({
-                    fields: "id,name,health_status",
-                    sort: "name",
-                    requestKey: "freq_overview_devices",
-                }),
-                ApiClient.collection("radios").getFullList({
-                    fields: "device,frequency,htmode",
-                    requestKey: "freq_overview_radios",
-                }),
-                ApiClient.collection("radio_frequencies").getFullList({
-                    fields: "device,frequency,flags",
-                    requestKey: "freq_overview_freqs",
-                }),
-            ]);
-
-            devices = deviceRows;
-            const deviceNameById = {};
-            for (const d of deviceRows) deviceNameById[d.id] = d.name;
-
-            // Allowed device-id set for the current scope (null = no filtering).
-            let allowed = null;
-            if (selectedScope === "healthy") {
-                allowed = new Set(deviceRows.filter((d) => d.health_status === "healthy").map((d) => d.id));
-            } else if (selectedScope !== "all") {
-                allowed = new Set([selectedScope]);
-            }
-            const inScope = (row) => allowed === null || allowed.has(row.device);
-            const scopedRadios = radios.filter(inScope);
-            const scopedFreqs = freqRows.filter(inScope);
-
-            bands = BANDS.map((b) => buildBand(b, scopedRadios, scopedFreqs, deviceNameById)).filter(Boolean);
+            const res = await ApiClient.send("/api/v1/frequency-overview", {
+                method: "GET",
+                query: { scope: selectedScope },
+                requestKey: "frequency_overview",
+            });
+            devices = res.devices || [];
+            bands = res.bands || [];
         } catch (err) {
             if (!err?.isAbort) {
                 ApiClient.error(err);
@@ -199,11 +85,11 @@
                         <div class="tier">
                             <span class="tier-label">{tier.width}</span>
                             <div class="tier-cells" style="--cols:{b.cols}">
-                                {#each tier.groups as g (g.key)}
+                                {#each tier.groups as g (g.startIndex)}
                                     <div
                                         class="block {g.state}"
                                         style="grid-column:{g.startIndex + 1} / span {g.span}"
-                                        title={g.title}
+                                        title={blockTitle(tier.width, g)}
                                     >
                                         <span class="block-label">{g.label}</span>
                                     </div>

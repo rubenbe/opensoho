@@ -28,7 +28,8 @@ type Block struct {
 	Channels    []int    `json:"channels"`
 	Frequencies []int    `json:"frequencies"`
 	Flags       []string `json:"flags"`
-	Devices     []string `json:"devices"`
+	Devices     []string `json:"devices"`     // devices that have this mode configured (in use)
+	SupportedBy []string `json:"supportedBy"` // devices whose capabilities support this mode
 }
 
 // Tier is one channel-width row within a band.
@@ -59,24 +60,31 @@ func BuildOverview(radios []Radio, freqs []Frequency, deviceNames map[string]str
 }
 
 func buildBand(band string, radios []Radio, freqs []Frequency, deviceNames map[string]string) *BandOverview {
-	// Hardware-advertised frequencies (union across scope) + merged flags per freq.
-	validFreqs := map[int]bool{}
-	flagsByFreq := map[int]map[string]bool{}
+	// Per-device hardware capabilities for this band: which frequencies each
+	// device advertises and the flags on each. Support is evaluated per device
+	// and OR-ed across devices, so an aggregate scope only greys a mode when no
+	// in-scope device supports it.
+	deviceFreqs := map[string]map[int]bool{}     // device -> set(frequency)
+	deviceFlags := map[string]map[int][]string{} // device -> frequency -> flags
 	for _, f := range freqs {
 		if FrequencyToBand(f.Frequency) != band {
 			continue
 		}
-		validFreqs[f.Frequency] = true
-		set := flagsByFreq[f.Frequency]
-		if set == nil {
-			set = map[string]bool{}
-			flagsByFreq[f.Frequency] = set
+		if deviceFreqs[f.Device] == nil {
+			deviceFreqs[f.Device] = map[int]bool{}
+			deviceFlags[f.Device] = map[int][]string{}
 		}
-		for _, fl := range f.Flags {
-			set[fl] = true
-		}
+		deviceFreqs[f.Device][f.Frequency] = true
+		deviceFlags[f.Device][f.Frequency] = f.Flags
 	}
-	hasFreqData := len(validFreqs) > 0
+	hasFreqData := len(deviceFreqs) > 0
+
+	// All in-scope device ids (those with advertised frequencies and/or a
+	// configured radio in this band) — used to OR support across devices.
+	scopeDevices := map[string]bool{}
+	for d := range deviceFreqs {
+		scopeDevices[d] = true
+	}
 
 	// Configured radios: widths in use per freq + which devices use them.
 	usedWidths := map[int]map[int]bool{}        // freq -> set(width)
@@ -87,6 +95,7 @@ func buildBand(band string, radios []Radio, freqs []Frequency, deviceNames map[s
 			continue
 		}
 		hasRadios = true
+		scopeDevices[r.Device] = true
 		width, ok := HtmodeWidth(r.Htmode)
 		if !ok {
 			continue
@@ -126,10 +135,37 @@ func buildBand(band string, radios []Radio, freqs []Frequency, deviceNames map[s
 				channels[i] = ch
 			}
 
-			mergedFlags := map[string]bool{}
-			for _, f := range g.Frequencies {
-				for fl := range flagsByFreq[f] {
-					mergedFlags[fl] = true
+			// Evaluate capability support per device, OR-ed across the scope.
+			// A device with no advertised frequencies in this band has unknown
+			// capabilities and is treated as supporting (mirrors the skip in
+			// validateRadioHtModeFlags). Such devices are not listed in
+			// SupportedBy but still keep the block from greying out.
+			anySupport := false
+			supporters := map[string]bool{}
+			mergedFlags := map[string]bool{} // union over the scope, for display only
+			for d := range scopeDevices {
+				if deviceFreqs[d] == nil { // unknown capabilities
+					anySupport = true
+					continue
+				}
+				advertisesAll := true
+				devFlags := map[string]bool{}
+				for _, f := range g.Frequencies {
+					if !deviceFreqs[d][f] {
+						advertisesAll = false
+					}
+					for _, fl := range deviceFlags[d][f] {
+						devFlags[fl] = true
+						mergedFlags[fl] = true
+					}
+				}
+				if advertisesAll && !WidthForbidden(width, sortedKeys(devFlags)) {
+					anySupport = true
+					name := deviceNames[d]
+					if name == "" {
+						name = d
+					}
+					supporters[name] = true
 				}
 			}
 
@@ -141,17 +177,7 @@ func buildBand(band string, radios []Radio, freqs []Frequency, deviceNames map[s
 				}
 			}
 
-			missing := false
-			if hasFreqData {
-				for _, f := range g.Frequencies {
-					if !validFreqs[f] {
-						missing = true
-						break
-					}
-				}
-			}
-
-			invalid := !g.Complete || missing || WidthForbidden(width, sortedKeys(mergedFlags))
+			invalid := !g.Complete || !anySupport
 
 			state := "available"
 			switch {
@@ -182,6 +208,7 @@ func buildBand(band string, radios []Radio, freqs []Frequency, deviceNames map[s
 				Frequencies: g.Frequencies,
 				Flags:       sortedKeys(mergedFlags),
 				Devices:     sortedKeys(devs),
+				SupportedBy: sortedKeys(supporters),
 			})
 		}
 		tiers = append(tiers, Tier{Width: width, Groups: blocks})

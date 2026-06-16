@@ -114,6 +114,69 @@ func TestBuildOverviewFlagForbidsWidth(t *testing.T) {
 	assert.Contains(t, g80.Flags, "no_80mhz")
 }
 
+func TestBuildOverviewAggregateAnyDeviceSupports(t *testing.T) {
+	// Device A advertises the lower 80 MHz block (36-48); device B advertises the
+	// 149-161 block. Each supports its own block; neither supports 100-112.
+	freqs := []Frequency{
+		{Device: "A", Frequency: 5180}, {Device: "A", Frequency: 5200},
+		{Device: "A", Frequency: 5220}, {Device: "A", Frequency: 5240},
+		{Device: "B", Frequency: 5745}, {Device: "B", Frequency: 5765},
+		{Device: "B", Frequency: 5785}, {Device: "B", Frequency: 5805},
+	}
+	names := map[string]string{"A": "AP-A", "B": "AP-B"}
+	ov := BuildOverview(nil, freqs, names)
+	tier80 := findTier(findBand(ov, "5"), 80)
+
+	gLow := blockAt(tier80, 0) // 36-48
+	assert.Equal(t, "available", gLow.State)
+	assert.Equal(t, []string{"AP-A"}, gLow.SupportedBy)
+
+	gHigh := blockAt(tier80, 20) // 149-161
+	assert.Equal(t, "available", gHigh.State)
+	assert.Equal(t, []string{"AP-B"}, gHigh.SupportedBy)
+
+	gMid := blockAt(tier80, 8) // 100-112, supported by neither
+	assert.Equal(t, "invalid", gMid.State)
+	assert.Empty(t, gMid.SupportedBy)
+}
+
+func TestBuildOverviewAggregateFlagRescuedByOtherDevice(t *testing.T) {
+	// Both advertise 36-48, but device A forbids 80 MHz on the primary.
+	freqs := []Frequency{
+		{Device: "A", Frequency: 5180, Flags: []string{"no_80mhz"}},
+		{Device: "A", Frequency: 5200}, {Device: "A", Frequency: 5220}, {Device: "A", Frequency: 5240},
+		{Device: "B", Frequency: 5180}, {Device: "B", Frequency: 5200},
+		{Device: "B", Frequency: 5220}, {Device: "B", Frequency: 5240},
+	}
+	names := map[string]string{"A": "AP-A", "B": "AP-B"}
+	ov := BuildOverview(nil, freqs, names)
+	b5 := findBand(ov, "5")
+
+	g80 := blockAt(findTier(b5, 80), 0) // 36-48: A forbidden, B supports
+	assert.Equal(t, "available", g80.State)
+	assert.Equal(t, []string{"AP-B"}, g80.SupportedBy)
+
+	g40 := blockAt(findTier(b5, 40), 0) // 36-40: 40 MHz allowed for both
+	assert.Equal(t, "available", g40.State)
+	assert.Equal(t, []string{"AP-A", "AP-B"}, g40.SupportedBy)
+}
+
+func TestBuildOverviewUnknownCapabilityDevicePreventsGreying(t *testing.T) {
+	// Device A advertises only 36,40 (so 100-112 is unsupported for A); device B
+	// has no advertised frequencies but has a radio in the band -> unknown
+	// capabilities -> keeps the block available without being listed.
+	freqs := []Frequency{
+		{Device: "A", Frequency: 5180}, {Device: "A", Frequency: 5200},
+	}
+	radios := []Radio{{Device: "B", Frequency: 5500, Htmode: "HT20"}} // ch100, 20 MHz
+	names := map[string]string{"A": "AP-A", "B": "AP-B"}
+	ov := BuildOverview(radios, freqs, names)
+
+	g80 := blockAt(findTier(findBand(ov, "5"), 80), 8) // 100-112
+	assert.Equal(t, "available", g80.State)
+	assert.Empty(t, g80.SupportedBy)
+}
+
 func TestBuildOverviewSkipsEmptyBand(t *testing.T) {
 	// Only a 2.4 GHz radio -> no 5/6 GHz bands in the output.
 	ov := BuildOverview([]Radio{{Device: "d", Frequency: 2412, Htmode: "HT20"}}, nil, nil)

@@ -15,7 +15,11 @@
         let t = `${width} MHz · ch ${chans} · ${freqs} MHz`;
         if (g.devices?.length) {
             t += ` · in use: ${g.devices.join(", ")}`;
-        } else if (g.state === "invalid") {
+        }
+        if (g.supportedBy?.length) {
+            t += ` · supported by: ${g.supportedBy.join(", ")}`;
+        }
+        if (!g.devices?.length && g.state === "invalid") {
             t += " · invalid";
         }
         if (g.flags?.length) {

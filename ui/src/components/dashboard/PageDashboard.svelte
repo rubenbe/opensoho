@@ -7,6 +7,7 @@
     import ClientsPerDeviceChart from "@/components/dashboard/ClientsPerDeviceChart.svelte";
     import ClientsPerChannelChart from "@/components/dashboard/ClientsPerChannelChart.svelte";
     import ClientSignalQualityChart from "@/components/dashboard/ClientSignalQualityChart.svelte";
+    import FrequencyOverview from "@/components/dashboard/FrequencyOverview.svelte";
 
     $pageTitle = "Dashboard";
 
@@ -14,12 +15,14 @@
     let clientsPerDeviceChart;
     let clientsPerChannelChart;
     let clientSignalQualityChart;
+    let frequencyOverview;
 
     function refreshAll() {
         deviceHealthChart?.load();
         clientsPerDeviceChart?.load();
         clientsPerChannelChart?.load();
         clientSignalQualityChart?.load();
+        frequencyOverview?.load();
     }
 
     const refreshInterval = setInterval(refreshAll, 15000);
@@ -55,6 +58,10 @@
             <h6 class="card-title">Client Signal Quality</h6>
             <ClientSignalQualityChart bind:this={clientSignalQualityChart} />
         </div>
+        <div class="dashboard-card wide">
+            <h6 class="card-title">Frequency Overview</h6>
+            <FrequencyOverview bind:this={frequencyOverview} />
+        </div>
     </div>
 </PageWrapper>
 
@@ -70,6 +77,9 @@
         border-radius: var(--lgRadius);
         padding: var(--baseSpacing);
         box-shadow: 0 1px 4px var(--shadowColor);
+    }
+    .dashboard-card.wide {
+        grid-column: 1 / -1;
     }
     .card-title {
         margin: 0 0 var(--smSpacing);

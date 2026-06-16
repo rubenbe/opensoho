@@ -1,6 +1,7 @@
 <script>
-    import { onMount } from "svelte";
+    import { onMount, onDestroy, tick } from "svelte";
     import { scale } from "svelte/transition";
+    import { push } from "svelte-spa-router";
     import ApiClient from "@/utils/ApiClient";
 
     let isLoading = false;
@@ -8,24 +9,38 @@
     let devices = [];
     let bands = []; // server-computed render model (see /api/v1/frequency-overview)
 
-    // Compose the hover tooltip from a block's structured fields.
-    function blockTitle(width, g) {
-        const chans = (g.channels || []).join("+");
-        const freqs = (g.frequencies || []).join("/");
-        let t = `${width} MHz · ch ${chans} · ${freqs} MHz`;
-        if (g.devices?.length) {
-            t += ` · in use: ${g.devices.join(", ")}`;
-        }
-        if (g.supportedBy?.length) {
-            t += ` · supported by: ${g.supportedBy.join(", ")}`;
-        }
-        if (!g.devices?.length && g.state === "invalid") {
-            t += " · invalid";
-        }
-        if (g.flags?.length) {
-            t += ` · flags: ${g.flags.join(", ")}`;
-        }
-        return t;
+    const STATE_LABELS = { used: "In use", available: "Available", invalid: "Invalid" };
+
+    // Custom tooltip state.
+    let tip = null; // { x, y, width, block }
+    let tipEl;
+    let hideTimer;
+
+    async function showTip(node, width, block) {
+        clearTimeout(hideTimer);
+        const rect = node.getBoundingClientRect();
+        tip = { x: rect.left, y: rect.bottom + 6, width, block };
+        // Clamp to the viewport once the tooltip has rendered and we know its size.
+        await tick();
+        if (!tipEl || !tip) return;
+        const t = tipEl.getBoundingClientRect();
+        const margin = 8;
+        let x = tip.x;
+        let y = tip.y;
+        if (x + t.width > window.innerWidth - margin) x = window.innerWidth - t.width - margin;
+        if (x < margin) x = margin;
+        if (y + t.height > window.innerHeight - margin) y = rect.top - t.height - 6;
+        tip = { ...tip, x, y };
+    }
+
+    function scheduleHide() {
+        clearTimeout(hideTimer);
+        hideTimer = setTimeout(() => (tip = null), 120);
+    }
+
+    function openRadios(id) {
+        tip = null;
+        push("/collections?collection=radios&filter=" + encodeURIComponent(`device="${id}"`));
     }
 
     export async function load() {
@@ -50,6 +65,8 @@
     onMount(() => {
         load();
     });
+
+    onDestroy(() => clearTimeout(hideTimer));
 </script>
 
 <div class="freq-overview" class:loading={isLoading}>
@@ -93,7 +110,8 @@
                                     <div
                                         class="block {g.state}"
                                         style="grid-column:{g.startIndex + 1} / span {g.span}"
-                                        title={blockTitle(tier.width, g)}
+                                        on:mouseenter={(e) => showTip(e.currentTarget, tier.width, g)}
+                                        on:mouseleave={scheduleHide}
                                     >
                                         <span class="block-label">{g.label}</span>
                                     </div>
@@ -105,6 +123,49 @@
             </div>
         </div>
     {/each}
+
+    {#if tip}
+        <div
+            class="freq-tip"
+            bind:this={tipEl}
+            style="left:{tip.x}px; top:{tip.y}px"
+            on:mouseenter={() => clearTimeout(hideTimer)}
+            on:mouseleave={scheduleHide}
+        >
+            <div class="tip-heading">
+                {tip.width} MHz · channel{tip.block.channels.length > 1 ? "s" : ""}
+                {tip.block.channels.join(", ")}
+            </div>
+            <div class="tip-row">
+                <span class="tip-label">Status</span>
+                <span class="tip-state {tip.block.state}">{STATE_LABELS[tip.block.state] || tip.block.state}</span>
+            </div>
+            <div class="tip-row">
+                <span class="tip-label">Frequencies</span>
+                <span>{tip.block.frequencies.join(", ")} MHz</span>
+            </div>
+            {#if tip.block.devices?.length}
+                <div class="tip-row">
+                    <span class="tip-label">In use by</span>
+                    <span class="tip-devices">
+                        {#each tip.block.devices as d (d.id)}
+                            <button type="button" class="device-link" on:click={() => openRadios(d.id)}>{d.name}</button>
+                        {/each}
+                    </span>
+                </div>
+            {/if}
+            {#if tip.block.supportedBy?.length}
+                <div class="tip-row">
+                    <span class="tip-label">Supported by</span>
+                    <span class="tip-devices">
+                        {#each tip.block.supportedBy as d (d.id)}
+                            <button type="button" class="device-link" on:click={() => openRadios(d.id)}>{d.name}</button>
+                        {/each}
+                    </span>
+                </div>
+            {/if}
+        </div>
+    {/if}
 </div>
 
 <style>
@@ -252,5 +313,61 @@
         font-size: var(--smFontSize);
         color: var(--txtHintColor);
         padding: var(--smSpacing) 0;
+    }
+
+    .freq-tip {
+        position: fixed;
+        z-index: 1000;
+        min-width: 200px;
+        max-width: 320px;
+        padding: 10px 12px;
+        background: var(--baseColor);
+        border: 1px solid var(--baseAlt2Color);
+        border-radius: var(--baseRadius);
+        box-shadow: 0 2px 10px var(--shadowColor);
+        font-size: 13px;
+        color: var(--txtPrimaryColor);
+    }
+    .tip-heading {
+        font-weight: 600;
+        margin-bottom: 6px;
+    }
+    .tip-row {
+        display: flex;
+        gap: 8px;
+        margin-top: 4px;
+        line-height: 1.4;
+    }
+    .tip-label {
+        flex: 0 0 84px;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        color: var(--txtHintColor);
+        padding-top: 1px;
+    }
+    .tip-state.used {
+        color: var(--successColor);
+    }
+    .tip-state.invalid {
+        color: var(--txtDisabledColor);
+    }
+    .tip-devices {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 10px;
+    }
+    .device-link {
+        padding: 0;
+        border: 0;
+        background: none;
+        font: inherit;
+        color: var(--infoColor);
+        cursor: pointer;
+        text-decoration: none;
+    }
+    .device-link:hover {
+        text-decoration: underline;
     }
 </style>

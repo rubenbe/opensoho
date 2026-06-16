@@ -27,6 +27,14 @@ func findTier(b *BandOverview, width int) *Tier {
 	return nil
 }
 
+func refNames(refs []DeviceRef) []string {
+	out := make([]string, len(refs))
+	for i, r := range refs {
+		out[i] = r.Name
+	}
+	return out
+}
+
 func blockAt(tier *Tier, startIndex int) *Block {
 	if tier == nil {
 		return nil
@@ -56,7 +64,8 @@ func TestBuildOverviewFallbackNoFreqData(t *testing.T) {
 	assert.NotNil(t, used)
 	assert.Equal(t, "used", used.State)
 	assert.Equal(t, "36–40", used.Label)
-	assert.Equal(t, []string{"AP-1"}, used.Devices)
+	assert.Equal(t, []string{"AP-1"}, refNames(used.Devices))
+	assert.Equal(t, "dev1", used.Devices[0].Id)
 
 	// 20 MHz tier, ch36 is valid but unused (no radio_frequencies data -> available).
 	avail := blockAt(findTier(b5, 20), 0)
@@ -70,7 +79,7 @@ func TestBuildOverviewFallbackNoFreqData(t *testing.T) {
 	b24 := findBand(ov, "2.4")
 	ch6 := blockAt(findTier(b24, 20), 5) // index 5 == channel 6
 	assert.Equal(t, "used", ch6.State)
-	assert.Equal(t, []string{"AP-2"}, ch6.Devices)
+	assert.Equal(t, []string{"AP-2"}, refNames(ch6.Devices))
 }
 
 func TestBuildOverviewMissingChannelInvalid(t *testing.T) {
@@ -108,10 +117,10 @@ func TestBuildOverviewFlagForbidsWidth(t *testing.T) {
 
 	// 40 MHz over 36-40 is allowed.
 	assert.Equal(t, "available", blockAt(findTier(b5, 40), 0).State)
-	// 80 MHz over 36-48 is forbidden by the no_80mhz flag.
+	// 80 MHz over 36-48 is forbidden by the no_80mhz flag -> no supporter.
 	g80 := blockAt(findTier(b5, 80), 0)
 	assert.Equal(t, "invalid", g80.State)
-	assert.Contains(t, g80.Flags, "no_80mhz")
+	assert.Empty(t, g80.SupportedBy)
 }
 
 func TestBuildOverviewAggregateAnyDeviceSupports(t *testing.T) {
@@ -129,11 +138,12 @@ func TestBuildOverviewAggregateAnyDeviceSupports(t *testing.T) {
 
 	gLow := blockAt(tier80, 0) // 36-48
 	assert.Equal(t, "available", gLow.State)
-	assert.Equal(t, []string{"AP-A"}, gLow.SupportedBy)
+	assert.Equal(t, []string{"AP-A"}, refNames(gLow.SupportedBy))
+	assert.Equal(t, "A", gLow.SupportedBy[0].Id)
 
 	gHigh := blockAt(tier80, 20) // 149-161
 	assert.Equal(t, "available", gHigh.State)
-	assert.Equal(t, []string{"AP-B"}, gHigh.SupportedBy)
+	assert.Equal(t, []string{"AP-B"}, refNames(gHigh.SupportedBy))
 
 	gMid := blockAt(tier80, 8) // 100-112, supported by neither
 	assert.Equal(t, "invalid", gMid.State)
@@ -154,11 +164,11 @@ func TestBuildOverviewAggregateFlagRescuedByOtherDevice(t *testing.T) {
 
 	g80 := blockAt(findTier(b5, 80), 0) // 36-48: A forbidden, B supports
 	assert.Equal(t, "available", g80.State)
-	assert.Equal(t, []string{"AP-B"}, g80.SupportedBy)
+	assert.Equal(t, []string{"AP-B"}, refNames(g80.SupportedBy))
 
 	g40 := blockAt(findTier(b5, 40), 0) // 36-40: 40 MHz allowed for both
 	assert.Equal(t, "available", g40.State)
-	assert.Equal(t, []string{"AP-A", "AP-B"}, g40.SupportedBy)
+	assert.Equal(t, []string{"AP-A", "AP-B"}, refNames(g40.SupportedBy))
 }
 
 func TestBuildOverviewUnknownCapabilityDevicePreventsGreying(t *testing.T) {

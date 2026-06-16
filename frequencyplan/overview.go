@@ -19,17 +19,22 @@ type Frequency struct {
 	Flags     []string
 }
 
+// DeviceRef identifies a device for display and for linking to its radios.
+type DeviceRef struct {
+	Id   string `json:"id"`
+	Name string `json:"name"`
+}
+
 // Block is one rendered block in a width tier.
 type Block struct {
-	StartIndex  int      `json:"startIndex"`
-	Span        int      `json:"span"`
-	State       string   `json:"state"` // "used" | "available" | "invalid"
-	Label       string   `json:"label"`
-	Channels    []int    `json:"channels"`
-	Frequencies []int    `json:"frequencies"`
-	Flags       []string `json:"flags"`
-	Devices     []string `json:"devices"`     // devices that have this mode configured (in use)
-	SupportedBy []string `json:"supportedBy"` // devices whose capabilities support this mode
+	StartIndex  int         `json:"startIndex"`
+	Span        int         `json:"span"`
+	State       string      `json:"state"` // "used" | "available" | "invalid"
+	Label       string      `json:"label"`
+	Channels    []int       `json:"channels"`
+	Frequencies []int       `json:"frequencies"`
+	Devices     []DeviceRef `json:"devices"`     // devices that have this mode configured (in use)
+	SupportedBy []DeviceRef `json:"supportedBy"` // devices whose capabilities support this mode
 }
 
 // Tier is one channel-width row within a band.
@@ -86,9 +91,9 @@ func buildBand(band string, radios []Radio, freqs []Frequency, deviceNames map[s
 		scopeDevices[d] = true
 	}
 
-	// Configured radios: widths in use per freq + which devices use them.
+	// Configured radios: widths in use per freq + which devices use them (by id).
 	usedWidths := map[int]map[int]bool{}        // freq -> set(width)
-	usedDevices := map[string]map[string]bool{} // "freq:width" -> set(device name)
+	usedDevices := map[string]map[string]bool{} // "freq:width" -> set(device id)
 	hasRadios := false
 	for _, r := range radios {
 		if FrequencyToBand(r.Frequency) != band {
@@ -109,14 +114,7 @@ func buildBand(band string, radios []Radio, freqs []Frequency, deviceNames map[s
 		if usedDevices[key] == nil {
 			usedDevices[key] = map[string]bool{}
 		}
-		name := deviceNames[r.Device]
-		if name == "" {
-			name = r.Device
-		}
-		if name == "" {
-			name = "?"
-		}
-		usedDevices[key][name] = true
+		usedDevices[key][r.Device] = true
 	}
 
 	// Skip bands with nothing configured and no advertised frequencies.
@@ -141,8 +139,7 @@ func buildBand(band string, radios []Radio, freqs []Frequency, deviceNames map[s
 			// validateRadioHtModeFlags). Such devices are not listed in
 			// SupportedBy but still keep the block from greying out.
 			anySupport := false
-			supporters := map[string]bool{}
-			mergedFlags := map[string]bool{} // union over the scope, for display only
+			supporters := map[string]bool{} // set(device id)
 			for d := range scopeDevices {
 				if deviceFreqs[d] == nil { // unknown capabilities
 					anySupport = true
@@ -156,16 +153,11 @@ func buildBand(band string, radios []Radio, freqs []Frequency, deviceNames map[s
 					}
 					for _, fl := range deviceFlags[d][f] {
 						devFlags[fl] = true
-						mergedFlags[fl] = true
 					}
 				}
 				if advertisesAll && !WidthForbidden(width, sortedKeys(devFlags)) {
 					anySupport = true
-					name := deviceNames[d]
-					if name == "" {
-						name = d
-					}
-					supporters[name] = true
+					supporters[d] = true
 				}
 			}
 
@@ -206,9 +198,8 @@ func buildBand(band string, radios []Radio, freqs []Frequency, deviceNames map[s
 				Label:       label,
 				Channels:    channels,
 				Frequencies: g.Frequencies,
-				Flags:       sortedKeys(mergedFlags),
-				Devices:     sortedKeys(devs),
-				SupportedBy: sortedKeys(supporters),
+				Devices:     deviceRefs(devs, deviceNames),
+				SupportedBy: deviceRefs(supporters, deviceNames),
 			})
 		}
 		tiers = append(tiers, Tier{Width: width, Groups: blocks})
@@ -220,6 +211,26 @@ func buildBand(band string, radios []Radio, freqs []Frequency, deviceNames map[s
 		Cols:  len(StandardChannels(band)),
 		Tiers: tiers,
 	}
+}
+
+// deviceRefs turns a set of device ids into DeviceRefs (name falling back to id),
+// sorted by name then id for deterministic output.
+func deviceRefs(ids map[string]bool, deviceNames map[string]string) []DeviceRef {
+	refs := make([]DeviceRef, 0, len(ids))
+	for id := range ids {
+		name := deviceNames[id]
+		if name == "" {
+			name = id
+		}
+		refs = append(refs, DeviceRef{Id: id, Name: name})
+	}
+	sort.Slice(refs, func(i, j int) bool {
+		if refs[i].Name != refs[j].Name {
+			return refs[i].Name < refs[j].Name
+		}
+		return refs[i].Id < refs[j].Id
+	})
+	return refs
 }
 
 func sortedKeys(m map[string]bool) []string {

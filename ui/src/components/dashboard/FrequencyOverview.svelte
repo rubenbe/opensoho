@@ -5,23 +5,39 @@
     import {
         BANDS,
         BAND_LABELS,
+        BAND_WIDTHS,
         STANDARD_CHANNELS,
+        bondingGroups,
         frequencyToBand,
+        frequencyToChannel,
         htmodeWidth,
     } from "@/utils/frequencies";
 
     let isLoading = false;
-    let selectedDevice = ""; // "" = all devices
+    let selectedScope = "healthy"; // "healthy" | "all" | <device id>
     let devices = [];
-    let bands = []; // processed render model, see buildBands()
+    let bands = []; // processed render model, see buildBand()
+
+    // Does `flags` forbid the given channel width? Mirrors validateRadioHtModeFlags in opensoho.go.
+    function widthForbidden(width, flags) {
+        if (!flags) return false;
+        switch (width) {
+            case 40:
+                return flags.has("no_ht40-") && flags.has("no_ht40+");
+            case 80:
+                return flags.has("no_80mhz");
+            case 160:
+                return flags.has("no_160mhz");
+            case 20:
+                return flags.has("no_20mhz");
+            default:
+                return false;
+        }
+    }
 
     // Returns the render model for one band, or null when there is nothing to show.
     function buildBand(band, radios, freqRows, deviceNameById) {
-        const plan = STANDARD_CHANNELS[band] || [];
-        const stdFreqs = new Set(plan.map((c) => c.frequency));
-
-        // Frequencies the hardware advertised for this band (union across scope),
-        // plus the merged flags per frequency.
+        // Hardware-advertised frequencies (union across scope) + merged flags per frequency.
         const validFreqs = new Set();
         const flagsByFreq = {};
         for (const r of freqRows) {
@@ -32,8 +48,7 @@
         }
         const hasFreqData = validFreqs.size > 0;
 
-        // Configured radios for this band: which widths are in use per frequency,
-        // and which devices configured them (for tooltips).
+        // Configured radios: widths in use per frequency + which devices use them (for tooltips).
         const usedWidths = {}; // freq -> Set(width)
         const usedDevices = {}; // `${freq}:${width}` -> Set(device name)
         let hasRadios = false;
@@ -48,79 +63,71 @@
             (usedDevices[key] || (usedDevices[key] = new Set())).add(name);
         }
 
-        // Skip bands with nothing configured and no advertised frequencies to keep
-        // the card from being cluttered with empty plans (e.g. 6 GHz).
+        // Skip bands with nothing configured and no advertised frequencies (keeps e.g. an empty
+        // 6 GHz plan from cluttering the card).
         if (!hasRadios && !hasFreqData) return null;
 
-        const flagsList = (freq) => Array.from(flagsByFreq[freq] || []);
-        const devicesFor = (freq, width) => Array.from(usedDevices[`${freq}:${width}`] || []);
+        const tiers = (BAND_WIDTHS[band] || []).map((width) => {
+            const groups = bondingGroups(band, width).map((g) => {
+                const channels = g.frequencies.map((f) => frequencyToChannel(f));
+                const mergedFlags = new Set();
+                for (const f of g.frequencies) for (const fl of flagsByFreq[f] || []) mergedFlags.add(fl);
 
-        const channels = plan.map(({ channel, frequency }) => {
-            const flags = flagsByFreq[frequency];
-            // A channel is invalid when the hardware reported its frequencies but
-            // this one is not among them, or it is explicitly flagged no_20mhz.
-            const channelInvalid =
-                (hasFreqData && !validFreqs.has(frequency)) ||
-                (flags && flags.has("no_20mhz"));
+                const used = g.frequencies.some((f) => usedWidths[f]?.has(width));
+                const missing = hasFreqData && g.frequencies.some((f) => !validFreqs.has(f));
+                const invalid = !g.complete || missing || widthForbidden(width, mergedFlags);
 
-            // 40 MHz needs an adjacent 20 MHz channel in the plan and must not be
-            // forbidden by both ht40 flags (matches opensoho.go validation).
-            const canPair = stdFreqs.has(frequency + 20) || stdFreqs.has(frequency - 20);
-            const ht40Forbidden = flags && flags.has("no_ht40-") && flags.has("no_ht40+");
+                const state = used ? "used" : invalid ? "invalid" : "available";
+                const label =
+                    g.span === 1
+                        ? `${channels[0]}`
+                        : `${channels[0]}–${channels[channels.length - 1]}`;
 
-            const ht20Used = usedWidths[frequency]?.has(20);
-            const ht40Used = usedWidths[frequency]?.has(40);
+                const devs = new Set();
+                for (const f of g.frequencies) {
+                    for (const d of usedDevices[`${f}:${width}`] || []) devs.add(d);
+                }
+                const flagList = Array.from(mergedFlags);
+                const title =
+                    `${width} MHz · ch ${channels.join("+")} · ${g.frequencies.join("/")} MHz` +
+                    (devs.size ? ` · in use: ${Array.from(devs).join(", ")}` : invalid ? " · invalid" : "") +
+                    (flagList.length ? ` · flags: ${flagList.join(", ")}` : "");
 
-            const ht20State = ht20Used ? "used" : channelInvalid ? "invalid" : "available";
-            const ht40State = ht40Used
-                ? "used"
-                : channelInvalid || !canPair || ht40Forbidden
-                  ? "invalid"
-                  : "available";
-
-            const freqTxt = `ch ${channel} · ${frequency} MHz`;
-            const flagTxt = flagsList(frequency).length ? ` · flags: ${flagsList(frequency).join(", ")}` : "";
-            const ht20Dev = devicesFor(frequency, 20);
-            const ht40Dev = devicesFor(frequency, 40);
-
-            return {
-                channel,
-                frequency,
-                ht20State,
-                ht40State,
-                ht20Title:
-                    `HT20 · ${freqTxt}` +
-                    (ht20Dev.length ? ` · in use: ${ht20Dev.join(", ")}` : ht20State === "invalid" ? " · invalid" : "") +
-                    flagTxt,
-                ht40Title:
-                    `HT40 · ${freqTxt}` +
-                    (ht40Dev.length ? ` · in use: ${ht40Dev.join(", ")}` : ht40State === "invalid" ? " · invalid" : "") +
-                    flagTxt,
-            };
+                return {
+                    key: `${width}:${g.startIndex}`,
+                    startIndex: g.startIndex,
+                    span: g.span,
+                    state,
+                    label,
+                    title,
+                };
+            });
+            return { width, groups };
         });
 
-        return { band, label: BAND_LABELS[band] || band, channels };
+        return {
+            band,
+            label: BAND_LABELS[band] || band,
+            cols: (STANDARD_CHANNELS[band] || []).length,
+            tiers,
+        };
     }
 
     export async function load() {
         isLoading = true;
         try {
-            const filter = selectedDevice ? `device = "${selectedDevice}"` : "";
-
             const [deviceRows, radios, freqRows] = await Promise.all([
                 ApiClient.collection("devices").getFullList({
-                    fields: "id,name",
+                    fields: "id,name,health_status",
                     sort: "name",
                     requestKey: "freq_overview_devices",
                 }),
                 ApiClient.collection("radios").getFullList({
-                    fields: "device,radio,frequency,htmode,enabled",
-                    filter,
+                    fields: "device,frequency,htmode",
                     requestKey: "freq_overview_radios",
                 }),
                 ApiClient.collection("radio_frequencies").getFullList({
-                    fields: "device,radio,channel,frequency,flags",
-                    filter,
+                    fields: "device,frequency,flags",
                     requestKey: "freq_overview_freqs",
                 }),
             ]);
@@ -129,7 +136,18 @@
             const deviceNameById = {};
             for (const d of deviceRows) deviceNameById[d.id] = d.name;
 
-            bands = BANDS.map((b) => buildBand(b, radios, freqRows, deviceNameById)).filter(Boolean);
+            // Allowed device-id set for the current scope (null = no filtering).
+            let allowed = null;
+            if (selectedScope === "healthy") {
+                allowed = new Set(deviceRows.filter((d) => d.health_status === "healthy").map((d) => d.id));
+            } else if (selectedScope !== "all") {
+                allowed = new Set([selectedScope]);
+            }
+            const inScope = (row) => allowed === null || allowed.has(row.device);
+            const scopedRadios = radios.filter(inScope);
+            const scopedFreqs = freqRows.filter(inScope);
+
+            bands = BANDS.map((b) => buildBand(b, scopedRadios, scopedFreqs, deviceNameById)).filter(Boolean);
         } catch (err) {
             if (!err?.isAbort) {
                 ApiClient.error(err);
@@ -137,10 +155,6 @@
         } finally {
             isLoading = false;
         }
-    }
-
-    function onDeviceChange() {
-        load();
     }
 
     onMount(() => {
@@ -155,9 +169,10 @@
 
     <div class="freq-toolbar">
         <label class="freq-device-select">
-            <span>Device</span>
-            <select bind:value={selectedDevice} on:change={onDeviceChange}>
-                <option value="">All devices</option>
+            <span>Devices</span>
+            <select bind:value={selectedScope} on:change={load}>
+                <option value="healthy">All healthy devices</option>
+                <option value="all">All devices</option>
                 {#each devices as d (d.id)}
                     <option value={d.id}>{d.name || d.id}</option>
                 {/each}
@@ -179,25 +194,23 @@
         <div class="band-block">
             <div class="band-label">{b.label}</div>
             <div class="band-scroll">
-                <div class="band-rows">
-                    <div class="square-row">
-                        <span class="row-label">HT20</span>
-                        <div class="squares">
-                            {#each b.channels as c (c.frequency)}
-                                <div class="square {c.ht20State}" title={c.ht20Title}>
-                                    <span class="ch-num">{c.channel}</span>
-                                </div>
-                            {/each}
+                <div class="band-grid">
+                    {#each b.tiers as tier (tier.width)}
+                        <div class="tier">
+                            <span class="tier-label">{tier.width}</span>
+                            <div class="tier-cells" style="--cols:{b.cols}">
+                                {#each tier.groups as g (g.key)}
+                                    <div
+                                        class="block {g.state}"
+                                        style="grid-column:{g.startIndex + 1} / span {g.span}"
+                                        title={g.title}
+                                    >
+                                        <span class="block-label">{g.label}</span>
+                                    </div>
+                                {/each}
+                            </div>
                         </div>
-                    </div>
-                    <div class="square-row">
-                        <span class="row-label">HT40</span>
-                        <div class="squares ht40">
-                            {#each b.channels as c (c.frequency)}
-                                <div class="square {c.ht40State}" title={c.ht40Title} />
-                            {/each}
-                        </div>
-                    </div>
+                    {/each}
                 </div>
             </div>
         </div>
@@ -221,7 +234,7 @@
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        z-index: 1;
+        z-index: 2;
     }
 
     .freq-toolbar {
@@ -243,7 +256,7 @@
         font-size: var(--smFontSize);
         padding: 4px 8px;
         border-radius: var(--baseRadius);
-        border: 1px solid var(--baseAlt2Color, #e0e0e0);
+        border: 1px solid var(--baseAlt2Color);
         background: var(--baseColor);
         color: var(--txtPrimaryColor);
     }
@@ -279,68 +292,70 @@
         overflow-x: auto;
         padding-bottom: 4px;
     }
-    .band-rows {
+    .band-grid {
         display: flex;
         flex-direction: column;
         gap: var(--cell-gap);
         width: max-content;
     }
-    .square-row {
+    .tier {
         display: flex;
         align-items: center;
         gap: var(--cell-gap);
     }
-    .row-label {
+    .tier-label {
+        position: sticky;
+        left: 0;
+        z-index: 1;
         flex: 0 0 auto;
-        width: 40px;
+        width: 34px;
+        text-align: right;
+        padding-right: 6px;
         font-size: 10px;
         font-weight: 600;
         color: var(--txtHintColor);
+        background: var(--baseColor);
     }
-    .squares {
-        display: flex;
+    .tier-cells {
+        display: grid;
+        grid-template-columns: repeat(var(--cols), var(--cell));
         gap: var(--cell-gap);
     }
-    /* Offset the HT40 row by half a cell so each 40 MHz block visually straddles
-       the two 20 MHz channels it overlaps. */
-    .squares.ht40 {
-        margin-left: calc((var(--cell) + var(--cell-gap)) / 2);
-    }
-    .square {
-        width: var(--cell);
+    .block {
         height: var(--cell);
         border-radius: 2px;
         display: flex;
         align-items: center;
         justify-content: center;
+        overflow: hidden;
         box-sizing: border-box;
-        flex: 0 0 auto;
     }
-    .ch-num {
+    .block-label {
         font-size: 10px;
         line-height: 1;
+        white-space: nowrap;
         color: var(--txtHintColor);
     }
-    .square.used .ch-num {
+    .block.used .block-label {
         color: #fff;
     }
+    .block.invalid .block-label {
+        color: var(--txtDisabledColor);
+    }
 
-    .square.used,
+    .block.used,
     .swatch.used {
         background: var(--successColor);
     }
-    .square.available,
+    .block.available,
     .swatch.available {
         background: var(--baseColor);
         border: 1px solid var(--successColor);
     }
-    .square.invalid,
+    .block.invalid,
     .swatch.invalid {
-        background: var(--baseAlt1Color, #f0f0f0);
-        border: 1px solid var(--baseAlt2Color, #e0e0e0);
-    }
-    .square.invalid .ch-num {
-        color: var(--txtDisabledColor);
+        background: var(--baseAlt1Color);
+        border: 1px solid var(--baseAlt2Color);
     }
 
     .freq-empty {

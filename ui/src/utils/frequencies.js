@@ -79,3 +79,68 @@ export function htmodeWidth(htmode) {
     const m = String(htmode).match(/(\d+)$/);
     return m ? parseInt(m[1], 10) : null;
 }
+
+// Channel widths we draw a bonding tier for, per band. 2.4 GHz only supports
+// 20/40 MHz; 5/6 GHz support the wider bonded widths.
+export const BAND_WIDTHS = {
+    "2.4": [20, 40],
+    "5": [20, 40, 80, 160],
+    "6": [20, 40, 80, 160],
+};
+
+// bondingGroups returns the channel-bonding groups for a band at a given width,
+// in column order. Each group is:
+//   { frequencies: number[], startIndex: number, span: number, complete: boolean }
+// where startIndex is the index into STANDARD_CHANNELS[band] of the group's first
+// channel and span === frequencies.length. complete is false for a trailing chunk
+// that does not have the full `width / 20` contiguous channels (it cannot form
+// that width).
+//
+// For 5/6 GHz, channels are grouped within frequency-contiguous runs (consecutive
+// plan entries 20 MHz apart). This prevents bonding across band gaps such as the
+// 5 GHz 64->100 jump and the 144->149 boundary, yielding the correct standard
+// bonding groups. For 2.4 GHz, whose channels overlap at 5 MHz spacing, groups are
+// simply consecutive adjacent-channel chunks (an accepted approximation).
+export function bondingGroups(band, width) {
+    const plan = STANDARD_CHANNELS[band] || [];
+    const k = width / 20;
+    if (k <= 1) {
+        return plan.map((c, i) => ({
+            frequencies: [c.frequency],
+            startIndex: i,
+            span: 1,
+            complete: true,
+        }));
+    }
+
+    // Split into contiguous runs of plan indices. 2.4 GHz is treated as one run
+    // (overlapping channels); 5/6 GHz break runs where the frequency step != 20.
+    const runs = [];
+    let run = [];
+    for (let i = 0; i < plan.length; i++) {
+        const contiguous =
+            run.length === 0 ||
+            band === "2.4" ||
+            plan[i].frequency - plan[i - 1].frequency === 20;
+        if (!contiguous) {
+            runs.push(run);
+            run = [];
+        }
+        run.push(i);
+    }
+    if (run.length) runs.push(run);
+
+    const groups = [];
+    for (const indices of runs) {
+        for (let off = 0; off < indices.length; off += k) {
+            const chunk = indices.slice(off, off + k);
+            groups.push({
+                frequencies: chunk.map((i) => plan[i].frequency),
+                startIndex: chunk[0],
+                span: chunk.length,
+                complete: chunk.length === k,
+            });
+        }
+    }
+    return groups;
+}

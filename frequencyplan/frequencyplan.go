@@ -75,21 +75,38 @@ func StandardChannels(band string) []Channel {
 	return standardChannels[band]
 }
 
+// bandRanges is the single source of truth for the inclusive MHz bounds of each
+// band, in the order FrequencyToBand checks them.
+var bandRanges = []struct {
+	band     string
+	min, max int
+}{
+	{"2.4", 2400, 2500},
+	{"5", 5170, 5835},
+	{"6", 5925, 7125},
+	{"60", 57000, 71000},
+}
+
 // FrequencyToBand maps a frequency in MHz to a band string. Ported verbatim
 // from opensoho.go so it remains the single source of truth.
 func FrequencyToBand(frequency int) string {
-	switch {
-	case frequency >= 2400 && frequency <= 2500:
-		return "2.4"
-	case frequency >= 5170 && frequency <= 5835:
-		return "5"
-	case frequency >= 5925 && frequency <= 7125:
-		return "6"
-	case frequency >= 57000 && frequency <= 71000:
-		return "60"
-	default:
-		return "unknown"
+	for _, r := range bandRanges {
+		if frequency >= r.min && frequency <= r.max {
+			return r.band
+		}
 	}
+	return "unknown"
+}
+
+// BandFrequencyRange returns the inclusive MHz range for a band; ok is false for
+// an unknown band.
+func BandFrequencyRange(band string) (min, max int, ok bool) {
+	for _, r := range bandRanges {
+		if r.band == band {
+			return r.min, r.max, true
+		}
+	}
+	return 0, 0, false
 }
 
 // FrequencyToChannel maps a frequency in MHz to a channel number. The bool is

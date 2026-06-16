@@ -45,10 +45,12 @@ type Tier struct {
 
 // BandOverview is the rendered model for a single band.
 type BandOverview struct {
-	Band  string `json:"band"`
-	Label string `json:"label"`
-	Cols  int    `json:"cols"`
-	Tiers []Tier `json:"tiers"`
+	Band    string `json:"band"`
+	Label   string `json:"label"`
+	Cols    int    `json:"cols"`
+	FreqMin int    `json:"freqMin"` // inclusive band frequency bounds (MHz), for filtering
+	FreqMax int    `json:"freqMax"`
+	Tiers   []Tier `json:"tiers"`
 }
 
 // BuildOverview turns the in-scope radios and advertised frequencies into the
@@ -205,11 +207,14 @@ func buildBand(band string, radios []Radio, freqs []Frequency, deviceNames map[s
 		tiers = append(tiers, Tier{Width: width, Groups: blocks})
 	}
 
+	freqMin, freqMax, _ := BandFrequencyRange(band)
 	return &BandOverview{
-		Band:  band,
-		Label: BandLabels[band],
-		Cols:  len(StandardChannels(band)),
-		Tiers: tiers,
+		Band:    band,
+		Label:   BandLabels[band],
+		Cols:    len(StandardChannels(band)),
+		FreqMin: freqMin,
+		FreqMax: freqMax,
+		Tiers:   tiers,
 	}
 }
 

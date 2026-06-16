@@ -52,6 +52,31 @@ func TestFrequencyToChannel(t *testing.T) {
 	}
 }
 
+func TestBandFrequencyRange(t *testing.T) {
+	tests := []struct {
+		band     string
+		min, max int
+		ok       bool
+	}{
+		{"2.4", 2400, 2500, true},
+		{"5", 5170, 5835, true},
+		{"6", 5925, 7125, true},
+		{"60", 57000, 71000, true},
+		{"unknown", 0, 0, false},
+	}
+	for _, tt := range tests {
+		min, max, ok := BandFrequencyRange(tt.band)
+		assert.Equal(t, tt.ok, ok, tt.band)
+		assert.Equal(t, tt.min, min, tt.band)
+		assert.Equal(t, tt.max, max, tt.band)
+		// Consistency: the band's own bounds map back to that band.
+		if ok {
+			assert.Equal(t, tt.band, FrequencyToBand(min), tt.band)
+			assert.Equal(t, tt.band, FrequencyToBand(max), tt.band)
+		}
+	}
+}
+
 func TestHtmodeWidth(t *testing.T) {
 	tests := []struct {
 		htmode string

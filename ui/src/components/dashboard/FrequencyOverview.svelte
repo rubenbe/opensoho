@@ -16,10 +16,10 @@
     let tipEl;
     let hideTimer;
 
-    async function showTip(node, width, block) {
+    async function showTip(node, band, width, block) {
         clearTimeout(hideTimer);
         const rect = node.getBoundingClientRect();
-        tip = { x: rect.left, y: rect.bottom + 6, width, block };
+        tip = { x: rect.left, y: rect.bottom + 6, freqMin: band.freqMin, freqMax: band.freqMax, width, block };
         // Clamp to the viewport once the tooltip has rendered and we know its size.
         await tick();
         if (!tipEl || !tip) return;
@@ -38,9 +38,10 @@
         hideTimer = setTimeout(() => (tip = null), 120);
     }
 
-    function openRadios(id) {
+    function openRadios(id, freqMin, freqMax) {
         tip = null;
-        push("/collections?collection=radios&filter=" + encodeURIComponent(`device="${id}"`));
+        const filter = `device="${id}" && frequency >= ${freqMin} && frequency <= ${freqMax}`;
+        push("/collections?collection=radios&filter=" + encodeURIComponent(filter));
     }
 
     export async function load() {
@@ -110,7 +111,7 @@
                                     <div
                                         class="block {g.state}"
                                         style="grid-column:{g.startIndex + 1} / span {g.span}"
-                                        on:mouseenter={(e) => showTip(e.currentTarget, tier.width, g)}
+                                        on:mouseenter={(e) => showTip(e.currentTarget, b, tier.width, g)}
                                         on:mouseleave={scheduleHide}
                                     >
                                         <span class="block-label">{g.label}</span>
@@ -149,7 +150,7 @@
                     <span class="tip-label">In use by</span>
                     <span class="tip-devices">
                         {#each tip.block.devices as d (d.id)}
-                            <button type="button" class="device-link" on:click={() => openRadios(d.id)}>{d.name}</button>
+                            <button type="button" class="device-link" on:click={() => openRadios(d.id, tip.freqMin, tip.freqMax)}>{d.name}</button>
                         {/each}
                     </span>
                 </div>
@@ -159,7 +160,7 @@
                     <span class="tip-label">Supported by</span>
                     <span class="tip-devices">
                         {#each tip.block.supportedBy as d (d.id)}
-                            <button type="button" class="device-link" on:click={() => openRadios(d.id)}>{d.name}</button>
+                            <button type="button" class="device-link" on:click={() => openRadios(d.id, tip.freqMin, tip.freqMax)}>{d.name}</button>
                         {/each}
                     </span>
                 </div>

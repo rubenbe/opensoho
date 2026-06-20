@@ -61,6 +61,11 @@ var internalFiles embed.FS
 //go:embed scripts/dump-radios.sh
 var dumpRadiosScript string
 
+// Hotplug script pushed to the router at /etc/hotplug.d/openwisp/opensoho-poe
+//
+//go:embed scripts/dump-poe.sh
+var dumpPoeScript string
+
 func copyEmbedDirToDisk(embedFS fs.FS, targetDir string) error {
 	return fs.WalkDir(embedFS, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -1009,7 +1014,7 @@ func createConfigTar(files map[string]string) ([]byte, string, error) {
 	}
 
 	sort.Strings(filenames)
-	executables := []string{"etc/hotplug.d/openwisp/opensoho"}
+	executables := []string{"etc/hotplug.d/openwisp/opensoho", "etc/hotplug.d/openwisp/opensoho-poe"}
 
 	for _, filePath := range filenames {
 		var mode int64 = 0644
@@ -1803,6 +1808,7 @@ func generateDeviceConfig(app core.App, record *core.Record) ([]byte, string, er
 		configfiles["etc/config/openwisp-monitoring"] = generateMonitoringConfig()
 		configfiles["etc/config/openwisp"] = generateOpenWispConfig()
 		configfiles["etc/hotplug.d/openwisp/opensoho"] = dumpRadiosScript
+		configfiles["etc/hotplug.d/openwisp/opensoho-poe"] = dumpPoeScript
 	}
 	{
 		sshkeyconfigs := generateSshKeyConfig(app)

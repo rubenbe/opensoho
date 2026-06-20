@@ -36,6 +36,10 @@ func setupPoeCollection(t *testing.T, app core.App, devicecollection *core.Colle
 	col.Fields.Add(&core.NumberField{
 		Name: "consumption",
 	})
+	col.Fields.Add(&core.AutodateField{
+		Name:     "updated",
+		OnUpdate: true,
+	})
 	err := app.Save(col)
 	assert.Equal(t, nil, err)
 	return col
@@ -102,4 +106,45 @@ func TestSync(t *testing.T) {
 	recs, err = app.FindAllRecords("poe", dbx.HashExp{"device": d.Id})
 	assert.Nil(t, err)
 	assert.Equal(t, 2, len(recs))
+}
+
+// TestSyncSkipsUnchanged verifies that re-syncing identical telemetry does not
+// touch the row: its updated timestamp must stay the same.
+func TestSyncSkipsUnchanged(t *testing.T) {
+	app, err := tests.NewTestApp()
+	assert.Nil(t, err)
+	defer app.Cleanup()
+
+	devicecollection := core.NewBaseCollection("devices")
+	assert.Nil(t, app.Save(devicecollection))
+	setupPoeCollection(t, app, devicecollection)
+
+	d := core.NewRecord(devicecollection)
+	assert.Nil(t, app.Save(d))
+
+	var info Info
+	assert.Nil(t, json.Unmarshal([]byte(sample), &info))
+
+	assert.Nil(t, Sync(app, d, info))
+
+	lan1, err := app.FindFirstRecordByFilter("poe", "port = 1")
+	assert.Nil(t, err)
+	updatedBefore := lan1.GetString("updated")
+
+	// Re-sync the exact same telemetry: nothing changed, so no write.
+	assert.Nil(t, Sync(app, d, info))
+
+	lan1, err = app.FindFirstRecordByFilter("poe", "port = 1")
+	assert.Nil(t, err)
+	assert.Equal(t, updatedBefore, lan1.GetString("updated"),
+		"unchanged port must not be re-saved")
+
+	// A changed status does write, bumping the timestamp.
+	info.Ports["lan1"] = RawPort{Priority: 0, Mode: "PoE", Status: "Delivering power", Consumption: 6.0}
+	assert.Nil(t, Sync(app, d, info))
+
+	lan1, err = app.FindFirstRecordByFilter("poe", "port = 1")
+	assert.Nil(t, err)
+	assert.NotEqual(t, updatedBefore, lan1.GetString("updated"),
+		"changed port must be re-saved")
 }

@@ -28,8 +28,14 @@ func Sync(app core.App, device *core.Record, info Info) error {
 		}
 
 		for _, p := range ports {
-			rec, ok := byPort[p.Number]
-			if !ok {
+			rec, found := byPort[p.Number]
+			if found {
+				// Don't update existing, unchanged poe entry
+				if rec.GetString("status") == p.Status &&
+					rec.GetFloat("consumption") == p.Consumption {
+					continue
+				}
+			} else {
 				rec = core.NewRecord(coll)
 				rec.Set("device", device.Id)
 				rec.Set("port", p.Number)

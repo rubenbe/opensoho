@@ -37,6 +37,7 @@ import (
 	//"github.com/rubenbe/pocketbase/plugins/ghupdate"
 	"github.com/reugn/wifiqr"
 	"github.com/rubenbe/opensoho/frequencyplan"
+	"github.com/rubenbe/opensoho/poe"
 	"github.com/rubenbe/opensoho/ui"
 	"github.com/rubenbe/pocketbase/plugins/jsvm"
 	"github.com/rubenbe/pocketbase/plugins/migratecmd"
@@ -514,10 +515,14 @@ type OpenSohoRadio struct {
 	} `json:"txpowerlist"`
 }
 
-// OpenSohoData is the decoded OpenSoho payload.
+// OpenSohoData is the decoded OpenSoho payload. The radios dump
+// (scripts/dump-radios.sh) carries "radios"; the PoE dump
+// (scripts/dump-poe.sh) carries "poe". Both share type "OpenSoho", so one
+// struct decodes either: the absent key simply stays nil/empty.
 type OpenSohoData struct {
 	Type   string          `json:"type"`
 	Radios []OpenSohoRadio `json:"radios"`
+	Poe    *poe.Info       `json:"poe"`
 }
 
 // radioBands returns the distinct Wi-Fi bands a radio supports, derived from
@@ -573,6 +578,14 @@ func handleOpenSohoMonitoring(app core.App, device *core.Record, data OpenSohoDa
 			app.Logger().Error("Failed to sync radio tx powers",
 				"device", device.GetString("id"), "radio", radio.Name, "error", err)
 			continue
+		}
+	}
+
+	// The PoE dump arrives on the same endpoint/type; persist it when present.
+	if data.Poe != nil {
+		if err := poe.Sync(app, device, *data.Poe); err != nil {
+			app.Logger().Error("Failed to sync poe ports",
+				"device", device.GetString("id"), "error", err)
 		}
 	}
 }

@@ -1,7 +1,7 @@
 ---
 title: "Usteer (Band Steering)"
 linkTitle: "Usteer"
-weight: 6
+weight: 7
 description: >
   Automatic client roaming using the OpenWRT usteer daemon.
 ---

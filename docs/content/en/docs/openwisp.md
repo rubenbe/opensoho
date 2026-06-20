@@ -1,7 +1,7 @@
 ---
 title: "OpenWISP Daemons"
 linkTitle: "OpenWISP"
-weight: 5
+weight: 6
 description: >
   OpenWISP daemon configuration files used by OpenSOHO.
 ---

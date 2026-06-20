@@ -1,7 +1,7 @@
 ---
 title: "VLAN Configuration"
 linkTitle: "VLANs"
-weight: 3
+weight: 4
 description: >
   Configure VLANs across your OpenWRT devices with OpenSOHO.
 ---

@@ -1,7 +1,7 @@
 ---
 title: "Home Assistant Integration"
 linkTitle: "Home Assistant"
-weight: 4
+weight: 5
 description: >
   Monitor OpenWRT device health in Home Assistant using the OpenSOHO REST API.
 ---

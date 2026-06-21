@@ -2405,7 +2405,7 @@ func TestParseOpenSohoDataIgnoresUnknownFlags(t *testing.T) {
 	d := core.NewRecord(devicecollection)
 	assert.Nil(t, app.Save(d))
 
-	handleOpenSohoMonitoring(app, d, data)
+	handleOpenSohoMonitoring(app, d, data, false)
 
 	rec, err := app.FindFirstRecordByFilter("radio_frequencies", "frequency = 5180")
 	assert.Nil(t, err)
@@ -2459,7 +2459,7 @@ func TestHandleOpenSohoMonitoring(t *testing.T) {
 		{Dbm: 0, Mw: 1},
 		{Dbm: 23, Mw: 199},
 	}
-	handleOpenSohoMonitoring(app, d, OpenSohoData{Type: "OpenSoho", Radios: []OpenSohoRadio{radio0}})
+	handleOpenSohoMonitoring(app, d, OpenSohoData{Type: "OpenSoho", Radios: []OpenSohoRadio{radio0}}, false)
 
 	recs, err := app.FindAllRecords("radio_frequencies", dbx.HashExp{"device": d.Id, "radio": 0})
 	assert.Nil(t, err)
@@ -2500,7 +2500,7 @@ func TestHandleOpenSohoMonitoring(t *testing.T) {
 		{Dbm: 23, Mw: 200},
 		{Dbm: 20, Mw: 100},
 	}
-	handleOpenSohoMonitoring(app, d, OpenSohoData{Type: "OpenSoho", Radios: []OpenSohoRadio{radio0}})
+	handleOpenSohoMonitoring(app, d, OpenSohoData{Type: "OpenSoho", Radios: []OpenSohoRadio{radio0}}, false)
 
 	recs, err = app.FindAllRecords("radio_frequencies", dbx.HashExp{"device": d.Id, "radio": 0})
 	assert.Nil(t, err)

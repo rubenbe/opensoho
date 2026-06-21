@@ -37,6 +37,7 @@ import (
 	//"github.com/rubenbe/pocketbase/plugins/ghupdate"
 	"github.com/reugn/wifiqr"
 	"github.com/rubenbe/opensoho/frequencyplan"
+	"github.com/rubenbe/opensoho/mqtt"
 	"github.com/rubenbe/opensoho/poe"
 	"github.com/rubenbe/opensoho/ui"
 	"github.com/rubenbe/pocketbase/plugins/jsvm"
@@ -120,14 +121,32 @@ func parseRadioName(name string) (int, error) {
 
 func updateDeviceHealth(app core.App, currenttime types.DateTime) {
 	oldesttime := currenttime.Add(-60 * time.Second)
-	_, err := app.DB().
+
+	// Collect the devices that are about to transition to unhealthy so we can
+	// flip their Home Assistant availability to offline.
+	var transitioning []struct {
+		Id string `db:"id"`
+	}
+	err := app.DB().
+		NewQuery("select id from devices where health_status != \"unhealthy\" and last_seen <= {:offset}").
+		Bind(dbx.Params{"offset": oldesttime.String()}).All(&transitioning)
+	if err != nil {
+		fmt.Println("Failed to query transitioning devices")
+		fmt.Println(err)
+	}
+
+	_, err = app.DB().
 		NewQuery("update devices set health_status = \"unhealthy\" where last_seen <= {:offset}").
 		Bind(dbx.Params{"offset": oldesttime.String()}).Execute()
 	if err != nil {
 		fmt.Println("Failed to update device health")
 		fmt.Println(err)
+		return
 	}
 
+	for _, d := range transitioning {
+		mqtt.PublishDeviceOffline(d.Id)
+	}
 }
 func updateLastSeen(e *core.RequestEvent, record *core.Record) error {
 	record.Set("last_seen", time.Now())
@@ -548,7 +567,7 @@ func radioBands(radio OpenSohoRadio) []string {
 // handleOpenSohoMonitoring is the entry point for parsed OpenSoho radio dumps.
 // It persists each radio's advertised frequency list into the
 // radio_frequencies collection, keyed by (device, radio index).
-func handleOpenSohoMonitoring(app core.App, device *core.Record, data OpenSohoData) {
+func handleOpenSohoMonitoring(app core.App, device *core.Record, data OpenSohoData, current bool) {
 	coll, err := app.FindCollectionByNameOrId("radio_frequencies")
 	if err != nil {
 		app.Logger().Error("Failed to find radio_frequencies collection", "error", err)
@@ -581,11 +600,13 @@ func handleOpenSohoMonitoring(app core.App, device *core.Record, data OpenSohoDa
 		}
 	}
 
-	// The PoE dump arrives on the same endpoint/type; persist it when present.
 	if data.Poe != nil {
 		if err := poe.Sync(app, device, *data.Poe); err != nil {
 			app.Logger().Error("Failed to sync poe ports",
 				"device", device.GetString("id"), "error", err)
+		}
+		if current {
+			mqtt.PublishPoE(device, *data.Poe)
 		}
 	}
 }
@@ -1997,6 +2018,9 @@ func updateInterface(app core.App, iface Interface, deviceId string, interfaceCo
 func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, collection *core.Collection) (error, map[int]Radio) {
 	e.Response.Header().Set("X-Openwisp-Controller", "true")
 	time := e.Request.URL.Query().Get("time")
+	// The openwisp agent marks the up-to-date info with current=true
+	// Only live data is published to Home Assistant does not support backfill over MQTT
+	current := e.Request.URL.Query().Get("current") == "true"
 	radios := make(map[int]Radio)
 	var payload MonitoringData
 	if e.Request.Header.Get("Content-Length") == "0" {
@@ -2024,7 +2048,7 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 			fmt.Println(err)
 			return e.BadRequestError("Failed to parse OpenSoho json", err), radios
 		}
-		handleOpenSohoMonitoring(app, device, osd)
+		handleOpenSohoMonitoring(app, device, osd, current)
 		return e.Blob(200, "text/plain", []byte("")), radios
 	}
 	if envelope.Type != "DeviceMonitoring" {
@@ -2340,7 +2364,18 @@ func bindAppHooks(app core.App, shared_secret string, enableNewDevices bool) {
 		// Regenerate all configs to have a correct "modified" flag
 		regenerateAllDeviceConfigs(se.App)
 
+		// Connect to the MQTT broker (if configured) so PoE telemetry can be
+		// published to Home Assistant. Failures are logged but non-fatal.
+		if err := mqtt.Configure(loadMQTTConfig(se.App)); err != nil {
+			app.Logger().Warn("MQTT connect failed", "error", err)
+		}
+
 		return se.Next()
+	})
+
+	app.OnTerminate().BindFunc(func(e *core.TerminateEvent) error {
+		mqtt.Close()
+		return e.Next()
 	})
 }
 
@@ -2601,6 +2636,21 @@ table.table > thead > tr > th > div.col-header-content > span.txt
 		return e.Next()
 	})
 
+	// Reconnect the MQTT publisher whenever an mqtt_* setting changes.
+	reconnectMQTT := func(e *core.RecordEvent) error {
+		if err := e.Next(); err != nil {
+			return err
+		}
+		if strings.HasPrefix(e.Record.GetString("name"), "mqtt_") {
+			if err := mqtt.Configure(loadMQTTConfig(e.App)); err != nil {
+				e.App.Logger().Warn("MQTT reconnect failed", "error", err)
+			}
+		}
+		return nil
+	}
+	app.OnRecordAfterUpdateSuccess("settings").BindFunc(reconnectMQTT)
+	app.OnRecordAfterCreateSuccess("settings").BindFunc(reconnectMQTT)
+
 	app.OnRecordCreateExecute("device").BindFunc(func(e *core.RecordEvent) error {
 		fmt.Println()
 		if err := updateAndStoreDeviceConfig(e.App, e.Record); err != nil {
@@ -2662,11 +2712,44 @@ func validateSetting(record *core.Record) error {
 		if IsValidCountryCode(value) == false {
 			errs["value"] = validation.NewError("validation_invalid_value", "Value must be a 2 letter country code (e.g. 'BE'). '00' for global. Leave empty for the driver default.")
 		}
+	case "mqtt_enabled":
+		if value != "" && value != "true" && value != "false" {
+			errs["value"] = validation.NewError("validation_invalid_value", "Value must be 'true' or 'false'.")
+		}
+	case "mqtt_broker":
+		if value != "" && !strings.HasPrefix(value, "tcp://") && !strings.HasPrefix(value, "ssl://") && !strings.HasPrefix(value, "ws://") && !strings.HasPrefix(value, "wss://") {
+			errs["value"] = validation.NewError("validation_invalid_value", "Must be a broker URL, e.g. 'tcp://host:1883', 'ssl://host:8883', 'ws://host:8083' or 'wss://host:8084'.")
+		}
 	}
 	if len(errs) > 0 {
 		return apis.NewBadRequestError("Failed to create record.", errs)
 	}
 	return nil
+}
+
+// loadMQTTConfig reads the mqtt_* rows from the settings collection into an
+// mqtt.Config. Missing rows leave their fields empty/disabled.
+func loadMQTTConfig(app core.App) mqtt.Config {
+	cfg := mqtt.Config{}
+	records, err := app.FindAllRecords("settings")
+	if err != nil {
+		app.Logger().Warn("Failed to load MQTT settings", "error", err)
+		return cfg
+	}
+	for _, rec := range records {
+		value := rec.GetString("value")
+		switch rec.GetString("name") {
+		case "mqtt_enabled":
+			cfg.Enabled = value == "true"
+		case "mqtt_broker":
+			cfg.Broker = value
+		case "mqtt_username":
+			cfg.Username = value
+		case "mqtt_password":
+			cfg.Password = value
+		}
+	}
+	return cfg
 }
 
 func updateAndStoreDeviceConfig(app core.App, record *core.Record) error {

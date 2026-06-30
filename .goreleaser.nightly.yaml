@@ -1,0 +1,54 @@
+version: 2
+
+project_name: opensoho
+
+dist: .builds
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: build_noncgo
+    main: .
+    binary:
+    ldflags:
+      - -s -w -X github.com/rubenbe/pocketbase.Version={{ .Version }}
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+      - arm
+    goarm:
+      - 7
+
+# No GitHub release for nightlies — we only want the container image.
+release:
+  disable: true
+
+kos:
+  - id: opensoho-nightly
+    build: build_noncgo
+    main: .
+    working_dir: .
+    base_image: alpine
+    labels:
+      org.opencontainers.image.source: https://github.com/rubenbe/opensoho
+    repositories:
+      - ghcr.io/opensoho
+    user: "0:0"
+    platforms:
+      - linux/amd64
+      - linux/arm64
+      - linux/arm
+    tags:
+      - nightly
+      - "nightly-{{ .Env.NIGHTLY_DATE }}"
+    creation_time: "{{.CommitTimestamp}}"
+    ko_data_creation_time: "{{.CommitTimestamp}}"
+    sbom: none
+    base_import_paths: true
+    bare: true

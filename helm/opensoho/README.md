@@ -116,6 +116,7 @@ it manually only after taking a backup.
 | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------- |
 | `healthCheck.enabled`       | Enable readiness probe                                                                                                          | `true`  |
 | `livenessProbe.enabled`     | Enable liveness probe                                                                                                           | `true`  |
+| `startupProbe.enabled`      | Enable startup probe                                                                                                            | `true`  |
 
 ## Configuration and installation details
 

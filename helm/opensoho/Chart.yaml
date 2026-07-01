@@ -2,7 +2,7 @@ apiVersion: v2
 name: opensoho
 description: A Helm chart for OpenSoho - OpenWrt management platform
 type: application
-version: 0.3.0
+version: 0.3.1
 appVersion: "v0.15.0"
 keywords:
   - opensoho

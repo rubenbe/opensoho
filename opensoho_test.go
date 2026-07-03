@@ -2063,6 +2063,58 @@ func TestInterfacesConfigMultipleBridgesNoMatch(t *testing.T) {
 	assert.Equal(t, ``, generateInterfacesConfig(app, d1))
 }
 
+func TestGenerateLldpdConfig(t *testing.T) {
+	app, _ := tests.NewTestApp()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	interfacescollection := setupInterfacesCollection(t, app)
+	porttaggingcollection := setupPortTaggingCollection(t, app, vlancollection)
+	ethernetcollection := setupEthernetCollection(t, app, devicecollection, porttaggingcollection)
+	bridgecollection := setupBridgesCollection(t, app, devicecollection, interfacescollection, ethernetcollection)
+
+	d1 := core.NewRecord(devicecollection)
+	d1.Id = "somethindevice1"
+	d1.Set("name", "the_device1")
+	d1.Set("health_status", "healthy")
+	d1.Set("ip_address", "8.8.8.8")
+	err := app.Save(d1)
+	assert.Equal(t, nil, err)
+
+	// No bridge -> no lldpd config.
+	assert.Equal(t, "", generateLldpdConfig(app, d1))
+
+	e1 := core.NewRecord(ethernetcollection)
+	e1.Id = "somethindevice1"
+	e1.Set("name", "lan2")
+	e1.Set("speed", "1000F")
+	err = app.Save(e1)
+	assert.Equal(t, nil, err)
+
+	e2 := core.NewRecord(ethernetcollection)
+	e2.Id = "somethindevice2"
+	e2.Set("name", "lan1")
+	e2.Set("speed", "1000F")
+	err = app.Save(e2)
+	assert.Equal(t, nil, err)
+
+	b1 := core.NewRecord(bridgecollection)
+	b1.Set("device", d1.Id)
+	b1.Set("name", "br-lan")
+	b1.Set("ethernet", []string{e1.Id, e2.Id})
+	err = app.Save(b1)
+	assert.Equal(t, nil, err)
+
+	// Ports should be sorted
+	assert.Equal(t, `
+config lldpd 'config'
+        option lldp_class '4'
+        list interface 'lan1'
+        list interface 'lan2'
+`, generateLldpdConfig(app, d1))
+}
+
 func TestUpdateMonitoring(t *testing.T) {
 	json := `
 {

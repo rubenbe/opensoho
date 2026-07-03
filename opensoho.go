@@ -1497,6 +1497,32 @@ func findBridgeForDevice(app core.App, device *core.Record) (*core.Record, error
 		dbx.Params{"device": device.Id})
 }
 
+func generateLldpdConfig(app core.App, device *core.Record) string {
+	bridge, err := findBridgeForDevice(app, device)
+	if err != nil {
+		return ""
+	}
+	if errs := app.ExpandRecord(bridge, []string{"ethernet"}, nil); len(errs) > 0 {
+		return ""
+	}
+	names := []string{}
+	for _, port := range bridge.ExpandedAll("ethernet") {
+		if name := port.GetString("name"); name != "" {
+			names = append(names, name)
+		}
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	sort.Strings(names)
+	// Hardcode type 4 since we are openwrt routers
+	output := "\nconfig lldpd 'config'\n        option lldp_class '4'\n"
+	for _, name := range names {
+		output += fmt.Sprintf("        list interface '%s'\n", name)
+	}
+	return output
+}
+
 func generateInterfacesConfig(app core.App, device *core.Record) string {
 	if false == IsFeatureApplied(device, "vlan") {
 		return ""
@@ -1870,6 +1896,12 @@ func generateDeviceConfig(app core.App, record *core.Record) ([]byte, string, er
 		usteerconfig := generateUsteerConfig(record, app)
 		if len(usteerconfig) > 0 {
 			configfiles["etc/config/usteer"] = usteerconfig
+		}
+	}
+	{
+		lldpdconfig := generateLldpdConfig(app, record)
+		if len(lldpdconfig) > 0 {
+			configfiles["etc/config/lldpd"] = lldpdconfig
 		}
 	}
 

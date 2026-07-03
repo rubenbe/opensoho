@@ -52,13 +52,13 @@ func deviceStatusTopic(deviceID string) string {
 }
 
 // where a port's current consumption (W) will be published.
-func stateTopic(deviceID string, port int) string {
-	return fmt.Sprintf("opensoho/%s/poe/port%d", deviceID, port)
+func stateTopic(deviceID string, port string) string {
+	return fmt.Sprintf("opensoho/%s/poe/%s", deviceID, port)
 }
 
 // the retained HA autodiscovery config topic.
-func discoveryTopic(deviceID string, port int) string {
-	return fmt.Sprintf("homeassistant/sensor/opensoho_%s/port%d/config", deviceID, port)
+func discoveryTopic(deviceID string, port string) string {
+	return fmt.Sprintf("homeassistant/sensor/opensoho_%s/%s/config", deviceID, port)
 }
 
 // mirrors Home Assistant's availability list item.
@@ -88,14 +88,14 @@ type discoveryConfig struct {
 }
 
 // buildDiscoveryConfig assembles the autodiscovery payload for one PoE port.
-func buildDiscoveryConfig(deviceID, deviceName string, port int) ([]byte, error) {
+func buildDiscoveryConfig(deviceID, deviceName string, port string) ([]byte, error) {
 	if deviceName == "" {
 		deviceName = deviceID
 	}
 	cfg := discoveryConfig{
-		Name:              fmt.Sprintf("PoE Port %d", port),
-		UniqueID:          fmt.Sprintf("opensoho_%s_poe_port%d", deviceID, port),
-		ObjectID:          fmt.Sprintf("opensoho_%s_poe_port%d", deviceName, port),
+		Name:              fmt.Sprintf("PoE %s", port),
+		UniqueID:          fmt.Sprintf("opensoho_%s_poe_%s", deviceID, port),
+		ObjectID:          fmt.Sprintf("opensoho_%s_poe_%s", deviceName, port),
 		StateTopic:        stateTopic(deviceID, port),
 		UnitOfMeasurement: "W",
 		DeviceClass:       "power",
@@ -167,18 +167,18 @@ func (p *Publisher) PublishPoE(device *core.Record, info poe.Info) {
 	deviceID := device.Id
 	deviceName := device.GetString("name")
 
-	ports, _ := info.NormalizedPorts()
+	ports := info.NormalizedPorts()
 	for _, port := range ports {
-		p.ensureDiscovery(deviceID, deviceName, port.Number)
-		p.client.Publish(stateTopic(deviceID, port.Number), 0, false, formatWatts(port.Consumption))
+		p.ensureDiscovery(deviceID, deviceName, port.Name)
+		p.client.Publish(stateTopic(deviceID, port.Name), 0, false, formatWatts(port.Consumption))
 	}
 	p.client.Publish(deviceStatusTopic(deviceID), 1, true, payloadOnline)
 }
 
 // ensureDiscovery publishes the retained discovery config for a port unless it
 // has already been published on this connection.
-func (p *Publisher) ensureDiscovery(deviceID, deviceName string, port int) {
-	key := fmt.Sprintf("%s/%d", deviceID, port)
+func (p *Publisher) ensureDiscovery(deviceID, deviceName string, port string) {
+	key := fmt.Sprintf("%s/%s", deviceID, port)
 	p.mu.Lock()
 	already := p.published[key]
 	p.published[key] = true

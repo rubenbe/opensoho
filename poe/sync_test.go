@@ -12,17 +12,15 @@ import (
 
 func setupPoeCollection(t *testing.T, app core.App, devicecollection *core.Collection) *core.Collection {
 	col := core.NewBaseCollection("poe")
-	min := 1.0
 	col.Fields.Add(&core.RelationField{
 		Name:         "device",
 		Required:     false,
 		MaxSelect:    1,
 		CollectionId: devicecollection.Id,
 	})
-	col.Fields.Add(&core.NumberField{
+	col.Fields.Add(&core.TextField{
 		Name:     "port",
 		Required: true,
-		Min:      &min,
 	})
 	col.Fields.Add(&core.SelectField{
 		Name:      "priority",
@@ -68,7 +66,7 @@ func TestSync(t *testing.T) {
 	assert.Equal(t, 2, len(recs))
 
 	// lan1 is searching: priority seeded to low, status verbatim, no consumption.
-	lan1, err := app.FindFirstRecordByFilter("poe", "port = 1")
+	lan1, err := app.FindFirstRecordByFilter("poe", "port = 'lan1'")
 	assert.Nil(t, err)
 	assert.Equal(t, d.Id, lan1.GetString("device"))
 	assert.Equal(t, "low", lan1.GetString("priority"))
@@ -77,7 +75,7 @@ func TestSync(t *testing.T) {
 	lan1Id := lan1.Id
 
 	// lan2 is delivering power: its consumption is recorded.
-	lan2, err := app.FindFirstRecordByFilter("poe", "port = 2")
+	lan2, err := app.FindFirstRecordByFilter("poe", "port = 'lan2'")
 	assert.Nil(t, err)
 	assert.Equal(t, "Delivering power", lan2.GetString("status"))
 	assert.Equal(t, 3.3, lan2.GetFloat("consumption"))
@@ -90,7 +88,7 @@ func TestSync(t *testing.T) {
 	delete(info.Ports, "lan2")
 	assert.Nil(t, Sync(app, d, info))
 
-	lan1, err = app.FindFirstRecordByFilter("poe", "port = 1")
+	lan1, err = app.FindFirstRecordByFilter("poe", "port = 'lan1'")
 	assert.Nil(t, err)
 	assert.Equal(t, lan1Id, lan1.Id, "lan1 row must be updated in place, not re-created")
 	// priority should be preserved
@@ -99,7 +97,7 @@ func TestSync(t *testing.T) {
 	assert.Equal(t, 6.0, lan1.GetFloat("consumption"))
 
 	// keep a removed record. no stale-delete (yet?)
-	lan2, err = app.FindFirstRecordByFilter("poe", "port = 2")
+	lan2, err = app.FindFirstRecordByFilter("poe", "port = 'lan2'")
 	assert.Nil(t, err, "unreported port should be kept, not deleted")
 	assert.Equal(t, "Delivering power", lan2.GetString("status"))
 
@@ -127,14 +125,14 @@ func TestSyncSkipsUnchanged(t *testing.T) {
 
 	assert.Nil(t, Sync(app, d, info))
 
-	lan1, err := app.FindFirstRecordByFilter("poe", "port = 1")
+	lan1, err := app.FindFirstRecordByFilter("poe", "port = 'lan1'")
 	assert.Nil(t, err)
 	updatedBefore := lan1.GetString("updated")
 
 	// Re-sync the exact same telemetry: nothing changed, so no write.
 	assert.Nil(t, Sync(app, d, info))
 
-	lan1, err = app.FindFirstRecordByFilter("poe", "port = 1")
+	lan1, err = app.FindFirstRecordByFilter("poe", "port = 'lan1'")
 	assert.Nil(t, err)
 	assert.Equal(t, updatedBefore, lan1.GetString("updated"),
 		"unchanged port must not be re-saved")
@@ -143,7 +141,7 @@ func TestSyncSkipsUnchanged(t *testing.T) {
 	info.Ports["lan1"] = RawPort{Priority: 0, Mode: "PoE", Status: "Delivering power", Consumption: 6.0}
 	assert.Nil(t, Sync(app, d, info))
 
-	lan1, err = app.FindFirstRecordByFilter("poe", "port = 1")
+	lan1, err = app.FindFirstRecordByFilter("poe", "port = 'lan1'")
 	assert.Nil(t, err)
 	assert.NotEqual(t, updatedBefore, lan1.GetString("updated"),
 		"changed port must be re-saved")

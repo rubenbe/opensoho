@@ -9,8 +9,8 @@ import (
 
 func TestTopics(t *testing.T) {
 	assert.Equal(t, "opensoho/abc/status", deviceStatusTopic("abc"))
-	assert.Equal(t, "opensoho/abc/poe/port4", stateTopic("abc", 4))
-	assert.Equal(t, "homeassistant/sensor/opensoho_abc/port4/config", discoveryTopic("abc", 4))
+	assert.Equal(t, "opensoho/abc/poe/lan4", stateTopic("abc", "lan4"))
+	assert.Equal(t, "homeassistant/sensor/opensoho_abc/lan4/config", discoveryTopic("abc", "lan4"))
 }
 
 func TestFormatWatts(t *testing.T) {
@@ -26,15 +26,15 @@ func TestFormatWatts(t *testing.T) {
 }
 
 func TestBuildDiscoveryConfig(t *testing.T) {
-	payload, err := buildDiscoveryConfig("dev123", "switch-rack", 4)
+	payload, err := buildDiscoveryConfig("dev123", "switch-rack", "lan4")
 	assert.NoError(t, err)
 
 	var cfg discoveryConfig
 	assert.NoError(t, json.Unmarshal(payload, &cfg))
 
-	assert.Equal(t, "PoE Port 4", cfg.Name)
-	assert.Equal(t, "opensoho_dev123_poe_port4", cfg.UniqueID)
-	assert.Equal(t, "opensoho/dev123/poe/port4", cfg.StateTopic)
+	assert.Equal(t, "PoE lan4", cfg.Name)
+	assert.Equal(t, "opensoho_dev123_poe_lan4", cfg.UniqueID)
+	assert.Equal(t, "opensoho/dev123/poe/lan4", cfg.StateTopic)
 	assert.Equal(t, "W", cfg.UnitOfMeasurement)
 	assert.Equal(t, "power", cfg.DeviceClass)
 	assert.Equal(t, "measurement", cfg.StateClass)
@@ -47,7 +47,7 @@ func TestBuildDiscoveryConfig(t *testing.T) {
 }
 
 func TestBuildDiscoveryConfigFallsBackToID(t *testing.T) {
-	payload, err := buildDiscoveryConfig("dev123", "", 1)
+	payload, err := buildDiscoveryConfig("dev123", "", "lan1")
 	assert.NoError(t, err)
 
 	var cfg discoveryConfig

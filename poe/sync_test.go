@@ -96,14 +96,38 @@ func TestSync(t *testing.T) {
 	assert.Equal(t, "Delivering power", lan1.GetString("status"))
 	assert.Equal(t, 6.0, lan1.GetFloat("consumption"))
 
-	// keep a removed record. no stale-delete (yet?)
-	lan2, err = app.FindFirstRecordByFilter("poe", "port = 'lan2'")
-	assert.Nil(t, err, "unreported port should be kept, not deleted")
-	assert.Equal(t, "Delivering power", lan2.GetString("status"))
+	// lan2 was absent from the (non-empty) report, so it is deleted.
+	_, err = app.FindFirstRecordByFilter("poe", "port = 'lan2'")
+	assert.Error(t, err, "unreported port should be deleted")
 
 	recs, err = app.FindAllRecords("poe", dbx.HashExp{"device": d.Id})
 	assert.Nil(t, err)
-	assert.Equal(t, 2, len(recs))
+	assert.Equal(t, 1, len(recs))
+}
+
+// An empty report must not delete existing records.
+func TestSyncEmptyReportKeepsRecords(t *testing.T) {
+	app, err := tests.NewTestApp()
+	assert.Nil(t, err)
+	defer app.Cleanup()
+
+	devicecollection := core.NewBaseCollection("devices")
+	assert.Nil(t, app.Save(devicecollection))
+	setupPoeCollection(t, app, devicecollection)
+
+	d := core.NewRecord(devicecollection)
+	assert.Nil(t, app.Save(d))
+
+	var info Info
+	assert.Nil(t, json.Unmarshal([]byte(sample), &info))
+	assert.Nil(t, Sync(app, d, info))
+
+	// A report with no ports leaves the existing rows untouched.
+	assert.Nil(t, Sync(app, d, Info{}))
+
+	recs, err := app.FindAllRecords("poe", dbx.HashExp{"device": d.Id})
+	assert.Nil(t, err)
+	assert.Equal(t, 2, len(recs), "empty report must not delete records")
 }
 
 // TestSyncSkipsUnchanged verifies that re-syncing identical telemetry does not

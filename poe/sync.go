@@ -23,7 +23,9 @@ func Sync(app core.App, device *core.Record, info Info) error {
 			byPort[rec.GetString("port")] = rec
 		}
 
+		reported := make(map[string]bool, len(ports))
 		for _, p := range ports {
+			reported[p.Name] = true
 			rec, found := byPort[p.Name]
 			if found {
 				// Don't update existing, unchanged poe entry
@@ -43,6 +45,20 @@ func Sync(app core.App, device *core.Record, info Info) error {
 			rec.Set("consumption", p.Consumption)
 			if err := txApp.Save(rec); err != nil {
 				return err
+			}
+		}
+
+		// Delete records for ports absent from this report, but only when the
+		// report actually listed ports: an empty report (e.g. a transient failed
+		// read) must not wipe the collection.
+		if len(ports) > 0 {
+			for _, rec := range existing {
+				if reported[rec.GetString("port")] {
+					continue
+				}
+				if err := txApp.Delete(rec); err != nil {
+					return err
+				}
 			}
 		}
 		return nil

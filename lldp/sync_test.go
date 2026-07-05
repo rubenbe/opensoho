@@ -23,7 +23,11 @@ func setupLldpCollection(t *testing.T, app core.App, devicecollection *core.Coll
 		Required: true,
 	})
 	col.Fields.Add(&core.TextField{
-		Name: "name",
+		Name: "neighbor_name",
+	})
+	col.Fields.Add(&core.TextField{
+		Name:     "neighbor_mac_address",
+		Required: true,
 	})
 	col.Fields.Add(&core.AutodateField{
 		Name:     "updated",
@@ -64,11 +68,12 @@ func TestSync(t *testing.T) {
 	eth0, err := app.FindFirstRecordByFilter("lldp", "port = 'eth0'")
 	assert.Nil(t, err)
 	assert.Equal(t, d.Id, eth0.GetString("device"))
-	assert.Equal(t, "sw-core-01", eth0.GetString("name"))
+	assert.Equal(t, "sw-core-01", eth0.GetString("neighbor_name"))
+	assert.Equal(t, "aa:bb:cc:dd:ee:ff", eth0.GetString("neighbor_mac_address"))
 	eth0Id := eth0.Id
 
 	// A later report drops eth1 and keeps eth0 unchanged.
-	assert.Nil(t, Sync(app, d, Info{Neighbors: []Neighbor{{Port: "eth0", Name: "sw-core-01"}}}))
+	assert.Nil(t, Sync(app, d, Info{Neighbors: []Neighbor{{Port: "eth0", Name: "sw-core-01", Mac: "aa:bb:cc:dd:ee:ff"}}}))
 
 	eth0, err = app.FindFirstRecordByFilter("lldp", "port = 'eth0'")
 	assert.Nil(t, err)
@@ -88,8 +93,8 @@ func TestSyncMultipleNeighborsPerPort(t *testing.T) {
 	defer app.Cleanup()
 
 	info := Info{Neighbors: []Neighbor{
-		{Port: "eth0", Name: "phone-01"},
-		{Port: "eth0", Name: "pc-01"},
+		{Port: "eth0", Name: "phone-01", Mac: "00:11:22:33:44:01"},
+		{Port: "eth0", Name: "pc-01", Mac: "00:11:22:33:44:02"},
 	}}
 	assert.Nil(t, Sync(app, d, info))
 

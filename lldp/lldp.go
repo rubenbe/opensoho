@@ -10,6 +10,7 @@ import (
 type Neighbor struct {
 	Port string // local interface the neighbour is seen on, e.g. "eth0"
 	Name string // neighbour's advertised system name; may be "" when unknown
+	Mac  string // neighbour's chassis MAC address, e.g. "00:11:22:33:44:55"
 }
 
 type Info struct {
@@ -80,13 +81,15 @@ func sortedEntries(m map[string]json.RawMessage) []entry {
 	return entries
 }
 
-// chassisName returns the neighbour's system name from a <chassis> body: the
-// single non-reserved key when lldpd wrapped the fields in a name, or "" when
-// the neighbour advertised no SysName (fields emitted unwrapped).
-func chassisName(raw json.RawMessage) string {
+// chassisInfo returns the neighbour's system name and chassis MAC address from a
+// <chassis> body. When lldpd wrapped the fields in a SysName key that key is the
+// name and its value holds the fields; when the neighbour advertised no SysName
+// the fields appear unwrapped and the name is "". The MAC comes from the chassis
+// `id` field ({"type":"mac","value":"aa:bb:..."}).
+func chassisInfo(raw json.RawMessage) (name, mac string) {
 	var m map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &m); err != nil {
-		return ""
+		return "", ""
 	}
 	keys := make([]string, 0, len(m))
 	for k := range m {
@@ -95,11 +98,38 @@ func chassisName(raw json.RawMessage) string {
 		}
 		keys = append(keys, k)
 	}
-	if len(keys) == 0 {
+	// fields defaults to the top-level object (unwrapped chassis); when a SysName
+	// wraps the fields, descend into its body.
+	fields := m
+	if len(keys) > 0 {
+		sort.Strings(keys)
+		name = keys[0]
+		var inner map[string]json.RawMessage
+		if err := json.Unmarshal(m[name], &inner); err == nil {
+			fields = inner
+		}
+	}
+	return name, chassisMac(fields)
+}
+
+// chassisMac pulls the MAC address out of a chassis's `id` field. Returns "" when
+// the id is absent or advertises a non-MAC identifier type.
+func chassisMac(fields map[string]json.RawMessage) string {
+	raw, ok := fields["id"]
+	if !ok {
 		return ""
 	}
-	sort.Strings(keys)
-	return keys[0]
+	var id struct {
+		Type  string `json:"type"`
+		Value string `json:"value"`
+	}
+	if err := json.Unmarshal(raw, &id); err != nil {
+		return ""
+	}
+	if id.Type != "mac" {
+		return ""
+	}
+	return id.Value
 }
 
 // UnmarshalJSON decodes the verbatim lldpcli output
@@ -125,9 +155,11 @@ func (i *Info) UnmarshalJSON(data []byte) error {
 		if err := json.Unmarshal(iface.raw, &body); err != nil {
 			return err
 		}
+		name, mac := chassisInfo(body.Chassis)
 		i.Neighbors = append(i.Neighbors, Neighbor{
 			Port: iface.key,
-			Name: chassisName(body.Chassis),
+			Name: name,
+			Mac:  mac,
 		})
 	}
 	return nil
@@ -137,7 +169,7 @@ func (i Info) Normalized() []Neighbor {
 	seen := make(map[string]bool, len(i.Neighbors))
 	out := make([]Neighbor, 0, len(i.Neighbors))
 	for _, n := range i.Neighbors {
-		key := n.Port + "\x00" + n.Name
+		key := rowKey(n.Port, n.Name, n.Mac)
 		if seen[key] {
 			continue
 		}
@@ -148,7 +180,10 @@ func (i Info) Normalized() []Neighbor {
 		if out[a].Port != out[b].Port {
 			return out[a].Port < out[b].Port
 		}
-		return out[a].Name < out[b].Name
+		if out[a].Name != out[b].Name {
+			return out[a].Name < out[b].Name
+		}
+		return out[a].Mac < out[b].Mac
 	})
 	return out
 }

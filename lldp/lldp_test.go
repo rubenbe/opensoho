@@ -38,20 +38,20 @@ func TestUnmarshalNormalized(t *testing.T) {
 		{
 			name: "one interface, object form",
 			json: oneInterface,
-			want: []Neighbor{{Port: "eth0", Name: "sw-core-01"}},
+			want: []Neighbor{{Port: "eth0", Name: "sw-core-01", Mac: "00:11:22:33:44:55"}},
 		},
 		{
 			name: "two interfaces, array form",
 			json: twoInterfaces,
 			want: []Neighbor{
-				{Port: "eth0", Name: "sw-core-01"},
-				{Port: "eth1", Name: "ap-roof"},
+				{Port: "eth0", Name: "sw-core-01", Mac: "aa:bb:cc:dd:ee:ff"},
+				{Port: "eth1", Name: "ap-roof", Mac: "11:22:33:44:55:66"},
 			},
 		},
 		{
 			name: "chassis without sysname",
 			json: noSysName,
-			want: []Neighbor{{Port: "eth2", Name: ""}},
+			want: []Neighbor{{Port: "eth2", Name: "", Mac: "de:ad:be:ef:00:01"}},
 		},
 		{
 			name: "empty interface object",
@@ -74,18 +74,21 @@ func TestUnmarshalNormalized(t *testing.T) {
 	}
 }
 
-// Normalized must dedup identical (port, name) pairs and sort deterministically.
+// Normalized must dedup identical (port, name, mac) tuples and sort
+// deterministically, with the MAC as the final tiebreak.
 func TestNormalizedDedupAndSort(t *testing.T) {
 	info := Info{Neighbors: []Neighbor{
-		{Port: "eth1", Name: "b"},
-		{Port: "eth0", Name: "z"},
-		{Port: "eth0", Name: "a"},
-		{Port: "eth0", Name: "a"}, // duplicate
+		{Port: "eth1", Name: "b", Mac: "00:00:00:00:00:0b"},
+		{Port: "eth0", Name: "z", Mac: "00:00:00:00:00:0z"},
+		{Port: "eth0", Name: "a", Mac: "00:00:00:00:00:02"},
+		{Port: "eth0", Name: "a", Mac: "00:00:00:00:00:01"},
+		{Port: "eth0", Name: "a", Mac: "00:00:00:00:00:01"}, // duplicate
 	}}
 	assert.Equal(t, []Neighbor{
-		{Port: "eth0", Name: "a"},
-		{Port: "eth0", Name: "z"},
-		{Port: "eth1", Name: "b"},
+		{Port: "eth0", Name: "a", Mac: "00:00:00:00:00:01"},
+		{Port: "eth0", Name: "a", Mac: "00:00:00:00:00:02"},
+		{Port: "eth0", Name: "z", Mac: "00:00:00:00:00:0z"},
+		{Port: "eth1", Name: "b", Mac: "00:00:00:00:00:0b"},
 	}, info.Normalized())
 }
 

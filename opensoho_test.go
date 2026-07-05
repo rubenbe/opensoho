@@ -2647,8 +2647,8 @@ func TestHandleOpenSohoMonitoringRealPayload(t *testing.T) {
 	}
 	if assert.NotNil(t, data.Lldp) {
 		assert.Equal(t, []lldp.Neighbor{
-			{Port: "lan1", Name: "OpenWrt-Garage"},
-			{Port: "lan3", Name: "EAP615-03-One"},
+			{Port: "lan1", Name: "OpenWrt-Garage", Mac: "30:23:03:df:00:00"},
+			{Port: "lan3", Name: "EAP615-03-One", Mac: "3c:78:95:18:00:00"},
 		}, data.Lldp.Normalized())
 	}
 
@@ -2661,11 +2661,13 @@ func TestHandleOpenSohoMonitoringRealPayload(t *testing.T) {
 	lan1, err := app.FindFirstRecordByFilter("lldp", "port = 'lan1'")
 	assert.Nil(t, err)
 	assert.Equal(t, d.Id, lan1.GetString("device"))
-	assert.Equal(t, "OpenWrt-Garage", lan1.GetString("name"))
+	assert.Equal(t, "OpenWrt-Garage", lan1.GetString("neighbor_name"))
+	assert.Equal(t, "30:23:03:df:00:00", lan1.GetString("neighbor_mac_address"))
 
 	lan3, err := app.FindFirstRecordByFilter("lldp", "port = 'lan3'")
 	assert.Nil(t, err)
-	assert.Equal(t, "EAP615-03-One", lan3.GetString("name"))
+	assert.Equal(t, "EAP615-03-One", lan3.GetString("neighbor_name"))
+	assert.Equal(t, "3c:78:95:18:00:00", lan3.GetString("neighbor_mac_address"))
 
 	poeRecs, err := app.FindAllRecords("poe", dbx.HashExp{"device": d.Id})
 	assert.Nil(t, err)
@@ -3815,7 +3817,11 @@ func setupLldpCollection(t *testing.T, app core.App, devicecollection *core.Coll
 		Required: true,
 	})
 	col.Fields.Add(&core.TextField{
-		Name: "name",
+		Name: "neighbor_name",
+	})
+	col.Fields.Add(&core.TextField{
+		Name:     "neighbor_mac_address",
+		Required: true,
 	})
 	col.Fields.Add(&core.AutodateField{
 		Name:     "updated",

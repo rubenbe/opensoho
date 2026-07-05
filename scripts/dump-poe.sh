@@ -1,8 +1,14 @@
 #!/bin/sh
 # OpenWISP hotplug script, deployed to /etc/hotplug.d/openwisp/opensoho-poe on the target.
-# On end-of-cycle, embeds the raw `ubus call poe info` output verbatim into a
-# {"type":"OpenSoho","poe":...} object and atomically writes it into the
-# openwisp-monitoring upload spool so the send agent POSTs it to the controller.
+# On end-of-cycle, collects live telemetry -- PoE status (`ubus call poe info`)
+# and LLDP neighbors (`lldpcli -f json show neighbors`) -- and embeds whichever
+# are available verbatim into a {"type":"OpenSoho","poe":...,"lldp":...} object,
+# then atomically writes it into the openwisp-monitoring upload spool so the send
+# agent POSTs it to the controller.
+#
+# Each source is probed independently: a device with no PoE controller still
+# reports LLDP, and a device without lldpcli installed still reports PoE. If
+# neither source yields data, nothing is written.
 #
 # The file is named with a current UTC timestamp in the agent's own format
 # (%d-%m-%Y_%H:%M:%S). The send agent reports the filename as its `time=` query
@@ -12,9 +18,7 @@
 # when it is the only file left, so the agent stamps the upload with
 # `&current=true`. See scripts/dump-radios.sh for the sibling radios dump.
 #
-# PoE is live telemetry, so a reading is emitted every run (no checksum guard).
-#
-# Pass -d (or --debug / --stdout) to print the JSON payload to stdout and skip
+# -d (or --debug / --stdout) to print the JSON payload to stdout and skip
 # the file write, for debugging. This also bypasses the ACTION check.
 
 debug=0
@@ -26,14 +30,27 @@ esac
 
 OUT_DIR=/tmp/openwisp/monitoring
 
-# Devices without a PoE controller expose no `poe` ubus object; bail quietly.
-info=$(ubus call poe info 2>/dev/null) || exit 0
-case "$info" in
-	'{'*) ;;
-	*) exit 0;;
+# Collect each source independently; a missing source is simply omitted.
+parts=""
+
+# PoE: devices without a PoE controller expose no `poe` ubus object.
+poe=$(ubus call poe info 2>/dev/null)
+case "$poe" in
+	'{'*) parts="\"poe\":$poe";;
 esac
 
-payload="{\"type\":\"OpenSoho\",\"poe\":$info}"
+# LLDP: lldpcli may be absent (lldpd not installed) or yield no JSON.
+if command -v lldpcli >/dev/null 2>&1; then
+	lldp=$(lldpcli -f json show neighbors 2>/dev/null)
+	case "$lldp" in
+		'{'*) parts="${parts:+$parts,}\"lldp\":$lldp";;
+	esac
+fi
+
+# Nothing to report -> don't write an empty payload.
+[ -n "$parts" ] || exit 0
+
+payload="{\"type\":\"OpenSoho\",$parts}"
 
 if [ "$debug" = 1 ]; then
 	printf '%s\n' "$payload"

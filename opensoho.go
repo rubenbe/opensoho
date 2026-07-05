@@ -2918,11 +2918,6 @@ func apiFrequencyOverview(e *core.RequestEvent) error {
 	})
 }
 
-// apiNetworkOverview builds the dashboard's per-device LLDP neighbour list. The
-// device query param selects which managed device's neighbours are returned; when
-// absent it defaults to the first device by name. Each neighbour whose chassis MAC
-// belongs to a device opensoho manages carries that device's id so the UI can turn
-// the neighbour into a link.
 func apiNetworkOverview(e *core.RequestEvent) error {
 	deviceRecords, err := e.App.FindAllRecords("devices")
 	if err != nil {
@@ -2984,10 +2979,41 @@ func apiNetworkOverview(e *core.RequestEvent) error {
 		})
 	}
 
+	// Known ports come from the ethernet collection, annotated with the bridge each
+	// belongs to (bridges.ethernet lists the member ethernet-record ids).
+	bridgeRecords, err := e.App.FindAllRecords("bridges")
+	if err != nil {
+		return e.InternalServerError("Failed to load bridges", err)
+	}
+	bridgeOfEth := map[string]string{} // ethernet record id -> bridge name
+	for _, b := range bridgeRecords {
+		if b.GetString("device") != scope {
+			continue
+		}
+		for _, ethId := range b.GetStringSlice("ethernet") {
+			bridgeOfEth[ethId] = b.GetString("name")
+		}
+	}
+	ethernetRecords, err := e.App.FindAllRecords("ethernet")
+	if err != nil {
+		return e.InternalServerError("Failed to load ethernet ports", err)
+	}
+	var ports []lldp.EthernetPort
+	for _, et := range ethernetRecords {
+		if et.GetString("device") != scope {
+			continue
+		}
+		ports = append(ports, lldp.EthernetPort{
+			Name:   et.GetString("name"),
+			Speed:  et.GetString("speed"),
+			Bridge: bridgeOfEth[et.Id],
+		})
+	}
+
 	return e.JSON(200, map[string]any{
-		"scope":     scope,
-		"devices":   devices,
-		"neighbors": lldp.BuildOverview(rows, macOwners),
+		"scope":   scope,
+		"devices": devices,
+		"ports":   lldp.BuildPortOverview(ports, rows, macOwners),
 	})
 }
 

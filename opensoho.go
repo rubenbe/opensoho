@@ -2627,6 +2627,7 @@ table.table > thead > tr > th > div.col-header-content > span.txt
 
 			e.Router.GET("/api/v1/devicestatus/{mac_address}", apiGenerateDeviceStatus).Bind(apis.RequireAuth())
 			e.Router.GET("/api/v1/frequency-overview", apiFrequencyOverview).Bind(apis.RequireAuth())
+			e.Router.GET("/api/v1/network-overview", apiNetworkOverview).Bind(apis.RequireAuth())
 
 			return e.Next()
 		},
@@ -2914,6 +2915,79 @@ func apiFrequencyOverview(e *core.RequestEvent) error {
 		"scope":   scope,
 		"devices": devices,
 		"bands":   frequencyplan.BuildOverview(radios, freqs, deviceNames),
+	})
+}
+
+// apiNetworkOverview builds the dashboard's per-device LLDP neighbour list. The
+// device query param selects which managed device's neighbours are returned; when
+// absent it defaults to the first device by name. Each neighbour whose chassis MAC
+// belongs to a device opensoho manages carries that device's id so the UI can turn
+// the neighbour into a link.
+func apiNetworkOverview(e *core.RequestEvent) error {
+	deviceRecords, err := e.App.FindAllRecords("devices")
+	if err != nil {
+		return e.InternalServerError("Failed to load devices", err)
+	}
+
+	// Device list for the selector, sorted by name.
+	type deviceOption struct {
+		Id   string `json:"id"`
+		Name string `json:"name"`
+	}
+	devices := make([]deviceOption, 0, len(deviceRecords))
+	for _, d := range deviceRecords {
+		devices = append(devices, deviceOption{Id: d.Id, Name: d.GetString("name")})
+	}
+	sort.Slice(devices, func(i, j int) bool { return devices[i].Name < devices[j].Name })
+
+	scope := e.Request.URL.Query().Get("device")
+	if scope == "" && len(devices) > 0 {
+		scope = devices[0].Id
+	}
+
+	// macOwners maps a known MAC to the opensoho device that owns it. The devices
+	// table holds each device's primary MAC; interfaces add per-interface MACs as a
+	// fallback without overwriting a devices-table hit.
+	macOwners := map[string]string{}
+	for _, d := range deviceRecords {
+		if mac := d.GetString("mac_address"); mac != "" {
+			macOwners[mac] = d.Id
+		}
+	}
+	interfaceRecords, err := e.App.FindAllRecords("interfaces")
+	if err != nil {
+		return e.InternalServerError("Failed to load interfaces", err)
+	}
+	for _, i := range interfaceRecords {
+		mac := i.GetString("mac_address")
+		if mac == "" {
+			continue
+		}
+		if _, ok := macOwners[mac]; !ok {
+			macOwners[mac] = i.GetString("device")
+		}
+	}
+
+	lldpRecords, err := e.App.FindAllRecords("lldp")
+	if err != nil {
+		return e.InternalServerError("Failed to load lldp neighbours", err)
+	}
+	var rows []lldp.Row
+	for _, r := range lldpRecords {
+		if r.GetString("device") != scope {
+			continue
+		}
+		rows = append(rows, lldp.Row{
+			Port: r.GetString("port"),
+			Name: r.GetString("neighbor_name"),
+			Mac:  r.GetString("neighbor_mac_address"),
+		})
+	}
+
+	return e.JSON(200, map[string]any{
+		"scope":     scope,
+		"devices":   devices,
+		"neighbors": lldp.BuildOverview(rows, macOwners),
 	})
 }
 

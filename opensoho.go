@@ -37,6 +37,7 @@ import (
 	//"github.com/rubenbe/pocketbase/plugins/ghupdate"
 	"github.com/reugn/wifiqr"
 	"github.com/rubenbe/opensoho/frequencyplan"
+	"github.com/rubenbe/opensoho/lldp"
 	"github.com/rubenbe/opensoho/mqtt"
 	"github.com/rubenbe/opensoho/poe"
 	"github.com/rubenbe/opensoho/ui"
@@ -542,6 +543,7 @@ type OpenSohoData struct {
 	Type   string          `json:"type"`
 	Radios []OpenSohoRadio `json:"radios"`
 	Poe    *poe.Info       `json:"poe"`
+	Lldp   *lldp.Info      `json:"lldp"`
 }
 
 // radioBands returns the distinct Wi-Fi bands a radio supports, derived from
@@ -607,6 +609,13 @@ func handleOpenSohoMonitoring(app core.App, device *core.Record, data OpenSohoDa
 		}
 		if current {
 			mqtt.PublishPoE(device, *data.Poe)
+		}
+	}
+
+	if data.Lldp != nil {
+		if err := lldp.Sync(app, device, *data.Lldp); err != nil {
+			app.Logger().Error("Failed to sync lldp neighbors",
+				"device", device.GetString("id"), "error", err)
 		}
 	}
 }

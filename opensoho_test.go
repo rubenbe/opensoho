@@ -21,6 +21,7 @@ import (
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"github.com/liyue201/goqr"
 	"github.com/pocketbase/dbx"
+	"github.com/rubenbe/opensoho/lldp"
 	"github.com/rubenbe/pocketbase/core"
 	"github.com/rubenbe/pocketbase/tests"
 	"github.com/rubenbe/pocketbase/tools/router"
@@ -2488,6 +2489,194 @@ func TestRadioBands(t *testing.T) {
 	assert.Equal(t, []string{}, radioBands(OpenSohoRadio{}))
 }
 
+const realOpenSohoPayload = `{"type":"OpenSoho","poe":{
+	"firmware": "v16.17",
+	"mcu": "Nuvoton M05xx LAN Microcontroller",
+	"budget": 55.000000,
+	"consumption": 61.599998,
+	"ports": {
+		"lan1": {
+			"priority": 0,
+			"mode": "PoE",
+			"status": "Searching"
+		},
+		"lan2": {
+			"priority": 0,
+			"mode": "PoE",
+			"status": "Delivering power",
+			"consumption": 3.300000
+		},
+		"lan3": {
+			"priority": 0,
+			"mode": "PoE",
+			"status": "Delivering power",
+			"consumption": 4.400000
+		}
+	}
+},"lldp":{
+  "lldp": {
+    "interface": [
+      {
+        "lan1": {
+          "via": "LLDP",
+          "rid": "2",
+          "age": "1 day, 23:43:33",
+          "chassis": {
+            "OpenWrt-Garage": {
+              "id": {
+                "type": "mac",
+                "value": "30:23:03:df:00:00"
+              },
+              "descr": "OpenWrt 24.10.4 @ OpenWrt-Garage",
+              "mgmt-ip": [
+                "192.168.0.1",
+                "fdb6:c182:55c6::1"
+              ],
+              "mgmt-iface": [
+                "10",
+                "10"
+              ],
+              "capability": [
+                {
+                  "type": "Bridge",
+                  "enabled": true
+                },
+                {
+                  "type": "Router",
+                  "enabled": true
+                },
+                {
+                  "type": "Wlan",
+                  "enabled": false
+                },
+                {
+                  "type": "Station",
+                  "enabled": false
+                }
+              ]
+            }
+          },
+          "port": {
+            "id": {
+              "type": "mac",
+              "value": "30:23:03:df:00:00"
+            },
+            "descr": "lan1",
+            "ttl": "120"
+          }
+        }
+      },
+      {
+        "lan3": {
+          "via": "LLDP",
+          "rid": "1",
+          "age": "1 day, 23:44:26",
+          "chassis": {
+            "EAP615-03-One": {
+              "id": {
+                "type": "mac",
+                "value": "3c:78:95:18:00:00"
+              },
+              "descr": "OpenWrt 25.12.0 @ EAP615-03-One",
+              "mgmt-ip": [
+                "192.168.0.244",
+                "fd07:7b79:9bc6::1"
+              ],
+              "mgmt-iface": [
+                "8",
+                "8"
+              ],
+              "capability": [
+                {
+                  "type": "Bridge",
+                  "enabled": true
+                },
+                {
+                  "type": "Router",
+                  "enabled": true
+                },
+                {
+                  "type": "Wlan",
+                  "enabled": false
+                },
+                {
+                  "type": "Station",
+                  "enabled": false
+                }
+              ]
+            }
+          },
+          "port": {
+            "id": {
+              "type": "mac",
+              "value": "3c:78:95:18:00:00"
+            },
+            "descr": "lan0",
+            "ttl": "120"
+          }
+        }
+      }
+    ]
+  }
+}}`
+
+func TestHandleOpenSohoMonitoringRealPayload(t *testing.T) {
+	app, err := tests.NewTestApp()
+	assert.Nil(t, err)
+	defer app.Cleanup()
+
+	devicecollection := core.NewBaseCollection("devices")
+	assert.Nil(t, app.Save(devicecollection))
+	setupRadioFrequenciesCollection(t, app, devicecollection)
+	setupRadioTxPowersCollection(t, app, devicecollection)
+	setupPoeCollection(t, app, devicecollection)
+	setupLldpCollection(t, app, devicecollection)
+
+	d := core.NewRecord(devicecollection)
+	assert.Nil(t, app.Save(d))
+
+	var data OpenSohoData
+	assert.Nil(t, json.Unmarshal([]byte(realOpenSohoPayload), &data))
+
+	// Parse: PoE (extra firmware/mcu fields ignored) and LLDP neighbours.
+	assert.Equal(t, "OpenSoho", data.Type)
+	if assert.NotNil(t, data.Poe) {
+		assert.Equal(t, 55.0, data.Poe.Budget)
+		assert.Equal(t, 61.599998, data.Poe.Consumption)
+		assert.Equal(t, 3, len(data.Poe.Ports))
+	}
+	if assert.NotNil(t, data.Lldp) {
+		assert.Equal(t, []lldp.Neighbor{
+			{Port: "lan1", Name: "OpenWrt-Garage"},
+			{Port: "lan3", Name: "EAP615-03-One"},
+		}, data.Lldp.Normalized())
+	}
+
+	handleOpenSohoMonitoring(app, d, data, false)
+
+	lldpRecs, err := app.FindAllRecords("lldp", dbx.HashExp{"device": d.Id})
+	assert.Nil(t, err)
+	assert.Equal(t, 2, len(lldpRecs))
+
+	lan1, err := app.FindFirstRecordByFilter("lldp", "port = 'lan1'")
+	assert.Nil(t, err)
+	assert.Equal(t, d.Id, lan1.GetString("device"))
+	assert.Equal(t, "OpenWrt-Garage", lan1.GetString("name"))
+
+	lan3, err := app.FindFirstRecordByFilter("lldp", "port = 'lan3'")
+	assert.Nil(t, err)
+	assert.Equal(t, "EAP615-03-One", lan3.GetString("name"))
+
+	poeRecs, err := app.FindAllRecords("poe", dbx.HashExp{"device": d.Id})
+	assert.Nil(t, err)
+	assert.Equal(t, 3, len(poeRecs))
+
+	poeLan2, err := app.FindFirstRecordByFilter("poe", "port = 'lan2'")
+	assert.Nil(t, err)
+	assert.Equal(t, "Delivering power", poeLan2.GetString("status"))
+	assert.Equal(t, 3.3, poeLan2.GetFloat("consumption"))
+}
+
 func TestHandleOpenSohoMonitoring(t *testing.T) {
 	app, err := tests.NewTestApp()
 	assert.Nil(t, err)
@@ -3580,6 +3769,63 @@ func setupRadioCollection(t *testing.T, app core.App, devicecollection *core.Col
 	return radiocollection
 
 }
+func setupPoeCollection(t *testing.T, app core.App, devicecollection *core.Collection) *core.Collection {
+	col := core.NewBaseCollection("poe")
+	col.Fields.Add(&core.RelationField{
+		Name:         "device",
+		Required:     false,
+		MaxSelect:    1,
+		CollectionId: devicecollection.Id,
+	})
+	col.Fields.Add(&core.TextField{
+		Name:     "port",
+		Required: true,
+	})
+	col.Fields.Add(&core.SelectField{
+		Name:      "priority",
+		Required:  true,
+		MaxSelect: 1,
+		Values:    []string{"low", "normal", "high", "critical"},
+	})
+	col.Fields.Add(&core.TextField{
+		Name: "status",
+	})
+	col.Fields.Add(&core.NumberField{
+		Name: "consumption",
+	})
+	col.Fields.Add(&core.AutodateField{
+		Name:     "updated",
+		OnUpdate: true,
+	})
+	err := app.Save(col)
+	assert.Equal(t, nil, err)
+	return col
+}
+
+func setupLldpCollection(t *testing.T, app core.App, devicecollection *core.Collection) *core.Collection {
+	col := core.NewBaseCollection("lldp")
+	col.Fields.Add(&core.RelationField{
+		Name:         "device",
+		Required:     true,
+		MaxSelect:    1,
+		CollectionId: devicecollection.Id,
+	})
+	col.Fields.Add(&core.TextField{
+		Name:     "port",
+		Required: true,
+	})
+	col.Fields.Add(&core.TextField{
+		Name: "name",
+	})
+	col.Fields.Add(&core.AutodateField{
+		Name:     "updated",
+		OnUpdate: true,
+	})
+	err := app.Save(col)
+	assert.Equal(t, nil, err)
+	return col
+}
+
 func setupRadioFrequenciesCollection(t *testing.T, app core.App, devicecollection *core.Collection) *core.Collection {
 	col := core.NewBaseCollection("radio_frequencies")
 	x := 0.0

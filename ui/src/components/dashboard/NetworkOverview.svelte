@@ -11,6 +11,10 @@
     // Only show the PoE column when this device actually reports PoE on some port.
     $: hasPoe = ports.some((p) => p.poe != null);
 
+    // Any LLDP neighbour on any port means lldpd is reporting; none likely means
+    // lldpd isn't installed/running on the device.
+    $: hasLldp = ports.some((p) => p.neighbors && p.neighbors.length);
+
     export async function load() {
         isLoading = true;
         try {
@@ -59,6 +63,12 @@
                 {/each}
             </select>
         </label>
+
+        {#if !isLoading && !hasLldp}
+            <span class="net-warning">
+                ⚠️ No LLDP data, is lldpd installed on this device?
+            </span>
+        {/if}
     </div>
 
     {#if ports.length === 0}
@@ -213,6 +223,10 @@
     }
     .net-dot--up {
         background: var(--successColor);
+    }
+    .net-warning {
+        font-size: var(--smFontSize);
+        color: var(--txtHintColor);
     }
     .net-neighbour + .net-neighbour {
         margin-top: 2px;

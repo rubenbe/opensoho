@@ -63,7 +63,7 @@ Alternatively, create the admin account via the command-line:
 ./opensoho superuser upsert EMAIL PASS
 ```
 
-## Configure the OpenWRT devices
+## Configuring (adopting) the OpenWRT devices
 
 ### Install the OpenWISP packages
 

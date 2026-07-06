@@ -3,10 +3,19 @@
     import { scale } from "svelte/transition";
     import ApiClient from "@/utils/ApiClient";
 
+    // Remember the last-selected device across page refreshes.
+    const STORAGE_KEY = "network_overview_device";
+
     let isLoading = false;
-    let selectedScope = ""; // the device id currently shown
+    let selectedScope = localStorage.getItem(STORAGE_KEY) || ""; // the device id currently shown
     let devices = [];
     let ports = [];
+
+    // Persist every resolved selection (user change, neighbour jump, or the
+    // server-adopted default) so a refresh reopens the same device.
+    $: if (selectedScope) {
+        localStorage.setItem(STORAGE_KEY, selectedScope);
+    }
 
     // Only show the PoE column when this device actually reports PoE on some port.
     $: hasPoe = ports.some((p) => p.poe != null);

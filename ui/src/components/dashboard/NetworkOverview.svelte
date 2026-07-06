@@ -123,6 +123,11 @@
                                 <td class="net-muted">
                                     {#if p.poe}
                                         ⚡ {p.poe.toFixed(1)}W
+                                    {:else if p.poe != null}
+                                        <span
+                                            class="net-poe-idle"
+                                            title="PoE port, not supplying power"
+                                        >⚡</span> —
                                     {:else}
                                         —
                                     {/if}
@@ -242,6 +247,11 @@
     }
     .net-dot--up {
         background: var(--successColor);
+    }
+    .net-poe-idle {
+        filter: grayscale(1);
+        opacity: 0.4;
+        cursor: help;
     }
     .net-warning {
         font-size: var(--smFontSize);

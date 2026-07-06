@@ -16,8 +16,15 @@
     $: hasLldp = ports.some((p) => p.neighbors && p.neighbors.length);
 
     // Selected device's health_status, badged with the same label markup the
-    // record views use (data--health_status--<value>).
+    // record views use (data--health_status--<value>), coloured with the app's
+    // semantic label variants: green for healthy, red for unhealthy.
     $: selectedHealth = devices.find((d) => d.id === selectedScope)?.health || "";
+    $: healthLabelClass =
+        selectedHealth === "healthy"
+            ? "label-success"
+            : selectedHealth === "unhealthy"
+              ? "label-danger"
+              : "";
 
     // LuCI package-manager page of the selected device, so the warning can link
     // straight to where lldpd can be installed. Empty when the device has no IP.
@@ -76,7 +83,7 @@
         </label>
 
         {#if selectedHealth}
-            <span class="label data--health_status--{selectedHealth}">
+            <span class="label {healthLabelClass} data--health_status--{selectedHealth}">
                 {selectedHealth}
             </span>
         {/if}

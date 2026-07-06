@@ -31,6 +31,7 @@ Compatible with <strong>openwisp-config</strong> and <strong>openwisp-monitoring
     <li>Real-time device health monitoring</li>
     <li>Connected client overview</li>
     <li>Home Assistant integration</li>
+    <li>PoE and LLDP monitoring</li>
   </ul>
   <p class="mt-4">Tested on <strong>OpenWRT 24.10.x</strong> and <strong>OpenWRT 25.12.x</strong> (DSA).</p>
 </div>

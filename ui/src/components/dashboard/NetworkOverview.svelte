@@ -69,7 +69,7 @@
                 <thead>
                     <tr>
                         <th>Port</th>
-                        <th>Speed</th>
+                        <th>Link</th>
                         {#if hasPoe}
                             <th>PoE</th>
                         {/if}
@@ -81,7 +81,15 @@
                     {#each ports as p (p.port)}
                         <tr>
                             <td class="net-port">{p.port}</td>
-                            <td class="net-muted">{p.speed || "—"}</td>
+                            {#if p.speed}
+                                <td>
+                                    <span class="net-dot net-dot--up" />{p.speed}
+                                </td>
+                            {:else}
+                                <td class="net-muted">
+                                    <span class="net-dot" />no link
+                                </td>
+                            {/if}
                             {#if hasPoe}
                                 <td class="net-muted">
                                     {#if p.poe}
@@ -193,6 +201,18 @@
     }
     .net-muted {
         color: var(--txtHintColor);
+    }
+    .net-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        margin-right: 6px;
+        vertical-align: middle;
+        background: var(--txtHintColor);
+    }
+    .net-dot--up {
+        background: var(--successColor);
     }
     .net-neighbour + .net-neighbour {
         margin-top: 2px;

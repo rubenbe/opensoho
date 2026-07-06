@@ -20,17 +20,24 @@ func TestBuildPortOverview(t *testing.T) {
 		"aa:bb:cc:dd:ee:01": "dev_core",
 		"AA:BB:CC:DD:EE:02": "dev_edge",
 	}
+	// lan1 draws power, lan2 is PoE-capable but idle (0W keeps a non-nil pointer),
+	// wan/eth9 have no PoE record at all (Poe stays nil).
+	poeByPort := map[string]float64{
+		"lan1": 3.2,
+		"lan2": 0.0,
+	}
+	w32, w0 := 3.2, 0.0
 
-	got := BuildPortOverview(ports, rows, macOwners)
+	got := BuildPortOverview(ports, rows, macOwners, poeByPort)
 	want := []Port{
 		{Port: "eth9", Speed: "", Bridge: "", Neighbors: []OverviewNeighbor{
 			{Name: "sw-edge", Mac: "aa:bb:cc:dd:ee:02", KnownDeviceId: "dev_edge"},
 		}},
-		{Port: "lan1", Speed: "1000F", Bridge: "br-lan", Neighbors: []OverviewNeighbor{
+		{Port: "lan1", Speed: "1000F", Bridge: "br-lan", Poe: &w32, Neighbors: []OverviewNeighbor{
 			{Name: "printer", Mac: "11:22:33:44:55:66", KnownDeviceId: ""},
 			{Name: "sw-core", Mac: "AA:BB:CC:DD:EE:01", KnownDeviceId: "dev_core"},
 		}},
-		{Port: "lan2", Speed: "1000F", Bridge: "br-lan", Neighbors: nil},
+		{Port: "lan2", Speed: "1000F", Bridge: "br-lan", Poe: &w0, Neighbors: nil},
 		{Port: "wan", Speed: "", Bridge: "", Neighbors: nil},
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -39,7 +46,7 @@ func TestBuildPortOverview(t *testing.T) {
 }
 
 func TestBuildPortOverviewEmpty(t *testing.T) {
-	got := BuildPortOverview(nil, nil, nil)
+	got := BuildPortOverview(nil, nil, nil, nil)
 	if len(got) != 0 {
 		t.Fatalf("expected empty result, got %+v", got)
 	}
@@ -53,7 +60,7 @@ func TestBuildPortOverviewNaturalSort(t *testing.T) {
 		{Name: "eth0"},
 		{Name: "wan"},
 	}
-	got := BuildPortOverview(ports, nil, nil)
+	got := BuildPortOverview(ports, nil, nil, nil)
 	var order []string
 	for _, p := range got {
 		order = append(order, p.Port)

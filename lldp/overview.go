@@ -35,20 +35,25 @@ type OverviewNeighbor struct {
 }
 
 // Port is the render model for one known port: its name, link speed, the bridge it
-// belongs to (or ""), and any LLDP neighbours seen on it.
+// belongs to (or ""), any LLDP neighbours seen on it, and its PoE draw in watts.
+// Poe is nil when the port has no PoE record (the UI then omits the PoE cell); a
+// PoE-capable port drawing 0W still carries a non-nil pointer so the column renders.
 type Port struct {
 	Port      string             `json:"port"`
 	Speed     string             `json:"speed"`
 	Bridge    string             `json:"bridge"`
 	Neighbors []OverviewNeighbor `json:"neighbors"`
+	Poe       *float64           `json:"poe,omitempty"`
 }
 
 // BuildPortOverview lists every known port of a device (sourced from the ethernet +
 // bridges collections) and overlays the LLDP neighbours seen on each. LLDP rows whose
 // local port is not among the known ethernet ports are appended as extra port rows so
 // no neighbour is lost. macOwners maps a MAC -> owning device id; matching is
-// case-insensitive. The result is sorted by port name.
-func BuildPortOverview(ports []EthernetPort, rows []Row, macOwners map[string]string) []Port {
+// case-insensitive. poeByPort maps a port name -> its PoE consumption in watts; a
+// port present in this map gets a non-nil Poe pointer (even at 0W). The result is
+// sorted by port name.
+func BuildPortOverview(ports []EthernetPort, rows []Row, macOwners map[string]string, poeByPort map[string]float64) []Port {
 	owners := make(map[string]string, len(macOwners))
 	for mac, device := range macOwners {
 		owners[strings.ToLower(mac)] = device
@@ -64,6 +69,16 @@ func BuildPortOverview(ports []EthernetPort, rows []Row, macOwners map[string]st
 		})
 	}
 
+	// poe returns a fresh pointer to the port's consumption, or nil when the port
+	// has no PoE record. A fresh pointer per call avoids aliasing the range var.
+	poe := func(port string) *float64 {
+		w, ok := poeByPort[port]
+		if !ok {
+			return nil
+		}
+		return &w
+	}
+
 	out := make([]Port, 0, len(ports)+len(byPort))
 	known := make(map[string]bool, len(ports))
 	for _, p := range ports {
@@ -73,6 +88,7 @@ func BuildPortOverview(ports []EthernetPort, rows []Row, macOwners map[string]st
 			Speed:     p.Speed,
 			Bridge:    p.Bridge,
 			Neighbors: sortNeighbors(byPort[p.Name]),
+			Poe:       poe(p.Name),
 		})
 	}
 	// LLDP neighbours seen on ports we don't otherwise know about.
@@ -80,7 +96,7 @@ func BuildPortOverview(ports []EthernetPort, rows []Row, macOwners map[string]st
 		if known[port] {
 			continue
 		}
-		out = append(out, Port{Port: port, Neighbors: sortNeighbors(ns)})
+		out = append(out, Port{Port: port, Neighbors: sortNeighbors(ns), Poe: poe(port)})
 	}
 	// Natural order so numeric runs sort by value: lan1 < lan2 < lan10.
 	sort.Slice(out, func(a, b int) bool { return natural.Less(out[a].Port, out[b].Port) })

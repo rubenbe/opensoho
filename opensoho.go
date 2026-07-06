@@ -3010,10 +3010,24 @@ func apiNetworkOverview(e *core.RequestEvent) error {
 		})
 	}
 
+	// PoE draw per port (watts). A port present here is PoE-capable, so the UI
+	// renders the PoE column; the whole column is hidden when no port has PoE.
+	poeRecords, err := e.App.FindAllRecords("poe")
+	if err != nil {
+		return e.InternalServerError("Failed to load poe ports", err)
+	}
+	poeByPort := map[string]float64{}
+	for _, pr := range poeRecords {
+		if pr.GetString("device") != scope {
+			continue
+		}
+		poeByPort[pr.GetString("port")] = pr.GetFloat("consumption")
+	}
+
 	return e.JSON(200, map[string]any{
 		"scope":   scope,
 		"devices": devices,
-		"ports":   lldp.BuildPortOverview(ports, rows, macOwners),
+		"ports":   lldp.BuildPortOverview(ports, rows, macOwners, poeByPort),
 	})
 }
 

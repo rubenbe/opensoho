@@ -1243,7 +1243,6 @@ export default class CommonHelper {
             switch (fieldname.toLowerCase()){
             case "ip_address":
             case "os":
-            case "mac_address":
             case "uuid":
             case "system":
             case "key":

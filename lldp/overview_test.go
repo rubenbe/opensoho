@@ -44,3 +44,22 @@ func TestBuildPortOverviewEmpty(t *testing.T) {
 		t.Fatalf("expected empty result, got %+v", got)
 	}
 }
+
+func TestBuildPortOverviewNaturalSort(t *testing.T) {
+	ports := []EthernetPort{
+		{Name: "lan10"},
+		{Name: "lan2"},
+		{Name: "lan1"},
+		{Name: "eth0"},
+		{Name: "wan"},
+	}
+	got := BuildPortOverview(ports, nil, nil)
+	var order []string
+	for _, p := range got {
+		order = append(order, p.Port)
+	}
+	want := []string{"eth0", "lan1", "lan2", "lan10", "wan"}
+	if !reflect.DeepEqual(order, want) {
+		t.Fatalf("port order mismatch:\n got: %v\nwant: %v", order, want)
+	}
+}

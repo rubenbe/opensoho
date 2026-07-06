@@ -3,6 +3,8 @@ package lldp
 import (
 	"sort"
 	"strings"
+
+	"github.com/maruel/natural"
 )
 
 // Row is a single stored lldp record for the device currently in scope: the local
@@ -80,7 +82,8 @@ func BuildPortOverview(ports []EthernetPort, rows []Row, macOwners map[string]st
 		}
 		out = append(out, Port{Port: port, Neighbors: sortNeighbors(ns)})
 	}
-	sort.Slice(out, func(a, b int) bool { return out[a].Port < out[b].Port })
+	// Natural order so numeric runs sort by value: lan1 < lan2 < lan10.
+	sort.Slice(out, func(a, b int) bool { return natural.Less(out[a].Port, out[b].Port) })
 	return out
 }
 

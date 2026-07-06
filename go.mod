@@ -8,6 +8,7 @@ require (
 	github.com/go-ozzo/ozzo-validation/v4 v4.3.0
 	github.com/google/uuid v1.6.0
 	github.com/liyue201/goqr v0.0.0-20200803022322-df443203d4ea
+	github.com/maruel/natural v1.3.0
 	github.com/mozillazg/go-unidecode v0.2.0
 	github.com/pocketbase/dbx v1.12.0
 	github.com/reugn/wifiqr v0.3.3

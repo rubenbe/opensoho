@@ -2925,15 +2925,22 @@ func apiNetworkOverview(e *core.RequestEvent) error {
 	}
 
 	// Device list for the selector, sorted by name. Ip is the device's last-known
-	// address, used by the UI to link to its LuCI package manager.
+	// address, used by the UI to link to its LuCI package manager. Health mirrors the
+	// devices.health_status select so the UI can badge healthy/unhealthy.
 	type deviceOption struct {
-		Id   string `json:"id"`
-		Name string `json:"name"`
-		Ip   string `json:"ip"`
+		Id     string `json:"id"`
+		Name   string `json:"name"`
+		Ip     string `json:"ip"`
+		Health string `json:"health"`
 	}
 	devices := make([]deviceOption, 0, len(deviceRecords))
 	for _, d := range deviceRecords {
-		devices = append(devices, deviceOption{Id: d.Id, Name: d.GetString("name"), Ip: d.GetString("ip_address")})
+		devices = append(devices, deviceOption{
+			Id:     d.Id,
+			Name:   d.GetString("name"),
+			Ip:     d.GetString("ip_address"),
+			Health: d.GetString("health_status"),
+		})
 	}
 	sort.Slice(devices, func(i, j int) bool { return devices[i].Name < devices[j].Name })
 

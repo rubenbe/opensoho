@@ -15,6 +15,10 @@
     // lldpd isn't installed/running on the device.
     $: hasLldp = ports.some((p) => p.neighbors && p.neighbors.length);
 
+    // Selected device's health_status, badged with the same label markup the
+    // record views use (data--health_status--<value>).
+    $: selectedHealth = devices.find((d) => d.id === selectedScope)?.health || "";
+
     // LuCI package-manager page of the selected device, so the warning can link
     // straight to where lldpd can be installed. Empty when the device has no IP.
     $: selectedIp = devices.find((d) => d.id === selectedScope)?.ip || "";
@@ -70,6 +74,12 @@
                 {/each}
             </select>
         </label>
+
+        {#if selectedHealth}
+            <span class="label data--health_status--{selectedHealth}">
+                {selectedHealth}
+            </span>
+        {/if}
 
         {#if !isLoading && !hasLldp}
             {#if luciPackagesUrl}

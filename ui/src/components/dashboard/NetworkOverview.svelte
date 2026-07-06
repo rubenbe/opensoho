@@ -8,6 +8,9 @@
     let devices = [];
     let ports = [];
 
+    // Only show the PoE column when this device actually reports PoE on some port.
+    $: hasPoe = ports.some((p) => p.poe != null);
+
     export async function load() {
         isLoading = true;
         try {
@@ -67,6 +70,9 @@
                     <tr>
                         <th>Port</th>
                         <th>Speed</th>
+                        {#if hasPoe}
+                            <th>PoE</th>
+                        {/if}
                         <th>Bridge</th>
                         <th>Neighbours</th>
                     </tr>
@@ -76,6 +82,15 @@
                         <tr>
                             <td class="net-port">{p.port}</td>
                             <td class="net-muted">{p.speed || "—"}</td>
+                            {#if hasPoe}
+                                <td class="net-muted">
+                                    {#if p.poe}
+                                        ⚡ {p.poe.toFixed(1)}W
+                                    {:else}
+                                        —
+                                    {/if}
+                                </td>
+                            {/if}
                             <td class="net-muted">{p.bridge || "—"}</td>
                             <td>
                                 {#if p.neighbors && p.neighbors.length}

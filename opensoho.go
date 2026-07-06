@@ -2924,14 +2924,16 @@ func apiNetworkOverview(e *core.RequestEvent) error {
 		return e.InternalServerError("Failed to load devices", err)
 	}
 
-	// Device list for the selector, sorted by name.
+	// Device list for the selector, sorted by name. Ip is the device's last-known
+	// address, used by the UI to link to its LuCI package manager.
 	type deviceOption struct {
 		Id   string `json:"id"`
 		Name string `json:"name"`
+		Ip   string `json:"ip"`
 	}
 	devices := make([]deviceOption, 0, len(deviceRecords))
 	for _, d := range deviceRecords {
-		devices = append(devices, deviceOption{Id: d.Id, Name: d.GetString("name")})
+		devices = append(devices, deviceOption{Id: d.Id, Name: d.GetString("name"), Ip: d.GetString("ip_address")})
 	}
 	sort.Slice(devices, func(i, j int) bool { return devices[i].Name < devices[j].Name })
 

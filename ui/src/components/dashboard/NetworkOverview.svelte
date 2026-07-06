@@ -15,6 +15,13 @@
     // lldpd isn't installed/running on the device.
     $: hasLldp = ports.some((p) => p.neighbors && p.neighbors.length);
 
+    // LuCI package-manager page of the selected device, so the warning can link
+    // straight to where lldpd can be installed. Empty when the device has no IP.
+    $: selectedIp = devices.find((d) => d.id === selectedScope)?.ip || "";
+    $: luciPackagesUrl = selectedIp
+        ? `http://${selectedIp}/cgi-bin/luci/admin/system/package-manager`
+        : "";
+
     export async function load() {
         isLoading = true;
         try {
@@ -65,9 +72,21 @@
         </label>
 
         {#if !isLoading && !hasLldp}
-            <span class="net-warning">
-                ⚠️ No LLDP data, is lldpd installed on this device?
-            </span>
+            {#if luciPackagesUrl}
+                <a
+                    class="net-warning"
+                    href={luciPackagesUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Open the device's LuCI package manager"
+                >
+                    ⚠️ No LLDP data, verify whether lldpd is installed on this device.
+                </a>
+            {:else}
+                <span class="net-warning">
+                    ⚠️ No LLDP data, verify whether lldpd is installed on this device.
+                </span>
+            {/if}
         {/if}
     </div>
 
@@ -227,6 +246,13 @@
     .net-warning {
         font-size: var(--smFontSize);
         color: var(--txtHintColor);
+        text-decoration: none;
+    }
+    a.net-warning {
+        cursor: pointer;
+    }
+    a.net-warning:hover {
+        text-decoration: underline;
     }
     .net-neighbour + .net-neighbour {
         margin-top: 2px;

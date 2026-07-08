@@ -25,6 +25,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/endobit/oui"
@@ -2337,7 +2338,31 @@ is-new: %d
 	return e.Blob(201, "text/plain", []byte(response))
 }
 
+// keyedMutex serializes work per key (here: per device id). Concurrent
+// monitoring posts for the same device queue; different devices run in parallel.
+type keyedMutex struct {
+	mu    sync.Mutex
+	locks map[string]*sync.Mutex
+}
+
+func (k *keyedMutex) Lock(key string) func() {
+	k.mu.Lock()
+	if k.locks == nil {
+		k.locks = map[string]*sync.Mutex{}
+	}
+	m, ok := k.locks[key]
+	if !ok {
+		m = &sync.Mutex{}
+		k.locks[key] = m
+	}
+	k.mu.Unlock()
+
+	m.Lock()
+	return m.Unlock
+}
+
 func bindAppHooks(app core.App, shared_secret string, enableNewDevices bool) {
+	var deviceLocks keyedMutex
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
 		se.Router.POST("/controller/register/", func(e *core.RequestEvent) error {
 			return handleDeviceRegistration(e, shared_secret, enableNewDevices)
@@ -2391,6 +2416,9 @@ func bindAppHooks(app core.App, shared_secret string, enableNewDevices bool) {
 			if err != nil {
 				return e.ForbiddenError("Not allowed", err)
 			}
+
+			unlock := deviceLocks.Lock(device.Id)
+			defer unlock()
 
 			collection, err := app.FindCollectionByNameOrId("clients")
 			if err != nil {

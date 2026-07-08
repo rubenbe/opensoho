@@ -15,6 +15,8 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -465,6 +467,69 @@ func TestHandleEthernetMonitoring(t *testing.T) {
 	assert.Equal(t, 200*1000*1000, records[1].GetInt("rx_bytes"))
 
 }
+
+// Concurrent monitoring posts for the same device must not run their
+// read-then-write upsert at the same time, otherwise duplicate ethernet
+// records slip through. keyedMutex is what guarantees that serialization.
+func TestKeyedMutexSerializesSameKey(t *testing.T) {
+	var km keyedMutex
+	const goroutines = 50
+	var active, maxActive int32
+	var wg sync.WaitGroup
+
+	wg.Add(goroutines)
+	for i := 0; i < goroutines; i++ {
+		go func() {
+			defer wg.Done()
+			unlock := km.Lock("device-1")
+			defer unlock()
+
+			cur := atomic.AddInt32(&active, 1)
+			for { // track the peak concurrency observed inside the section
+				m := atomic.LoadInt32(&maxActive)
+				if cur <= m || atomic.CompareAndSwapInt32(&maxActive, m, cur) {
+					break
+				}
+			}
+			time.Sleep(time.Millisecond)
+			atomic.AddInt32(&active, -1)
+		}()
+	}
+	wg.Wait()
+
+	assert.Equal(t, int32(1), maxActive, "same-key critical sections must not overlap")
+}
+
+// Different devices are independent, so their locks must not block each other.
+func TestKeyedMutexAllowsDifferentKeys(t *testing.T) {
+	var km keyedMutex
+	const goroutines = 10
+	var wg sync.WaitGroup
+	release := make(chan struct{})
+	entered := make(chan struct{}, goroutines)
+
+	wg.Add(goroutines)
+	for i := 0; i < goroutines; i++ {
+		go func(i int) {
+			defer wg.Done()
+			unlock := km.Lock(fmt.Sprintf("device-%d", i))
+			defer unlock()
+			entered <- struct{}{}
+			<-release // hold the lock until every distinct key has entered
+		}(i)
+	}
+
+	for i := 0; i < goroutines; i++ {
+		select {
+		case <-entered:
+		case <-time.After(2 * time.Second):
+			t.Fatal("distinct keys blocked each other")
+		}
+	}
+	close(release)
+	wg.Wait()
+}
+
 func TestHandleDeviceInfoUpdate(t *testing.T) {
 	app, err := tests.NewTestApp()
 	assert.Equal(t, nil, err)

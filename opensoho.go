@@ -1915,11 +1915,34 @@ func generateDeviceConfig(app core.App, record *core.Record) ([]byte, string, er
 		}
 	}
 
+	if keepList := generateKeepList(configfiles); keepList != "" {
+		configfiles["lib/upgrade/keep.d/opensoho"] = keepList
+	}
+
 	blob, checksum, err := createConfigTar(configfiles)
 
 	if err != nil {
 	}
 	return blob, checksum, err
+}
+
+// generateKeepList builds the /lib/upgrade/keep.d/opensoho file,
+// files under etc/config/ already preserved across sysupgrades
+func generateKeepList(configfiles map[string]string) string {
+	var paths []string
+	for path := range configfiles {
+		if strings.HasPrefix(path, "etc/config/") {
+			continue
+		}
+		paths = append(paths, "/"+path)
+	}
+	sort.Strings(paths)
+
+	output := ""
+	for _, path := range paths {
+		output += path + "\n"
+	}
+	return output
 }
 
 func findFirstOrNewByFilter(app core.App,

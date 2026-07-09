@@ -6108,3 +6108,35 @@ func TestCreateConfigTarHotplugScript(t *testing.T) {
 	// Ordinary config files stay non-executable.
 	assert.Equal(t, int64(0644), modes["etc/config/openwisp"])
 }
+
+func TestGenerateKeepList(t *testing.T) {
+	files := map[string]string{
+		"etc/config/openwisp":                 "config foo\n",
+		"etc/config/system":                   "config foo\n",
+		"etc/hotplug.d/openwisp/opensoho":     dumpRadiosScript,
+		"etc/hotplug.d/openwisp/opensoho-poe": dumpPoeScript,
+		"etc/dropbear/authorized_keys":        "ssh-ed25519 AAAA...\n",
+	}
+
+	output := generateKeepList(files)
+
+	// UCI configs are already preserved by OpenWrt's default keep.d rules
+	// and must not be listed here.
+	assert.NotContains(t, output, "etc/config/")
+
+	// Everything else we push needs to be listed, as an absolute path.
+	assert.Contains(t, output, "/etc/hotplug.d/openwisp/opensoho\n")
+	assert.Contains(t, output, "/etc/hotplug.d/openwisp/opensoho-poe\n")
+	assert.Contains(t, output, "/etc/dropbear/authorized_keys\n")
+}
+
+func TestGenerateKeepListOnlyConfigFiles(t *testing.T) {
+	files := map[string]string{
+		"etc/config/openwisp": "config foo\n",
+		"etc/config/system":   "config foo\n",
+	}
+
+	// When nothing outside etc/config/ is pushed, there is nothing to
+	// keep, so the caller must not add an empty keep.d file to the tar.
+	assert.Empty(t, generateKeepList(files))
+}

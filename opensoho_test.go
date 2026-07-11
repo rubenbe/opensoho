@@ -5007,6 +5007,48 @@ config wifi-station 'psk_somethingapsk03_0'
         option key 'aaaabbbb'
         option mac '00:00:00:00:00:00'
 `, wificonfig)
+
+	// Verify that an apostrophe in the ssid/key/psk password is escaped for UCI
+	w.Set("ssid", "the{'ssid")
+	w.Set("key", "abc{'U")
+
+	psk1.Set("password", "psk{'pass")
+	err = app.Save(psk1)
+	assert.Nil(t, err)
+
+	wificonfig, has_psk = generateWifiConfig(wr, 3, 4, app, d)
+	assert.True(t, has_psk)
+	assert.Equal(t, `
+config wifi-iface 'wifi_3_radio4'
+        option device 'radio4'
+        option network 'wan'
+        option disabled '0'
+        option mode 'ap'
+        option ssid 'the{'\''ssid'
+        option encryption 'psk2+ccmp'
+        option key 'abc{'\''U'
+        option hidden '1'
+        option isolate '1'
+        option ieee80211k '1'
+        option ieee80211r '0'
+        option reassociation_deadline '1000'
+        option time_advertisement '2'
+        option time_zone 'CET-1CEST,M3.5.0,M10.5.0/3'
+        option wnm_sleep_mode '1'
+        option wnm_sleep_mode_no_keys '0'
+        option proxy_arp '1'
+        option bss_transition '1'
+        option dtim_period '3'
+        option ft_over_ds '0'
+        option ft_psk_generate_local '1'
+        option macfilter 'deny'
+        list maclist '11:22:33:44:55:66'
+
+config wifi-station 'psk_somethingapsk03_0'
+        option iface 'wifi_3_radio4'
+        option key 'psk{'\''pass'
+        option mac '00:00:00:00:00:00'
+`, wificonfig)
 }
 
 func TestIsUnHealthyQuorumReached(t *testing.T) {

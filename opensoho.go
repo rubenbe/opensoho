@@ -974,6 +974,11 @@ func getTimeAdvertisementValues(vta string) (int, string) {
 	return vta_flag, GetTzData(vta)
 }
 
+// uciQuote escapes a value for inclusion inside a single-quoted UCI option.
+func uciQuote(value string) string {
+	return strings.ReplaceAll(value, "'", `'\''`)
+}
+
 func generateWifiConfig(wifirecord WifiRecord, wifiid int, radio uint, app core.App, device *core.Record) (string, bool) {
 	wifi := wifirecord.Record
 
@@ -1028,7 +1033,7 @@ config wifi-iface '%s'
         option ft_psk_generate_local '1'
 %s%s`,
 			ifaceName, radio, vlanName, disabled,
-			ssid, encryption, key,
+			uciQuote(ssid), encryption, uciQuote(key),
 			wifi.GetInt("hidden"),
 			wifi.GetInt("isolate_clients"),
 			wifi.GetInt("ieee80211k"),
@@ -3150,7 +3155,7 @@ config wifi-station 'psk_%[5]s_%[6]d'
         option iface '%[3]s'
         option key '%[1]s'
         option mac '%[2]s'
-%[4]s`, password, client, wifiname, vlanconfig, client_psk.Id, num)
+%[4]s`, uciQuote(password), client, wifiname, vlanconfig, client_psk.Id, num)
 		}
 	}
 	return output

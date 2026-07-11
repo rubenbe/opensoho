@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/md5"
 	"database/sql"
 	"embed"
@@ -2368,25 +2369,33 @@ is-new: %d
 
 // keyedMutex serializes work per key (here: per device id). Concurrent
 // monitoring posts for the same device queue; different devices run in parallel.
+// Use a channel, since Mutexes can't have a timeout
 type keyedMutex struct {
 	mu    sync.Mutex
-	locks map[string]*sync.Mutex
+	locks map[string]chan struct{}
 }
 
-func (k *keyedMutex) Lock(key string) func() {
+// Lock acquires the per-key lock, blocking until it is free or ctx is done.
+// Returns an unlock func and true on success; nil and false if ctx expired
+// (or the client disconnected) before the lock was acquired.
+func (k *keyedMutex) Lock(ctx context.Context, key string) (func(), bool) {
 	k.mu.Lock()
 	if k.locks == nil {
-		k.locks = map[string]*sync.Mutex{}
+		k.locks = map[string]chan struct{}{}
 	}
-	m, ok := k.locks[key]
+	ch, ok := k.locks[key]
 	if !ok {
-		m = &sync.Mutex{}
-		k.locks[key] = m
+		ch = make(chan struct{}, 1)
+		k.locks[key] = ch
 	}
 	k.mu.Unlock()
 
-	m.Lock()
-	return m.Unlock
+	select {
+	case ch <- struct{}{}:
+		return func() { <-ch }, true
+	case <-ctx.Done():
+		return nil, false
+	}
 }
 
 func bindAppHooks(app core.App, shared_secret string, enableNewDevices bool) {
@@ -2445,7 +2454,13 @@ func bindAppHooks(app core.App, shared_secret string, enableNewDevices bool) {
 				return e.ForbiddenError("Not allowed", err)
 			}
 
-			unlock := deviceLocks.Lock(device.Id)
+			ctx, cancel := context.WithTimeout(e.Request.Context(), 10*time.Second)
+			defer cancel()
+			unlock, ok := deviceLocks.Lock(ctx, device.Id)
+			if !ok {
+				e.Response.Header().Set("Retry-After", "10")
+				return e.TooManyRequestsError("Device monitoring busy, retry later", nil)
+			}
 			defer unlock()
 
 			collection, err := app.FindCollectionByNameOrId("clients")

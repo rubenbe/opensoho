@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -481,7 +482,8 @@ func TestKeyedMutexSerializesSameKey(t *testing.T) {
 	for i := 0; i < goroutines; i++ {
 		go func() {
 			defer wg.Done()
-			unlock := km.Lock("device-1")
+			unlock, ok := km.Lock(context.Background(), "device-1")
+			assert.True(t, ok)
 			defer unlock()
 
 			cur := atomic.AddInt32(&active, 1)
@@ -512,7 +514,8 @@ func TestKeyedMutexAllowsDifferentKeys(t *testing.T) {
 	for i := 0; i < goroutines; i++ {
 		go func(i int) {
 			defer wg.Done()
-			unlock := km.Lock(fmt.Sprintf("device-%d", i))
+			unlock, ok := km.Lock(context.Background(), fmt.Sprintf("device-%d", i))
+			assert.True(t, ok)
 			defer unlock()
 			entered <- struct{}{}
 			<-release // hold the lock until every distinct key has entered
@@ -528,6 +531,24 @@ func TestKeyedMutexAllowsDifferentKeys(t *testing.T) {
 	}
 	close(release)
 	wg.Wait()
+}
+
+// A held lock must not block its waiter forever: once ctx is done, Lock
+// gives up and reports failure instead of hanging.
+func TestKeyedMutexLockTimesOut(t *testing.T) {
+	var km keyedMutex
+
+	unlock, ok := km.Lock(context.Background(), "device-1")
+	assert.True(t, ok)
+	defer unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	_, ok = km.Lock(ctx, "device-1")
+	assert.False(t, ok, "Lock should fail once ctx expires while the key is held")
+	assert.True(t, time.Since(start) >= 20*time.Millisecond)
 }
 
 func TestHandleDeviceInfoUpdate(t *testing.T) {

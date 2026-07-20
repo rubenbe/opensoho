@@ -843,17 +843,14 @@ config led 'led_%s'
 }
 
 func generateRadioConfig(app core.App, radio *core.Record, country_code string) string {
-	frequency := radio.GetInt("frequency")
-	channel, ok := frequencyToChannel(frequency)
-	if ok == false {
-		fmt.Println("invalid frequency", frequency)
-		return ""
-	}
 
-	frequency_txt := "auto"
+	frequency_txt := "        option channel 'auto'\n"
 	band_txt := ""
 	if radio.GetBool("auto_frequency") != true {
-		frequency_txt = fmt.Sprintf("%d", channel)
+	  frequency := radio.GetInt("frequency")
+		if channel, ok := frequencyToChannel(frequency); ok == true {
+		    frequency_txt = fmt.Sprintf("        option channel '%d'\n", channel)
+    }
 		// A specific frequency pins the band; emit it so the driver picks
 		// the right radio band (e.g. option band '2g').
 		if band := frequencyToUciBand(frequency); len(band) > 0 {
@@ -886,8 +883,7 @@ func generateRadioConfig(app core.App, radio *core.Record, country_code string) 
 
 	return fmt.Sprintf(`
 config wifi-device 'radio%[1]d'
-        option channel '%[2]s'
-%[6]s%[3]s%[4]s%[5]s`, radio.GetInt("radio"), frequency_txt, country_txt, htmode_txt, txpower_txt, band_txt)
+%[2]s%[6]s%[3]s%[4]s%[5]s`, radio.GetInt("radio"), frequency_txt, country_txt, htmode_txt, txpower_txt, band_txt)
 }
 
 func getRadiosForDevice(device *core.Record, app core.App) ([]*core.Record, error) {

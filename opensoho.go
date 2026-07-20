@@ -2760,7 +2760,7 @@ table.table > thead > tr > th > div.col-header-content > span.txt
 	app.OnRecordAfterUpdateSuccess("settings").BindFunc(reconnectMQTT)
 	app.OnRecordAfterCreateSuccess("settings").BindFunc(reconnectMQTT)
 
-	app.OnRecordCreateExecute("device").BindFunc(func(e *core.RecordEvent) error {
+	app.OnRecordCreateExecute("devices").BindFunc(func(e *core.RecordEvent) error {
 		fmt.Println()
 		if err := updateAndStoreDeviceConfig(e.App, e.Record); err != nil {
 			return err

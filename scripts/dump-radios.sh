@@ -41,7 +41,7 @@ for cfg in $(uci -q show wireless | sed -n 's/^wireless\.\(radio[0-9]*\)=wifi-de
 	case "$offset" in ""|*[!0-9]*) offset=0;; esac
 	phy=""
 	n=0
-	for p in $(ls -d /sys/class/ieee80211/phy* 2>/dev/null | sort -V); do
+	for p in $(find /sys/class/ieee80211 -maxdepth 1 -name 'phy*' 2>/dev/null | sort -V); do
 		[ -e "$p" ] || continue
 		rp=$(readlink -f "$p/device" 2>/dev/null)
 		case "$rp" in

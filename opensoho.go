@@ -413,7 +413,6 @@ type Radio struct {
 	Channel   int    `json:"channel"`
 	HTmode    string `json:"htmode"`
 	TxPower   int    `json:"tx_power"`
-	MAC       string `json:"mac"`
 }
 
 type Wireless struct {
@@ -754,14 +753,10 @@ func updateRadios(device *core.Record, app core.App, newradios map[int]Radio) {
 		oldradionum := oldradio.GetInt("radio")
 		if newradio, ok := newradios[oldradionum]; ok {
 			// Old radio exists within the updated list (newradios)
-			fmt.Println("EXISTS", newradio, oldradio, oldradio.GetString("mac_address"))
+			fmt.Println("EXISTS", newradio, oldradio)
 			dirty := false
 			if oldradio.GetBool("enabled") == false {
 				oldradio.Set("enabled", true)
-				dirty = true
-			}
-			if len(oldradio.GetString("mac_address")) == 0 {
-				oldradio.Set("mac_address", newradio.MAC)
 				dirty = true
 			}
 			// tx_power_mode is a required field; rows created before it existed
@@ -814,7 +809,6 @@ func updateRadios(device *core.Record, app core.App, newradios map[int]Radio) {
 		fmt.Println(numradio, radio, device.GetString("id"))
 		record := core.NewRecord(radiocollection)
 		record.Set("device", device.GetString("id"))
-		record.Set("mac_address", radio.MAC)
 		record.Set("radio", numradio)
 		record.Set("channel", radio.Channel)
 		record.Set("frequency", radio.Frequency)
@@ -2145,7 +2139,7 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 			if err != nil {
 				fmt.Printf("Found an unknown phy pattern '%s', please report a github issue\n", iface.Name)
 			} else {
-				radios[radionum] = Radio{Frequency: iface.Wireless.Frequency, Channel: iface.Wireless.Channel, HTmode: iface.Wireless.HTmode, TxPower: iface.Wireless.TxPower, MAC: iface.MAC}
+				radios[radionum] = Radio{Frequency: iface.Wireless.Frequency, Channel: iface.Wireless.Channel, HTmode: iface.Wireless.HTmode, TxPower: iface.Wireless.TxPower}
 			}
 
 			for _, client := range iface.Wireless.Clients {

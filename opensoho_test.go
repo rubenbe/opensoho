@@ -2345,7 +2345,7 @@ func TestUpdateMonitoring(t *testing.T) {
 	fmt.Println(radios)
 	radio := radios[1]
 	assert.NotEqual(t, nil, radio)
-	assert.Equal(t, Radio{Frequency: 2462, Channel: 11, HTmode: "HT20", TxPower: 22, MAC: "aa:bb:cc:dd:ee:ff"}, radio)
+	assert.Equal(t, Radio{Frequency: 2462, Channel: 11, HTmode: "HT20", TxPower: 22}, radio)
 }
 
 // Verify an empty monitoring request is correctly ignored

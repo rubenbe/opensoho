@@ -841,10 +841,10 @@ func generateRadioConfig(app core.App, radio *core.Record, country_code string) 
 	frequency_txt := "        option channel 'auto'\n"
 	band_txt := ""
 	if radio.GetBool("auto_frequency") != true {
-	  frequency := radio.GetInt("frequency")
+		frequency := radio.GetInt("frequency")
 		if channel, ok := frequencyToChannel(frequency); ok == true {
-		    frequency_txt = fmt.Sprintf("        option channel '%d'\n", channel)
-    }
+			frequency_txt = fmt.Sprintf("        option channel '%d'\n", channel)
+		}
 		// A specific frequency pins the band; emit it so the driver picks
 		// the right radio band (e.g. option band '2g').
 		if band := frequencyToUciBand(frequency); len(band) > 0 {

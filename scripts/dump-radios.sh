@@ -32,11 +32,23 @@ sig=""
 sep=""
 for cfg in $(uci -q show wireless | sed -n 's/^wireless\.\(radio[0-9]*\)=wifi-device$/\1/p'); do
 	cpath=$(uci -q get wireless."$cfg".path)
+	# Combo chips expose several bands as separate phys sharing one device
+	# path; OpenWrt disambiguates them with a "<path>+N" suffix. readlink strips
+	# the +N (all such phys resolve to the same base path), so match the base
+	# path and pick the Nth phy (0-based) among those that share it.
+	base=${cpath%+*}
+	offset=${cpath##*+}
+	case "$offset" in ""|*[!0-9]*) offset=0;; esac
 	phy=""
-	for p in /sys/class/ieee80211/phy*; do
+	n=0
+	for p in $(ls -d /sys/class/ieee80211/phy* 2>/dev/null | sort -V); do
 		[ -e "$p" ] || continue
 		rp=$(readlink -f "$p/device" 2>/dev/null)
-		case "$rp" in */$cpath) phy=${p##*/}; break;; esac
+		case "$rp" in
+			*/$base)
+				[ "$n" = "$offset" ] && { phy=${p##*/}; break; }
+				n=$((n+1));;
+		esac
 	done
 	[ -n "$phy" ] || continue
 	info=$(ubus call iwinfo info "{\"device\":\"$phy\"}")

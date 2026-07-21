@@ -212,9 +212,9 @@ func frequencyToChannel(freqMHz int) (int, bool) {
 
 func validateRadioHtModeBandCombo(band string, htmode string) error {
 	validHtModes := map[string][]string{
-		"2.4": {"HT20", "HT40", "HE20", "HE40"},
-		"5":   {"HT20", "HT40", "VHT20", "VHT40", "VHT80", "VHT160", "HE20", "HE40", "HE80", "HE160"},
-		"6":   {"HE20", "HE40", "HE80", "HE160"},
+		"2.4": {"HT20", "HT40", "HE20", "HE40", "EHT20", "EHT40"},
+		"5":   {"HT20", "HT40", "VHT20", "VHT40", "VHT80", "VHT160", "HE20", "HE40", "HE80", "HE160", "EHT20", "EHT40", "EHT80", "EHT160"},
+		"6":   {"HE20", "HE40", "HE80", "HE160", "EHT20", "EHT40", "EHT80", "EHT160", "EHT320"},
 	}
 
 	htmodes, ok := validHtModes[band]

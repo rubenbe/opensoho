@@ -29,7 +29,7 @@ var BandLabels = map[string]string{
 var BandWidths = map[string][]int{
 	"2.4": {20, 40},
 	"5":   {20, 40, 80, 160},
-	"6":   {20, 40, 80, 160},
+	"6":   {20, 40, 80, 160, 320},
 }
 
 var standardChannels = map[string][]Channel{
@@ -244,6 +244,8 @@ func WidthForbidden(width int, flags []string) bool {
 		return contains(flags, "no_80mhz")
 	case 160:
 		return contains(flags, "no_160mhz")
+	case 320:
+		return contains(flags, "no_320mhz")
 	case 20:
 		return contains(flags, "no_20mhz")
 	default:

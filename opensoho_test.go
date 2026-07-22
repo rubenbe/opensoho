@@ -1680,7 +1680,7 @@ func TestGenerateInterfaceVlanConfigForGateway(t *testing.T) {
 	iot_vlan := core.NewRecord(vlancollection)
 	iot_vlan.Set("name", "iot")
 	iot_vlan.Set("number", "300")
-	iot_vlan.Set("cidr", "172.16.0.1/17")
+	iot_vlan.Set("gateway_ip_config", "172.16.0.1/17")
 	iot_vlan.Set("gateway", "somethindevice2")
 	err = app.Save(iot_vlan)
 	assert.Equal(t, nil, err)
@@ -1689,7 +1689,7 @@ func TestGenerateInterfaceVlanConfigForGateway(t *testing.T) {
 	lan_vlan := core.NewRecord(vlancollection)
 	lan_vlan.Set("name", "lan")
 	lan_vlan.Set("number", "200")
-	lan_vlan.Set("cidr", "192.168.1.1/24")     //Should be ignored
+	lan_vlan.Set("gateway_ip_config", "192.168.1.1/24")     //Should be ignored
 	lan_vlan.Set("gateway", "somethindevice2") // Should be ignored
 	err = app.Save(lan_vlan)
 	assert.Equal(t, nil, err)
@@ -1839,7 +1839,7 @@ func TestGenerateDhcpConfigForDevice(t *testing.T) {
 	iot_vlan := core.NewRecord(vlancollection)
 	iot_vlan.Set("name", "guest")
 	iot_vlan.Set("number", "300")
-	iot_vlan.Set("cidr", "172.16.0.1/17")
+	iot_vlan.Set("gateway_ip_config", "172.16.0.1/17")
 	iot_vlan.Set("gateway", "somethindevice2")
 	err = app.Save(iot_vlan)
 	assert.Equal(t, nil, err)
@@ -1848,7 +1848,7 @@ func TestGenerateDhcpConfigForDevice(t *testing.T) {
 	lan_vlan := core.NewRecord(vlancollection)
 	lan_vlan.Set("name", "lan")
 	lan_vlan.Set("number", "200")
-	lan_vlan.Set("cidr", "192.168.1.1/24")
+	lan_vlan.Set("gateway_ip_config", "192.168.1.1/24")
 	lan_vlan.Set("gateway", "somethindevice2")
 	err = app.Save(lan_vlan)
 	assert.Equal(t, nil, err)
@@ -4339,8 +4339,8 @@ func setupVlanCollection(t *testing.T, app core.App) *core.Collection {
 		OnlyInt:  true,
 	})
 	vlancollection.Fields.Add(&core.TextField{
-		Name:     "cidr",
-		Pattern:  "^([0-9]{1,3}.){3}[0-9]{1,3}/[0-9]{1,2}$",
+		Name:     "gateway_ip_config",
+		Pattern:  "^((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\\.){3}(25[0-4]|2[0-4][0-9]|1[0-9]{2}|[1-9][0-9]?)/(3[0-2]|[12][0-9]|[0-9])$",
 		Required: false,
 	})
 	vlancollection.Fields.Add(&core.AutodateField{

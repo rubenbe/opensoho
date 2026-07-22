@@ -1307,7 +1307,7 @@ func generateDhcpConfigForDevice(app core.App, device *core.Record, vlan *core.R
 		return ""
 	}
 	vlanname := vlan.GetString("name")
-	vlancidr := vlan.GetString("cidr")
+	vlancidr := vlan.GetString("gateway_ip_config")
 	if vlancidr == "" {
 		return ""
 	}
@@ -1425,7 +1425,7 @@ func generateInterfaceVlanConfig(app core.App, device *core.Record, bridgeConfig
 	cidr := ""
 
 	if len(gatewayid) > 0 && gatewayid == device.Id {
-		cidr = vlanConfig.GetString("cidr")
+		cidr = vlanConfig.GetString("gateway_ip_config")
 	}
 
 	return generateInterfaceVlanConfigInt(app, bridgeConfig, vlanname, vlanid, cidr, taggingConfig)
@@ -1464,7 +1464,7 @@ func generateInterfaceVlanConfigInt(app core.App, bridgeConfig *core.Record, vla
         option ipaddr '%[1]s'
         option netmask '%[2]s'`, ipAddr, prefixmask)
 		} else {
-			app.Logger().Warn("Invalid CIDR", "cidr", cidr)
+			app.Logger().Warn("Set a valid gateway IP config e.g. '192.168.1.1/24'", "gateway_ip_config", cidr)
 		}
 	}
 

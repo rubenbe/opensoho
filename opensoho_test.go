@@ -1689,8 +1689,8 @@ func TestGenerateInterfaceVlanConfigForGateway(t *testing.T) {
 	lan_vlan := core.NewRecord(vlancollection)
 	lan_vlan.Set("name", "lan")
 	lan_vlan.Set("number", "200")
-	lan_vlan.Set("gateway_ip_config", "192.168.1.1/24")     //Should be ignored
-	lan_vlan.Set("gateway", "somethindevice2") // Should be ignored
+	lan_vlan.Set("gateway_ip_config", "192.168.1.1/24") //Should be ignored
+	lan_vlan.Set("gateway", "somethindevice2")          // Should be ignored
 	err = app.Save(lan_vlan)
 	assert.Equal(t, nil, err)
 

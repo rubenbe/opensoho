@@ -1455,16 +1455,23 @@ func generateInterfaceVlanConfigInt(app core.App, bridgeConfig *core.Record, vla
 
 	// Avoid overwriting the default LAN configuration
 	if len(cidr) > 0 && vlanname != "lan" {
-		ipAddr, ipNet, err := net.ParseCIDR(cidr)
-		if err == nil {
-			prefixsize, _ := ipNet.Mask.Size()
-			prefixmask, _ := CIDRToMask(prefixsize)
-			intfmode = fmt.Sprintf(`
+		// Parse the IP address from the CIDR notation (before the /)
+		cidrParts := strings.Split(cidr, "/")
+		if len(cidrParts) == 2 {
+			ipAddr := net.ParseIP(cidrParts[0])
+			_, ipNet, err := net.ParseCIDR(cidr)
+			if err == nil && ipAddr != nil {
+				prefixsize, _ := ipNet.Mask.Size()
+				prefixmask, _ := CIDRToMask(prefixsize)
+				intfmode = fmt.Sprintf(`
         option proto 'static'
         option ipaddr '%[1]s'
         option netmask '%[2]s'`, ipAddr, prefixmask)
+			} else {
+				app.Logger().Warn("Invalid CIDR", "cidr", cidr)
+			}
 		} else {
-			app.Logger().Warn("Invalid CIDR", "cidr", cidr)
+			app.Logger().Warn("Invalid CIDR format", "cidr", cidr)
 		}
 	}
 

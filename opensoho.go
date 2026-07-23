@@ -2731,6 +2731,17 @@ table.table > thead > tr > th > div.col-header-content > span.txt
 		return e.Next()
 	})
 
+	// OnRecordValidate (instead of the create/update request hooks) so internal
+	// app.Save() calls are covered too. The built-in field validation is bound
+	// with priority 99, so this runs first and its message wins over the raw
+	// field pattern error.
+	app.OnRecordValidate("vlan").BindFunc(func(e *core.RecordEvent) error {
+		if err := validateVlan(e.Record); err != nil {
+			return err
+		}
+		return e.Next()
+	})
+
 	app.OnRecordUpdateRequest("settings").BindFunc(func(e *core.RecordRequestEvent) error {
 		err := validateSetting(e.Record)
 		if err != nil {
@@ -2803,6 +2814,66 @@ func validateDevice(record *core.Record) error {
 		return apis.NewBadRequestError("Failed to save record.", errs)
 	}
 	return nil
+}
+
+// validateVlan checks the gateway IP config so an unusable value is rejected on
+// save instead of silently degrading the generated config (see
+// generateInterfaceVlanConfigInt and generateDhcpConfigForDevice, which only log
+// a warning and fall back to 'proto none' / no DHCP block).
+// Bound to OnRecordValidate, so it returns validation.Errors directly.
+func validateVlan(record *core.Record) error {
+	cidr := record.GetString("gateway_ip_config")
+	if cidr == "" {
+		return nil
+	}
+
+	err := validateGatewayIPConfig(cidr)
+	if err != nil {
+		return validation.Errors{"gateway_ip_config": err}
+	}
+	return nil
+}
+
+func validateGatewayIPConfig(cidr string) error {
+	ip, ipNet, err := net.ParseCIDR(cidr)
+	if err != nil {
+		return validation.NewError(
+			"validation_invalid_gateway_ip_config",
+			"Set a valid gateway IP config e.g. '192.168.1.1/24'.",
+		)
+	}
+
+	ip4 := ip.To4()
+	if ip4 == nil {
+		return validation.NewError(
+			"validation_invalid_gateway_ip_config",
+			"Set a valid IPv4 gateway IP config e.g. '192.168.1.1/24'.",
+		)
+	}
+
+	// The network and broadcast addresses are not usable as a gateway address.
+	// They don't exist for /31 and /32, so skip the check there.
+	prefixsize, _ := ipNet.Mask.Size()
+	if prefixsize < 31 && (ip4.Equal(ipNet.IP) || ip4.Equal(broadcastAddress(ipNet))) {
+		return validation.NewError(
+			"validation_invalid_gateway_ip_config",
+			"Gateway IP cannot be the network or broadcast address of its subnet.",
+		)
+	}
+
+	return nil
+}
+
+func broadcastAddress(ipNet *net.IPNet) net.IP {
+	ip := ipNet.IP.To4()
+	if ip == nil {
+		return nil
+	}
+	broadcast := make(net.IP, net.IPv4len)
+	for i := range ip {
+		broadcast[i] = ip[i] | ^ipNet.Mask[i]
+	}
+	return broadcast
 }
 
 func validateSetting(record *core.Record) error {

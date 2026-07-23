@@ -1064,6 +1064,39 @@ func TestValidateSetting(t *testing.T) {
 	assert.Error(t, validateSetting(s))
 }
 
+func TestValidateVlan(t *testing.T) {
+	app, err := tests.NewTestApp()
+	assert.Nil(t, err)
+	defer app.Cleanup()
+
+	vlancollection := setupVlanCollection(t, app)
+
+	v := core.NewRecord(vlancollection)
+	v.Set("name", "iot")
+	v.Set("number", 300)
+
+	// Empty is allowed, the field is optional.
+	assert.Nil(t, validateVlan(v))
+
+	for _, cidr := range []string{"192.168.1.1/24", "172.16.0.1/17", "10.0.0.1/8", "192.168.1.1/32"} {
+		v.Set("gateway_ip_config", cidr)
+		assert.Nil(t, validateVlan(v), cidr)
+	}
+
+	for _, cidr := range []string{
+		"192.168.1.1",      // missing prefix
+		"not-an-ip",        //
+		"192.168.1.1/33",   // prefix out of range
+		"192.168.1.999/24", // invalid octet
+		"::1/64",           // IPv6
+		"10.0.0.0/8",       // network address
+		"10.255.255.255/8", // broadcast address
+	} {
+		v.Set("gateway_ip_config", cidr)
+		assert.Error(t, validateVlan(v), cidr)
+	}
+}
+
 func TestValidateDevice(t *testing.T) {
 	app, err := tests.NewTestApp()
 	assert.Nil(t, err)

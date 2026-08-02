@@ -2693,6 +2693,7 @@ func TestUpdateMonitoringOpenSoho(t *testing.T) {
 	wificollection := setupWifiCollection(t, app, vlancollection)
 	clientcollection := setupClientsCollection(t, app)
 	devicecollection := setupDeviceCollection(t, app, wificollection)
+	setupRadioCollection(t, app, devicecollection)
 
 	// Add a device
 	d := core.NewRecord(devicecollection)
@@ -2703,19 +2704,118 @@ func TestUpdateMonitoringOpenSoho(t *testing.T) {
 
 	event.Response = rec
 
-	// The endpoint accepts the payload with an empty 200 response. It carries
-	// radio data of its own (handled by handleOpenSohoMonitoring), not
-	// through the returned map; updateRadios must not treat that as "every
-	// radio is down".
+	// The endpoint accepts the payload with an empty 200 response.
 	response, radios := handleMonitoring(&event, app, d, clientcollection)
 	assert.Equal(t, nil, response)
-	assert.Nil(t, radios)
 	httpResponse := rec.Result()
 	defer httpResponse.Body.Close()
 	body, err := io.ReadAll(httpResponse.Body)
 	assert.Equal(t, nil, err)
 	assert.Equal(t, 200, httpResponse.StatusCode)
 	assert.Equal(t, "", string(body))
+
+	// The dump enumerates the UCI wifi-devices, so both radios are discovered
+	// even though radio1 is switched off in UCI.
+	assert.Equal(t, 2, len(radios))
+	assert.Equal(t, false, radios[0].Disabled)
+	assert.Equal(t, true, radios[1].Disabled)
+
+	updateRadios(d, app, radios)
+	{
+		r, err := app.FindFirstRecordByData("radios", "radio", "0")
+		assert.Equal(t, nil, err)
+		assert.Equal(t, 5180, r.GetInt("frequency"))
+		assert.Equal(t, true, r.GetBool("enabled"))
+	}
+	{
+		r, err := app.FindFirstRecordByData("radios", "radio", "1")
+		assert.Equal(t, nil, err)
+		assert.Equal(t, 2462, r.GetInt("frequency"))
+		assert.Equal(t, false, r.GetBool("enabled"))
+	}
+}
+
+// A PoE dump shares the OpenSoho type but carries no radios, so it must leave
+// the radios collection alone.
+func TestUpdateMonitoringOpenSohoPoeOnly(t *testing.T) {
+	app, err := tests.NewTestApp()
+	assert.Nil(t, err)
+	defer app.Cleanup()
+
+	event := core.RequestEvent{}
+	event.Request, err = http.NewRequest("POST", "/api/v1/monitoring/device/",
+		strings.NewReader(`{"type":"OpenSoho","poe":{"budget":65,"consumption":4.1,`+
+			`"ports":{"lan1":{"priority":2,"mode":"auto","status":"delivering","consumption":4.1}}}}`))
+	assert.Nil(t, err)
+	event.Request.Header.Set("content-type", "application/json")
+	event.App = app
+	event.Response = httptest.NewRecorder()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	clientcollection := setupClientsCollection(t, app)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	setupRadioCollection(t, app, devicecollection)
+
+	d := core.NewRecord(devicecollection)
+	d.Set("name", "the_device1")
+	d.Set("health_status", "healthy")
+	assert.Nil(t, app.Save(d))
+
+	updateRadios(d, app, map[int]Radio{0: {Frequency: 2412, Channel: 1, TxPower: 23}})
+
+	response, radios := handleMonitoring(&event, app, d, clientcollection)
+	assert.Nil(t, response)
+	assert.Equal(t, 0, len(radios))
+
+	updateRadios(d, app, radios)
+	radiocount, err := app.CountRecords("radios")
+	assert.Nil(t, err)
+	assert.Equal(t, int64(1), radiocount)
+
+	r, err := app.FindFirstRecordByData("radios", "radio", "0")
+	assert.Nil(t, err)
+	assert.Equal(t, true, r.GetBool("enabled"))
+}
+
+func TestUciBool(t *testing.T) {
+	cases := map[string]bool{
+		"1": true, "on": true, "true": true, "yes": true, "enabled": true,
+		"ON": true, " 1 ": true,
+		"0": false, "": false, "off": false, "no": false, "false": false,
+		"2": false, "disabled": false,
+	}
+	for value, expected := range cases {
+		assert.Equal(t, expected, uciBool(value), "uciBool(%q)", value)
+	}
+}
+
+// The dump names radios by their UCI section, which is the index the radios
+// collection is keyed on.
+func TestRadiosFromOpenSoho(t *testing.T) {
+	app, err := tests.NewTestApp()
+	assert.Nil(t, err)
+	defer app.Cleanup()
+
+	d := core.NewRecord(core.NewBaseCollection("devices"))
+
+	var onair, idle, bogus OpenSohoRadio
+	onair.Name = "radio0"
+	onair.Disabled = "0"
+	onair.Info = IwinfoInfo{Channel: 36, Frequency: 5180, TxPower: 23}
+	idle.Name = "radio1"
+	idle.Disabled = "1"
+	bogus.Name = "wifi-iface"
+
+	radios := radiosFromOpenSoho(app, d, OpenSohoData{
+		Type:   "OpenSoho",
+		Radios: []OpenSohoRadio{onair, idle, bogus},
+	})
+
+	assert.Equal(t, 2, len(radios), "the unparseable name should be skipped")
+	assert.Equal(t, Radio{Frequency: 5180, Channel: 36, TxPower: 23}, radios[0])
+	// An idle radio reports no operating values, only that it exists.
+	assert.Equal(t, Radio{Disabled: true}, radios[1])
 }
 
 // Currently should be a nop, but will be implemented later

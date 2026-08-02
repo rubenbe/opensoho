@@ -123,6 +123,14 @@ func parseRadioName(name string) (int, error) {
 	return strconv.Atoi(strings.TrimPrefix(name, "radio"))
 }
 
+func uciBool(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "1", "on", "true", "yes", "enabled":
+		return true
+	}
+	return false
+}
+
 func updateDeviceHealth(app core.App, currenttime types.DateTime) {
 	oldesttime := currenttime.Add(-60 * time.Second)
 
@@ -509,6 +517,10 @@ type Radio struct {
 	Channel   int    `json:"channel"`
 	HTmode    string `json:"htmode"`
 	TxPower   int    `json:"tx_power"`
+	// Disabled mirrors the UCI wifi-device "disabled" option. Only the OpenSoho
+	// dump knows about it; radios derived from the interface list are on air by
+	// definition and leave it false.
+	Disabled bool `json:"disabled"`
 }
 
 type Wireless struct {
@@ -641,6 +653,28 @@ type OpenSohoData struct {
 	Radios []OpenSohoRadio `json:"radios"`
 	Poe    *poe.Info       `json:"poe"`
 	Lldp   *lldp.Info      `json:"lldp"`
+}
+
+func radiosFromOpenSoho(app core.App, device *core.Record, data OpenSohoData) map[int]Radio {
+	radios := make(map[int]Radio, len(data.Radios))
+	for _, radio := range data.Radios {
+		idx, err := parseRadioName(radio.Name)
+		if err != nil {
+			app.Logger().Error("Skipping radio with unparseable name",
+				"device", device.GetString("id"), "radio", radio.Name, "error", err)
+			continue
+		}
+		// Info holds the current operating values, which are 0 while the radio
+		// is idle. HTmode is left empty on purpose: Info.HtModes lists the modes
+		// the radio supports, not the one it is using.
+		radios[idx] = Radio{
+			Frequency: radio.Info.Frequency,
+			Channel:   radio.Info.Channel,
+			TxPower:   radio.Info.TxPower,
+			Disabled:  uciBool(radio.Disabled),
+		}
+	}
+	return radios
 }
 
 // radioBands returns the distinct Wi-Fi bands a radio supports, derived from
@@ -972,7 +1006,7 @@ func updateRadios(device *core.Record, app core.App, newradios map[int]Radio) {
 			// Only store frequencies form enabled radios
 			record.Set("frequency", radio.Frequency)
 		}
-		record.Set("enabled", true)
+		record.Set("enabled", !radio.Disabled)
 		// New radios default to auto power; store the reported value (in dBm) so
 		// tx_power reflects what the driver chose.
 		record.Set("tx_power_mode", "auto")
@@ -2270,7 +2304,7 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 			return e.BadRequestError("Failed to parse OpenSoho json", err), radios
 		}
 		handleOpenSohoMonitoring(app, device, osd, current)
-		return e.Blob(200, "text/plain", []byte("")), radios
+		return e.Blob(200, "text/plain", []byte("")), radiosFromOpenSoho(app, device, osd)
 	}
 	if envelope.Type != "DeviceMonitoring" {
 		errormsg := fmt.Sprintf(`Invalid type '%s' in JSON`, envelope.Type)

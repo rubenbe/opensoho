@@ -3382,7 +3382,6 @@ func TestUpdateRadios(t *testing.T) {
 		assert.Equal(t, err, nil)
 		assert.Equal(t, r.GetInt("radio"), 0)
 		assert.Equal(t, r.GetInt("frequency"), 2412)
-		assert.Equal(t, r.GetInt("channel"), 1)
 		assert.Equal(t, r.GetBool("enabled"), true)
 		assert.Equal(t, r.GetString("device"), d.GetString("id"))
 	}
@@ -3391,7 +3390,6 @@ func TestUpdateRadios(t *testing.T) {
 		assert.Equal(t, err, nil)
 		assert.Equal(t, r.GetInt("radio"), 1)
 		assert.Equal(t, r.GetInt("frequency"), 5200)
-		assert.Equal(t, r.GetInt("channel"), 40)
 		assert.Equal(t, r.GetBool("enabled"), true)
 		assert.Equal(t, r.GetString("device"), d.GetString("id"))
 	}
@@ -3408,7 +3406,6 @@ func TestUpdateRadios(t *testing.T) {
 		assert.Equal(t, err, nil)
 		assert.Equal(t, r.GetInt("radio"), 0)
 		assert.Equal(t, r.GetInt("frequency"), 2412)
-		assert.Equal(t, r.GetInt("channel"), 1)
 		assert.Equal(t, r.GetBool("enabled"), true)
 	}
 	{
@@ -3416,7 +3413,6 @@ func TestUpdateRadios(t *testing.T) {
 		assert.Equal(t, err, nil)
 		assert.Equal(t, r.GetInt("radio"), 1)
 		assert.Equal(t, r.GetInt("frequency"), 5200)
-		assert.Equal(t, r.GetInt("channel"), 40)
 		assert.Equal(t, r.GetBool("enabled"), true)
 	}
 	{
@@ -3424,7 +3420,6 @@ func TestUpdateRadios(t *testing.T) {
 		assert.Equal(t, err, nil)
 		assert.Equal(t, r.GetInt("radio"), 2)
 		assert.Equal(t, r.GetInt("frequency"), 5955)
-		assert.Equal(t, r.GetInt("channel"), 100)
 		assert.Equal(t, r.GetBool("enabled"), true)
 	}
 
@@ -3442,7 +3437,6 @@ func TestUpdateRadios(t *testing.T) {
 		assert.Equal(t, err, nil)
 		assert.Equal(t, r.GetInt("radio"), 0)
 		assert.Equal(t, r.GetInt("frequency"), 2412)
-		assert.Equal(t, r.GetInt("channel"), 1)
 		assert.Equal(t, r.GetBool("enabled"), true)
 	}
 	{
@@ -3450,7 +3444,6 @@ func TestUpdateRadios(t *testing.T) {
 		assert.Equal(t, err, nil)
 		assert.Equal(t, r.GetInt("radio"), 1)
 		assert.Equal(t, r.GetInt("frequency"), 5200)
-		assert.Equal(t, r.GetInt("channel"), 40)
 		assert.Equal(t, r.GetBool("enabled"), false)
 	}
 	{
@@ -3458,7 +3451,6 @@ func TestUpdateRadios(t *testing.T) {
 		assert.Equal(t, err, nil)
 		assert.Equal(t, r.GetInt("radio"), 2)
 		assert.Equal(t, r.GetInt("frequency"), 5955)
-		assert.Equal(t, r.GetInt("channel"), 100)
 		assert.Equal(t, r.GetBool("enabled"), true)
 	}
 
@@ -3473,7 +3465,6 @@ func TestUpdateRadios(t *testing.T) {
 		assert.Equal(t, err, nil)
 		assert.Equal(t, r.GetInt("radio"), 0)
 		assert.Equal(t, r.GetInt("frequency"), 2412)
-		assert.Equal(t, r.GetInt("channel"), 1)
 		assert.Equal(t, r.GetBool("enabled"), true)
 	}
 	{
@@ -3481,7 +3472,6 @@ func TestUpdateRadios(t *testing.T) {
 		assert.Equal(t, err, nil)
 		assert.Equal(t, r.GetInt("radio"), 1)
 		assert.Equal(t, r.GetInt("frequency"), 5200)
-		assert.Equal(t, r.GetInt("channel"), 40)
 		assert.Equal(t, r.GetBool("enabled"), true)
 	}
 	{
@@ -3489,7 +3479,6 @@ func TestUpdateRadios(t *testing.T) {
 		assert.Equal(t, err, nil)
 		assert.Equal(t, r.GetInt("radio"), 2)
 		assert.Equal(t, r.GetInt("frequency"), 5955)
-		assert.Equal(t, r.GetInt("channel"), 100)
 		assert.Equal(t, r.GetBool("enabled"), true)
 	}
 }
@@ -4082,12 +4071,6 @@ func setupRadioCollection(t *testing.T, app core.App, devicecollection *core.Col
 		MaxSelect:     1,
 		CascadeDelete: false,
 		CollectionId:  devicecollection.Id,
-	})
-	radiocollection.Fields.Add(&core.NumberField{
-		Name:     "channel",
-		Required: false,
-		Min:      &x,
-		OnlyInt:  true,
 	})
 	radiocollection.Fields.Add(&core.SelectField{
 		Name:      "frequency",

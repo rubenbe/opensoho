@@ -959,7 +959,6 @@ func updateRadios(device *core.Record, app core.App, newradios map[int]Radio) {
 		record := core.NewRecord(radiocollection)
 		record.Set("device", device.GetString("id"))
 		record.Set("radio", numradio)
-		record.Set("channel", radio.Channel)
 		record.Set("frequency", radio.Frequency)
 		record.Set("enabled", true)
 		// New radios default to auto power; store the reported value (in dBm) so

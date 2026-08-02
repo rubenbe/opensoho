@@ -967,9 +967,9 @@ func updateRadios(device *core.Record, app core.App, newradios map[int]Radio) {
 		if radio.TxPower > 0 {
 			record.Set("tx_power", radio.TxPower)
 		}
-		err := app.Save(record)
-		if err != nil {
-			fmt.Println("Failed to save radio config")
+		if err := app.Save(record); err != nil {
+			app.Logger().Error("Failed to save radio",
+				"device", device.GetString("id"), "radio", numradio, "error", err)
 		}
 	}
 }

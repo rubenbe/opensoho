@@ -3560,6 +3560,32 @@ func TestUpdateRadiosTxPower(t *testing.T) {
 	}
 }
 
+// A disabled radio reports frequency 0.
+// That's not a valid frequency, but it should not fail the record from saving
+func TestUpdateRadiosWithoutFrequency(t *testing.T) {
+	app, err := tests.NewTestApp()
+	assert.Nil(t, err)
+	defer app.Cleanup()
+
+	devicecollection := core.NewBaseCollection("devices")
+	assert.Nil(t, app.Save(devicecollection))
+	setupRadioCollection(t, app, devicecollection)
+
+	d := core.NewRecord(devicecollection)
+	assert.Nil(t, app.Save(d))
+
+	updateRadios(d, app, map[int]Radio{0: {Frequency: 0, Channel: 0, TxPower: 0}})
+
+	radiocount, err := app.CountRecords("radios")
+	assert.Nil(t, err)
+	assert.Equal(t, int64(1), radiocount, "the radio should still be recorded")
+
+	r, err := app.FindFirstRecordByData("radios", "radio", "0")
+	assert.Nil(t, err)
+	assert.Equal(t, "", r.GetString("frequency"))
+	assert.Equal(t, "auto", r.GetString("tx_power_mode"))
+}
+
 func TestFrequencyToChannel(t *testing.T) {
 	tests := []struct {
 		freq            int

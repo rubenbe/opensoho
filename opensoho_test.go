@@ -891,33 +891,210 @@ func TestGetPortTagConfigForVlan(t *testing.T) {
 	assert.Equal(t, "t", getPortTagConfigForVlan(iot_vlan.Id, defaultSettings))
 }
 
-func TestValidateRadioHtModeBandCombo(t *testing.T) {
-	// Valid combinations
-	assert.Nil(t, validateRadioHtModeBandCombo("2.4", "HT20"))
-	assert.Nil(t, validateRadioHtModeBandCombo("2.4", "HT40"))
-	assert.Nil(t, validateRadioHtModeBandCombo("2.4", "HE20"))
-	assert.Nil(t, validateRadioHtModeBandCombo("2.4", "HE40"))
-	assert.Nil(t, validateRadioHtModeBandCombo("5", "HT20"))
-	assert.Nil(t, validateRadioHtModeBandCombo("5", "HT40"))
-	assert.Nil(t, validateRadioHtModeBandCombo("5", "VHT20"))
-	assert.Nil(t, validateRadioHtModeBandCombo("5", "VHT40"))
-	assert.Nil(t, validateRadioHtModeBandCombo("5", "VHT80"))
-	assert.Nil(t, validateRadioHtModeBandCombo("5", "VHT160"))
-	assert.Nil(t, validateRadioHtModeBandCombo("5", "HE20"))
-	assert.Nil(t, validateRadioHtModeBandCombo("5", "HE40"))
-	assert.Nil(t, validateRadioHtModeBandCombo("5", "HE80"))
-	assert.Nil(t, validateRadioHtModeBandCombo("5", "HE160"))
-	assert.Nil(t, validateRadioHtModeBandCombo("6", "HE20"))
-	assert.Nil(t, validateRadioHtModeBandCombo("6", "HE40"))
-	assert.Nil(t, validateRadioHtModeBandCombo("6", "HE80"))
-	assert.Nil(t, validateRadioHtModeBandCombo("6", "HE160"))
-	// Invalid combinations
-	assert.Error(t, validateRadioHtModeBandCombo("2.4", "VHT40"))
-	assert.Error(t, validateRadioHtModeBandCombo("6", "VHT40"))
+func TestHtModeGeneration(t *testing.T) {
+	for htmode, want := range map[string]string{
+		"HT20":   "Wifi 4",
+		"HT40":   "Wifi 4",
+		"VHT80":  "Wifi 5",
+		"HE160":  "Wifi 6",
+		"EHT320": "Wifi 7",
+	} {
+		name, rank := htModeToWifiGeneration(htmode)
+		assert.Equal(t, want, name)
+		assert.NotEqual(t, 0, rank)
+	}
 
-	// Invalid input
-	assert.Error(t, validateRadioHtModeBandCombo("60", "HE160"))
-	assert.Error(t, validateRadioHtModeBandCombo("5", "HT1000"))
+	// Unrecognised and empty input rank as 0 so they sort below everything.
+	for _, htmode := range []string{"", "NOHT", "DMG20"} {
+		name, rank := htModeToWifiGeneration(htmode)
+		assert.Equal(t, "", name)
+		assert.Equal(t, 0, rank)
+	}
+
+	// The ranks order the generations.
+	_, ht := htModeToWifiGeneration("HT40")
+	_, vht := htModeToWifiGeneration("VHT40")
+	_, he := htModeToWifiGeneration("HE40")
+	_, eht := htModeToWifiGeneration("EHT40")
+	assert.True(t, ht < vht && vht < he && he < eht)
+}
+
+func TestHighestHtMode(t *testing.T) {
+	// Generation wins over width: a narrow HE beats a wide VHT.
+	assert.Equal(t, "HE20", highestHtMode([]string{"HT40", "VHT160", "HE20"}))
+	// Within a generation the widest wins, regardless of input order.
+	assert.Equal(t, "HE160", highestHtMode([]string{"HE160", "HE20", "HE80"}))
+	assert.Equal(t, "EHT320", highestHtMode([]string{"EHT20", "EHT320", "EHT80"}))
+	// Unrecognised entries are ignored.
+	assert.Equal(t, "HT40", highestHtMode([]string{"NOHT", "HT40", "bogus"}))
+	// Nothing rankable.
+	assert.Equal(t, "", highestHtMode(nil))
+	assert.Equal(t, "", highestHtMode([]string{"NOHT"}))
+}
+
+func TestSupportedHtModes(t *testing.T) {
+	app, err := tests.NewTestApp()
+	assert.Nil(t, err)
+	defer app.Cleanup()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	htcollection := setupRadioHtModesCollection(t, app, devicecollection)
+
+	device := core.NewRecord(devicecollection)
+	device.Set("health_status", "healthy")
+	assert.Nil(t, app.Save(device))
+
+	band24, _ := htModesForBand("2.4")
+
+	// Nothing reported: the full band list is the effective set.
+	modes, ok, err := supportedHtModes(app, device.Id, 0, "2.4")
+	assert.Nil(t, err)
+	assert.True(t, ok)
+	assert.Equal(t, band24, modes)
+
+	// A row with an empty list means "not reported" too.
+	h := core.NewRecord(htcollection)
+	h.Set("device", device.Id)
+	h.Set("radio", 0)
+	h.Set("ht_modes", []string{})
+	assert.Nil(t, app.Save(h))
+
+	modes, ok, err = supportedHtModes(app, device.Id, 0, "2.4")
+	assert.Nil(t, err)
+	assert.True(t, ok)
+	assert.Equal(t, band24, modes)
+
+	// The advertised list is per-phy: a dual-band phy reports VHT, but VHT is
+	// not usable on 2.4 GHz so it must not come back for that band.
+	h.Set("ht_modes", []string{"HT20", "HT40", "VHT20", "VHT40", "VHT80", "HE20", "HE40", "HE80"})
+	assert.Nil(t, app.Save(h))
+
+	modes, ok, err = supportedHtModes(app, device.Id, 0, "2.4")
+	assert.Nil(t, err)
+	assert.True(t, ok)
+	assert.Equal(t, []string{"HT20", "HT40", "HE20", "HE40"}, modes)
+
+	// Same row, 5 GHz: the band allows more, so more comes back.
+	modes, ok, err = supportedHtModes(app, device.Id, 0, "5")
+	assert.Nil(t, err)
+	assert.True(t, ok)
+	assert.Equal(t, []string{"HT20", "HT40", "VHT20", "VHT40", "VHT80", "HE20", "HE40", "HE80"}, modes)
+
+	// 6 GHz allows only HE and EHT, so the HT/VHT modes drop out.
+	modes, ok, err = supportedHtModes(app, device.Id, 0, "6")
+	assert.Nil(t, err)
+	assert.True(t, ok)
+	assert.Equal(t, []string{"HE20", "HE40", "HE80"}, modes)
+
+	// A Wi-Fi 5 phy advertises nothing 6 GHz allows: the intersection is empty.
+	h.Set("ht_modes", []string{"HT20", "HT40", "VHT20", "VHT40", "VHT80"})
+	assert.Nil(t, app.Save(h))
+
+	modes, ok, err = supportedHtModes(app, device.Id, 0, "6")
+	assert.Nil(t, err)
+	assert.True(t, ok)
+	assert.Empty(t, modes)
+
+	// Another radio on the same device reported nothing of its own.
+	modes, _, err = supportedHtModes(app, device.Id, 1, "2.4")
+	assert.Nil(t, err)
+	assert.Equal(t, band24, modes)
+
+	// Unknown band.
+	_, ok, err = supportedHtModes(app, device.Id, 0, "60")
+	assert.Nil(t, err)
+	assert.False(t, ok)
+}
+
+func TestValidateRadioHtMode(t *testing.T) {
+	app, err := tests.NewTestApp()
+	assert.Nil(t, err)
+	defer app.Cleanup()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	htcollection := setupRadioHtModesCollection(t, app, devicecollection)
+
+	device := core.NewRecord(devicecollection)
+	device.Set("health_status", "healthy")
+	assert.Nil(t, app.Save(device))
+
+	// Representative frequency per band; 900 MHz falls in no known band.
+	freq := map[string]int{"2.4": 2412, "5": 5180, "6": 5955, "60": 900}
+	validate := func(band string, htmode string) error {
+		return validateRadioHtMode(app, device.Id, 0, freq[band], htmode)
+	}
+
+	// No radio_ht_modes row: the per-band list is the fallback, so the band
+	// rules are still enforced.
+	assert.Nil(t, validate("2.4", "HT20"))
+	assert.Nil(t, validate("2.4", "HT40"))
+	assert.Nil(t, validate("2.4", "HE20"))
+	assert.Nil(t, validate("2.4", "HE40"))
+	assert.Nil(t, validate("5", "HT20"))
+	assert.Nil(t, validate("5", "HT40"))
+	assert.Nil(t, validate("5", "VHT20"))
+	assert.Nil(t, validate("5", "VHT40"))
+	assert.Nil(t, validate("5", "VHT80"))
+	assert.Nil(t, validate("5", "VHT160"))
+	assert.Nil(t, validate("5", "HE20"))
+	assert.Nil(t, validate("5", "HE40"))
+	assert.Nil(t, validate("5", "HE80"))
+	assert.Nil(t, validate("5", "HE160"))
+	assert.Nil(t, validate("6", "HE20"))
+	assert.Nil(t, validate("6", "HE40"))
+	assert.Nil(t, validate("6", "HE80"))
+	assert.Nil(t, validate("6", "HE160"))
+
+	// Invalid combinations, now with a message naming the ceiling for the band.
+	err = validate("2.4", "VHT40")
+	assert.Contains(t, err.Error(), "VHT40 is not supported by this radio")
+	assert.Contains(t, err.Error(), "The highest supported mode is EHT40 (Wifi 7)")
+	assert.Error(t, validate("6", "VHT40"))
+
+	// Invalid input.
+	assert.Contains(t, validate("60", "HE160").Error(), "Invalid band")
+	assert.Error(t, validate("5", "HT1000"))
+
+	// An empty htmode means auto and is always allowed.
+	assert.Nil(t, validate("2.4", ""))
+	assert.Nil(t, validate("60", ""))
+
+	// Now the radio reports what it can do: HE, topping out at 80 MHz.
+	h := core.NewRecord(htcollection)
+	h.Set("device", device.Id)
+	h.Set("radio", 0)
+	h.Set("ht_modes", []string{"HT20", "HT40", "VHT20", "VHT40", "VHT80", "HE20", "HE40", "HE80"})
+	assert.Nil(t, app.Save(h))
+
+	// Advertised mode on a band that allows it.
+	assert.Nil(t, validate("5", "HE80"))
+	assert.Nil(t, validate("5", "VHT80"))
+
+	// Generation the radio doesn't do at all.
+	err = validate("5", "EHT80")
+	assert.Contains(t, err.Error(), "EHT80 is not supported by this radio")
+	assert.Contains(t, err.Error(), "The highest supported mode is HE80 (Wifi 6)")
+
+	// Generation is supported, only this width is out of reach.
+	err = validate("5", "HE160")
+	assert.Contains(t, err.Error(), "HE160 is not supported by this radio")
+	assert.Contains(t, err.Error(), "The highest supported mode is HE80 (Wifi 6)")
+
+	// Advertised, but not on this band.
+	err = validate("2.4", "VHT40")
+	assert.Contains(t, err.Error(), "VHT40 is not supported by this radio")
+	assert.Contains(t, err.Error(), "The highest supported mode is HE40 (Wifi 6)")
+
+	// A Wi-Fi 5 phy advertises nothing the 6 GHz band allows, so no htmode can
+	// be valid there and the message says so rather than naming a ceiling.
+	h.Set("ht_modes", []string{"HT20", "HT40", "VHT20", "VHT40", "VHT80"})
+	assert.Nil(t, app.Save(h))
+
+	assert.Contains(t, validate("6", "HE80").Error(), "This radio does not support the 6 GHz band")
 }
 
 func TestValidateRadio(t *testing.T) {
@@ -930,6 +1107,7 @@ func TestValidateRadio(t *testing.T) {
 	devicecollection := setupDeviceCollection(t, app, wificollection)
 	radiocollection := setupRadioCollection(t, app, devicecollection)
 	freqcollection := setupRadioFrequenciesCollection(t, app, devicecollection)
+	htcollection := setupRadioHtModesCollection(t, app, devicecollection)
 
 	device := core.NewRecord(devicecollection)
 	device.Set("health_status", "healthy")
@@ -985,6 +1163,25 @@ func TestValidateRadio(t *testing.T) {
 	assert.Error(t, validateRadio(app, r))
 	// A permitted width on the same channel still passes.
 	r.Set("htmode", "VHT80")
+	assert.Nil(t, validateRadio(app, r))
+
+	// The radio now reports what it supports, topping out at VHT40. The mode
+	// that passed on the band list alone is rejected against the hardware.
+	h := core.NewRecord(htcollection)
+	h.Set("device", device.Id)
+	h.Set("radio", 0)
+	h.Set("ht_modes", []string{"HT20", "HT40", "VHT20", "VHT40"})
+	assert.Nil(t, app.Save(h))
+
+	// The radio tops out at VHT40, but 5180 has both no_ht40 flags set, so VHT40
+	// would fail the channel check straight after. The suggested mode has to be
+	// one that actually saves, so it drops to VHT20.
+	err = validateRadio(app, r)
+	assert.Contains(t, err.Error(), "VHT80 is not supported by this radio")
+	assert.Contains(t, err.Error(), "The highest supported mode is VHT20 (Wifi 5)")
+
+	// And the mode the message named does pass.
+	r.Set("htmode", "VHT20")
 	assert.Nil(t, validateRadio(app, r))
 }
 
@@ -2573,6 +2770,7 @@ func TestParseOpenSohoDataIgnoresUnknownFlags(t *testing.T) {
 	assert.Nil(t, app.Save(devicecollection))
 	setupRadioFrequenciesCollection(t, app, devicecollection)
 	setupRadioTxPowersCollection(t, app, devicecollection)
+	setupRadioHtModesCollection(t, app, devicecollection)
 
 	d := core.NewRecord(devicecollection)
 	assert.Nil(t, app.Save(d))
@@ -2748,6 +2946,7 @@ func TestHandleOpenSohoMonitoringRealPayload(t *testing.T) {
 	assert.Nil(t, app.Save(devicecollection))
 	setupRadioFrequenciesCollection(t, app, devicecollection)
 	setupRadioTxPowersCollection(t, app, devicecollection)
+	setupRadioHtModesCollection(t, app, devicecollection)
 	setupPoeCollection(t, app, devicecollection)
 	setupLldpCollection(t, app, devicecollection)
 
@@ -2807,6 +3006,7 @@ func TestHandleOpenSohoMonitoring(t *testing.T) {
 	assert.Nil(t, app.Save(devicecollection))
 	setupRadioFrequenciesCollection(t, app, devicecollection)
 	setupRadioTxPowersCollection(t, app, devicecollection)
+	setupRadioHtModesCollection(t, app, devicecollection)
 
 	d := core.NewRecord(devicecollection)
 	assert.Nil(t, app.Save(d))
@@ -2821,6 +3021,9 @@ func TestHandleOpenSohoMonitoring(t *testing.T) {
 		{Dbm: 0, Mw: 1},
 		{Dbm: 23, Mw: 199},
 	}
+	// "NOHT" is not one of the schema's select values and must be dropped
+	// instead of failing the save.
+	radio0.Info.HtModes = []string{"NOHT", "HT20", "HT40", "VHT20", "VHT40", "VHT80"}
 	handleOpenSohoMonitoring(app, d, OpenSohoData{Type: "OpenSoho", Radios: []OpenSohoRadio{radio0}}, false)
 
 	recs, err := app.FindAllRecords("radio_frequencies", dbx.HashExp{"device": d.Id, "radio": 0})
@@ -2848,6 +3051,16 @@ func TestHandleOpenSohoMonitoring(t *testing.T) {
 	assert.Equal(t, 0, tp23.GetInt("radio"))
 	id23 := tp23.Id
 
+	// The advertised htmodes land in a single row for this (device, radio),
+	// minus the value the schema doesn't know.
+	htrecs, err := app.FindAllRecords("radio_ht_modes", dbx.HashExp{"device": d.Id, "radio": 0})
+	assert.Nil(t, err)
+	assert.Equal(t, 1, len(htrecs))
+	assert.ElementsMatch(t,
+		[]string{"HT20", "HT40", "VHT20", "VHT40", "VHT80"},
+		htrecs[0].GetStringSlice("ht_modes"))
+	idht := htrecs[0].Id
+
 	// Re-running with a still-present 5180 MHz adjusts its row in place rather
 	// than deleting and re-creating it: the record ID is preserved while the
 	// changed channel/flags are applied. The dropped 2412 MHz row is deleted and
@@ -2862,6 +3075,8 @@ func TestHandleOpenSohoMonitoring(t *testing.T) {
 		{Dbm: 23, Mw: 200},
 		{Dbm: 20, Mw: 100},
 	}
+	// A firmware upgrade adds HE support: the single row is updated in place.
+	radio0.Info.HtModes = []string{"HT20", "HT40", "VHT20", "VHT40", "VHT80", "HE20", "HE40"}
 	handleOpenSohoMonitoring(app, d, OpenSohoData{Type: "OpenSoho", Radios: []OpenSohoRadio{radio0}}, false)
 
 	recs, err = app.FindAllRecords("radio_frequencies", dbx.HashExp{"device": d.Id, "radio": 0})
@@ -2896,6 +3111,23 @@ func TestHandleOpenSohoMonitoring(t *testing.T) {
 	tp20, err := app.FindFirstRecordByFilter("radio_tx_powers", "dbm = 20")
 	assert.Nil(t, err)
 	assert.Equal(t, 100, tp20.GetInt("mw"))
+
+	htrecs, err = app.FindAllRecords("radio_ht_modes", dbx.HashExp{"device": d.Id, "radio": 0})
+	assert.Nil(t, err)
+	assert.Equal(t, 1, len(htrecs))
+	assert.Equal(t, idht, htrecs[0].Id, "ht modes row must be updated in place, not re-created")
+	assert.ElementsMatch(t,
+		[]string{"HT20", "HT40", "VHT20", "VHT40", "VHT80", "HE20", "HE40"},
+		htrecs[0].GetStringSlice("ht_modes"))
+
+	// A dump with no usable htmodes drops the row, so validation falls back to
+	// the per-band list rather than rejecting everything.
+	radio0.Info.HtModes = []string{"NOHT"}
+	handleOpenSohoMonitoring(app, d, OpenSohoData{Type: "OpenSoho", Radios: []OpenSohoRadio{radio0}}, false)
+
+	htrecs, err = app.FindAllRecords("radio_ht_modes", dbx.HashExp{"device": d.Id, "radio": 0})
+	assert.Nil(t, err)
+	assert.Empty(t, htrecs)
 }
 
 func TestUpdateInterface(t *testing.T) {
@@ -3978,6 +4210,32 @@ func setupRadioFrequenciesCollection(t *testing.T, app core.App, devicecollectio
 		Values: []string{
 			"indoor_only", "no_ht40-", "no_ht40+", "no_80mhz", "no_160mhz",
 			"no_320mhz", "no_10mhz", "no_20mhz", "no_he", "no_ir",
+		},
+	})
+	err := app.Save(col)
+	assert.Equal(t, nil, err)
+	return col
+}
+func setupRadioHtModesCollection(t *testing.T, app core.App, devicecollection *core.Collection) *core.Collection {
+	col := core.NewBaseCollection("radio_ht_modes")
+	x := 0.0
+	col.Fields.Add(&core.RelationField{
+		Name:         "device",
+		Required:     true,
+		MaxSelect:    1,
+		CollectionId: devicecollection.Id,
+	})
+	col.Fields.Add(&core.NumberField{
+		Name: "radio",
+		Min:  &x,
+	})
+	col.Fields.Add(&core.SelectField{
+		Name:      "ht_modes",
+		MaxSelect: 15,
+		Values: []string{
+			"HT20", "HT40", "VHT20", "VHT40", "VHT80", "VHT160",
+			"HE20", "HE40", "HE80", "HE160",
+			"EHT20", "EHT40", "EHT80", "EHT160", "EHT320",
 		},
 	})
 	err := app.Save(col)

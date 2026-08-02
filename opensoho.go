@@ -210,7 +210,7 @@ func frequencyToChannel(freqMHz int) (int, bool) {
 	return frequencyplan.FrequencyToChannel(freqMHz)
 }
 
-func validateRadioHtModeBandCombo(band string, htmode string) error {
+func htModesForBand(band string) ([]string, bool) {
 	validHtModes := map[string][]string{
 		"2.4": {"HT20", "HT40", "HE20", "HE40", "EHT20", "EHT40"},
 		"5":   {"HT20", "HT40", "VHT20", "VHT40", "VHT80", "VHT160", "HE20", "HE40", "HE80", "HE160", "EHT20", "EHT40", "EHT80", "EHT160"},
@@ -218,17 +218,113 @@ func validateRadioHtModeBandCombo(band string, htmode string) error {
 	}
 
 	htmodes, ok := validHtModes[band]
+	return htmodes, ok
+}
+
+func htModeToWifiGeneration(htmode string) (string, int) {
+	switch {
+	case strings.HasPrefix(htmode, "EHT"):
+		return "Wifi 7", 7
+	case strings.HasPrefix(htmode, "VHT"):
+		return "Wifi 5", 5
+	case strings.HasPrefix(htmode, "HE"):
+		return "Wifi 6", 6
+	case strings.HasPrefix(htmode, "HT"):
+		return "Wifi 4", 4
+	}
+	return "", 0
+}
+
+func highestHtMode(modes []string) string {
+	best := ""
+	bestGen, bestWidth := 0, 0
+	for _, m := range modes {
+		_, gen := htModeToWifiGeneration(m)
+		if gen == 0 {
+			continue
+		}
+		width, ok := frequencyplan.HtmodeWidth(m)
+		if !ok {
+			continue
+		}
+		if gen > bestGen || (gen == bestGen && width > bestWidth) {
+			best, bestGen, bestWidth = m, gen, width
+		}
+	}
+	return best
+}
+
+// Returns the list of modes, whether it is spported and/or an error
+// If no rows are found, allow the config.
+func supportedHtModes(app core.App, device string, radio int, band string) ([]string, bool, error) {
+	bandModes, ok := htModesForBand(band)
+	if !ok {
+		return nil, false, nil
+	}
+
+	rows, err := app.FindAllRecords("radio_ht_modes",
+		dbx.HashExp{"device": device, "radio": radio})
+	if err != nil {
+		return nil, true, err
+	}
+	// The collection is unique on (device, radio), so there is at most one row.
+	var advertised []string
+	if len(rows) > 0 {
+		advertised = rows[0].GetStringSlice("ht_modes")
+	}
+	if len(advertised) == 0 {
+		return bandModes, true, nil
+	}
+
+	modes := make([]string, 0, len(bandModes))
+	for _, m := range bandModes {
+		if slices.Contains(advertised, m) {
+			modes = append(modes, m)
+		}
+	}
+	return modes, true, nil
+}
+
+func validateRadioHtMode(app core.App, device string, radio int, frequency int, htmode string) error {
+	// Empty HTMode is always allowed (auto)
+	if htmode == "" {
+		return nil
+	}
+
+	band := frequencyToBand(frequency)
+	modes, ok, err := supportedHtModes(app, device, radio, band)
+	if err != nil {
+		return validation.NewError("validation_invalid_value", "Failed to look up supported HT modes")
+	}
 	if !ok {
 		return validation.NewError("validation_invalid_value", "Invalid band")
 	}
-
-	for _, h := range htmodes {
-		if h == htmode {
-			return nil
-		}
+	if slices.Contains(modes, htmode) {
+		return nil
+	}
+	if len(modes) == 0 {
+		return validation.NewError("validation_invalid_value", fmt.Sprintf(
+			"This radio does not support the %s GHz band", band))
 	}
 
-	return validation.NewError("validation_invalid_value", "HT mode does not match selected band")
+	highest := highestHtModeAllowedOnChannel(app, device, radio, frequency, modes)
+	generation, _ := htModeToWifiGeneration(highest)
+	return validation.NewError("validation_invalid_value", fmt.Sprintf(
+		"%s is not supported by this radio. The highest supported mode is %s (%s)",
+		htmode, highest, generation))
+}
+
+func highestHtModeAllowedOnChannel(app core.App, device string, radio int, frequency int, modes []string) string {
+	usable := make([]string, 0, len(modes))
+	for _, m := range modes {
+		if validateRadioHtModeFlags(app, device, radio, frequency, m) == nil {
+			usable = append(usable, m)
+		}
+	}
+	if best := highestHtMode(usable); best != "" {
+		return best
+	}
+	return highestHtMode(modes)
 }
 
 // validateRadioFrequency checks the user-set frequency against the frequencies
@@ -373,10 +469,9 @@ func validateRadio(app core.App, record *core.Record) error {
 		errs["frequency"] = err
 	}
 
-	band := frequencyToBand(frequency)
 	htmode := record.GetString("htmode")
 
-	err = validateRadioHtModeBandCombo(band, htmode)
+	err = validateRadioHtMode(app, record.GetString("device"), record.GetInt("radio"), frequency, htmode)
 	if err != nil {
 		errs["htmode"] = err
 	} else if err = validateRadioHtModeFlags(app, record.GetString("device"), record.GetInt("radio"), frequency, htmode); err != nil {
@@ -388,7 +483,7 @@ func validateRadio(app core.App, record *core.Record) error {
 		errs["tx_power"] = err
 	}
 	if len(errs) > 0 {
-		return apis.NewBadRequestError("Failed to create record.", errs)
+		return errs
 	}
 	return nil
 }
@@ -581,6 +676,11 @@ func handleOpenSohoMonitoring(app core.App, device *core.Record, data OpenSohoDa
 		app.Logger().Error("Failed to find radio_tx_powers collection", "error", err)
 		return
 	}
+	htColl, err := app.FindCollectionByNameOrId("radio_ht_modes")
+	if err != nil {
+		app.Logger().Error("Failed to find radio_ht_modes collection", "error", err)
+		return
+	}
 
 	for _, radio := range data.Radios {
 		idx, err := parseRadioName(radio.Name)
@@ -598,6 +698,12 @@ func handleOpenSohoMonitoring(app core.App, device *core.Record, data OpenSohoDa
 
 		if err := syncRadioTxPowers(app, txColl, device, idx, radio.TxPowerList.Results); err != nil {
 			app.Logger().Error("Failed to sync radio tx powers",
+				"device", device.GetString("id"), "radio", radio.Name, "error", err)
+			continue
+		}
+
+		if err := syncRadioHtModes(app, htColl, device, idx, radio.Info.HtModes); err != nil {
+			app.Logger().Error("Failed to sync radio ht modes",
 				"device", device.GetString("id"), "radio", radio.Name, "error", err)
 			continue
 		}
@@ -716,6 +822,49 @@ func syncRadioTxPowers(app core.App, coll *core.Collection, device *core.Record,
 			}
 		}
 		return nil
+	})
+}
+
+func syncRadioHtModes(app core.App, coll *core.Collection, device *core.Record, idx int, modes []string) error {
+	// Drop modes the schema doesn't know about
+	var allowedModes []string
+	if field, ok := coll.Fields.GetByName("ht_modes").(*core.SelectField); ok {
+		allowedModes = field.Values
+	}
+	modes = knownFlags(modes, allowedModes)
+
+	return app.RunInTransaction(func(txApp core.App) error {
+		existing, err := txApp.FindAllRecords("radio_ht_modes",
+			dbx.HashExp{"device": device.Id, "radio": idx})
+		if err != nil {
+			return err
+		}
+
+		if len(modes) == 0 {
+			for _, rec := range existing {
+				if err := txApp.Delete(rec); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+
+		var rec *core.Record
+		if len(existing) > 0 {
+			rec = existing[0]
+			// Drop duplicates predating the unique index on (device, radio).
+			for _, dup := range existing[1:] {
+				if err := txApp.Delete(dup); err != nil {
+					return err
+				}
+			}
+		} else {
+			rec = core.NewRecord(coll)
+			rec.Set("device", device.Id)
+			rec.Set("radio", idx)
+		}
+		rec.Set("ht_modes", modes)
+		return txApp.Save(rec)
 	})
 }
 
@@ -2695,7 +2844,7 @@ table.table > thead > tr > th > div.col-header-content > span.txt
 		Priority: 0,
 	})
 
-	app.OnRecordUpdateRequest("radios").BindFunc(func(e *core.RecordRequestEvent) error {
+  app.OnRecordUpdateRequest("radios").BindFunc(func(e *core.RecordRequestEvent) error {
 		err := validateRadio(e.App, e.Record)
 		if err != nil {
 			return err

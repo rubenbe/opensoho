@@ -2850,12 +2850,25 @@ table.table > thead > tr > th > div.col-header-content > span.txt
 		Priority: 0,
 	})
 
-  app.OnRecordUpdateRequest("radios").BindFunc(func(e *core.RecordRequestEvent) error {
+	app.OnRecordUpdateRequest("radios").BindFunc(func(e *core.RecordRequestEvent) error {
 		err := validateRadio(e.App, e.Record)
 		if err != nil {
 			return err
 		}
-		return e.Next()
+
+		radio := records.NewRadio(e.Record)
+		changed := radio.ConfigChanged() // capture before the save refreshes it
+
+		if err := e.Next(); err != nil {
+			return err
+		}
+
+		if changed {
+			if err := radio.MarkDeviceModified(e.App); err != nil {
+				e.App.Logger().Error("Failed to mark device modified", "radio", e.Record.Id, "error", err)
+			}
+		}
+		return nil
 	})
 
 	app.OnRecordCreateRequest("devices").BindFunc(func(e *core.RecordRequestEvent) error {

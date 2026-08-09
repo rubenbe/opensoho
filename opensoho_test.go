@@ -3595,6 +3595,44 @@ func TestUpdateRadiosKeepsEnabledWhileConfigNotApplied(t *testing.T) {
 	}
 }
 
+// updateRadios() is the internal path monitoring reports come through
+// (app.Save, no RecordRequestEvent); only the OnRecordUpdateRequest("radios")
+// hook is wired to flip a device to "modified". This guards against that
+// wiring accidentally widening to cover the internal saves too, which would
+// reintroduce the race commit 0d48567 fixed.
+func TestUpdateRadiosDoesNotMarkDeviceModified(t *testing.T) {
+	app, _ := tests.NewTestApp()
+
+	devicecollection := core.NewBaseCollection("devices")
+	devicecollection.Fields.Add(&core.SelectField{
+		Name:      "config_status",
+		MaxSelect: 1,
+		Values: []string{
+			records.ConfigStatusApplied,
+			records.ConfigStatusModified,
+			records.ConfigStatusError,
+			records.ConfigStatusDeactivating,
+			records.ConfigStatusDeactivated,
+		},
+	})
+	assert.Nil(t, app.Save(devicecollection))
+
+	setupRadioCollection(t, app, devicecollection)
+
+	d := core.NewRecord(devicecollection)
+	d.Set("config_status", records.ConfigStatusApplied)
+	assert.Nil(t, app.Save(d))
+
+	// Create radio 0, then report it again with a changed tx_power: a
+	// config-affecting field, but reported via the monitoring path.
+	updateRadios(d, app, map[int]Radio{0: {Frequency: 2412, Channel: 1, TxPower: 19}})
+	updateRadios(d, app, map[int]Radio{0: {Frequency: 2412, Channel: 1, TxPower: 23}})
+
+	record, err := app.FindRecordById("devices", d.Id)
+	assert.Nil(t, err)
+	assert.Equal(t, records.ConfigStatusApplied, record.GetString("config_status"))
+}
+
 func TestUpdateRadiosTxPower(t *testing.T) {
 	app, _ := tests.NewTestApp()
 

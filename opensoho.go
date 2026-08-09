@@ -42,6 +42,7 @@ import (
 	"github.com/rubenbe/opensoho/lldp"
 	"github.com/rubenbe/opensoho/mqtt"
 	"github.com/rubenbe/opensoho/poe"
+	"github.com/rubenbe/opensoho/records"
 	"github.com/rubenbe/opensoho/ui"
 	"github.com/rubenbe/pocketbase/plugins/jsvm"
 	"github.com/rubenbe/pocketbase/plugins/migratecmd"
@@ -895,6 +896,9 @@ func updateRadios(device *core.Record, app core.App, newradios map[int]Radio) {
 		fmt.Println(err)
 		return
 	}
+
+	deviceConfigApplied := records.NewDevice(device).IsConfigApplied()
+
 	// Loop over the existing (old) radios for this device, and update if not found.
 	// Update the MAC address and set it to enabled
 	for _, oldradio := range oldradios {
@@ -904,7 +908,7 @@ func updateRadios(device *core.Record, app core.App, newradios map[int]Radio) {
 			// Old radio exists within the updated list (newradios)
 			fmt.Println("EXISTS", newradio, oldradio)
 			dirty := false
-			if oldradio.GetBool("enabled") == false {
+			if deviceConfigApplied && oldradio.GetBool("enabled") == false {
 				oldradio.Set("enabled", true)
 				dirty = true
 			}
@@ -935,7 +939,7 @@ func updateRadios(device *core.Record, app core.App, newradios map[int]Radio) {
 		} else {
 			fmt.Println("Not in list:", oldradio)
 			// Old radio does not exist within the updated list
-			if oldradio.GetBool("enabled") == true {
+			if deviceConfigApplied && oldradio.GetBool("enabled") == true {
 				oldradio.Set("enabled", false)
 				err := app.Save(oldradio)
 				if err != nil {

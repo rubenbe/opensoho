@@ -25,6 +25,7 @@ import (
 	"github.com/liyue201/goqr"
 	"github.com/pocketbase/dbx"
 	"github.com/rubenbe/opensoho/lldp"
+	"github.com/rubenbe/opensoho/records"
 	"github.com/rubenbe/pocketbase/core"
 	"github.com/rubenbe/pocketbase/tests"
 	"github.com/rubenbe/pocketbase/tools/router"
@@ -3364,13 +3365,26 @@ func TestUpdateRadios(t *testing.T) {
 
 	// Create devices collection
 	devicecollection := core.NewBaseCollection("devices")
+	devicecollection.Fields.Add(&core.SelectField{
+		Name:      "config_status",
+		MaxSelect: 1,
+		Values: []string{
+			records.ConfigStatusApplied,
+			records.ConfigStatusModified,
+			records.ConfigStatusError,
+			records.ConfigStatusDeactivating,
+			records.ConfigStatusDeactivated,
+		},
+	})
 	err := app.Save(devicecollection)
 	assert.Equal(t, err, nil)
 
 	setupRadioCollection(t, app, devicecollection)
 
-	// Add a dummy radio
+	// Add a dummy radio. The enabled flag is only tracked while the device's
+	// config is applied.
 	d := core.NewRecord(devicecollection)
+	d.Set("config_status", records.ConfigStatusApplied)
 	app.Save(d)
 
 	updateRadios(d, app, radios)
@@ -3480,6 +3494,104 @@ func TestUpdateRadios(t *testing.T) {
 		assert.Equal(t, r.GetInt("radio"), 2)
 		assert.Equal(t, r.GetInt("frequency"), 5955)
 		assert.Equal(t, r.GetBool("enabled"), true)
+	}
+}
+
+func TestUpdateRadiosKeepsEnabledWhileConfigNotApplied(t *testing.T) {
+	app, _ := tests.NewTestApp()
+
+	devicecollection := core.NewBaseCollection("devices")
+	devicecollection.Fields.Add(&core.SelectField{
+		Name:      "config_status",
+		MaxSelect: 1,
+		Values: []string{
+			records.ConfigStatusApplied,
+			records.ConfigStatusModified,
+			records.ConfigStatusError,
+			records.ConfigStatusDeactivating,
+			records.ConfigStatusDeactivated,
+		},
+	})
+	assert.Equal(t, nil, app.Save(devicecollection))
+
+	setupRadioCollection(t, app, devicecollection)
+
+	d := core.NewRecord(devicecollection)
+	d.Set("config_status", records.ConfigStatusApplied)
+	assert.Equal(t, nil, app.Save(d))
+
+	// Config applied: both reported radios are created enabled.
+	updateRadios(d, app, map[int]Radio{
+		0: {Frequency: 2412, Channel: 1, TxPower: 23},
+		1: {Frequency: 5200, Channel: 40, TxPower: 19},
+	})
+
+	// The user just changed the config, wait until it is applied again
+	d.Set("config_status", records.ConfigStatusModified)
+	assert.Equal(t, nil, app.Save(d))
+
+	updateRadios(d, app, map[int]Radio{
+		0: {Frequency: 2412, Channel: 1, TxPower: 25},
+		2: {Frequency: 5955, Channel: 100, TxPower: 19},
+	})
+	{
+		r, err := app.FindFirstRecordByData("radios", "radio", "1")
+		assert.Equal(t, nil, err)
+		assert.Equal(t, true, r.GetBool("enabled"), "radio missing from an unapplied report must stay enabled")
+	}
+	{
+		r, err := app.FindFirstRecordByData("radios", "radio", "0")
+		assert.Equal(t, nil, err)
+		assert.Equal(t, true, r.GetBool("enabled"))
+		assert.Equal(t, 25, r.GetInt("tx_power"), "tx_power telemetry keeps flowing while the config is pending")
+	}
+	{
+		r, err := app.FindFirstRecordByData("radios", "radio", "2")
+		assert.Equal(t, nil, err)
+		assert.Equal(t, true, r.GetBool("enabled"), "a radio unseen before is still created enabled")
+	}
+
+	// Should not be applied, since the config is still not applied
+	r0, err := app.FindFirstRecordByData("radios", "radio", "0")
+	assert.Equal(t, nil, err)
+	r0.Set("enabled", false)
+	assert.Equal(t, nil, app.Save(r0))
+
+	// The device still reports radio 0 as up (it hasn't applied the new
+	// config yet); that must not re-enable it while config_status is
+	// "modified".
+	updateRadios(d, app, map[int]Radio{
+		0: {Frequency: 2412, Channel: 1, TxPower: 25},
+		1: {Frequency: 5200, Channel: 40, TxPower: 19},
+		2: {Frequency: 5955, Channel: 100, TxPower: 19},
+	})
+	{
+		r, err := app.FindFirstRecordByData("radios", "radio", "0")
+		assert.Equal(t, nil, err)
+		assert.Equal(t, false, r.GetBool("enabled"), "a pending disable must not be reverted before the config is applied")
+	}
+
+	// Config is applied, the monitoring changes should be applied again
+	d.Set("config_status", records.ConfigStatusApplied)
+	assert.Equal(t, nil, app.Save(d))
+	updateRadios(d, app, map[int]Radio{
+		0: {Frequency: 2412, Channel: 1, TxPower: 25},
+		2: {Frequency: 5955, Channel: 100, TxPower: 19},
+	})
+	{
+		r, err := app.FindFirstRecordByData("radios", "radio", "0")
+		assert.Equal(t, nil, err)
+		assert.Equal(t, true, r.GetBool("enabled"))
+	}
+	{
+		r, err := app.FindFirstRecordByData("radios", "radio", "1")
+		assert.Equal(t, nil, err)
+		assert.Equal(t, false, r.GetBool("enabled"), "once applied, the report reconciles enabled again")
+	}
+	{
+		r, err := app.FindFirstRecordByData("radios", "radio", "2")
+		assert.Equal(t, nil, err)
+		assert.Equal(t, true, r.GetBool("enabled"))
 	}
 }
 

@@ -2549,7 +2549,7 @@ func TestUpdateMonitoring(t *testing.T) {
 	response, radios := handleMonitoring(&event, app, d, clientcollection)
 	//var apiresponse *router.ApiError
 	assert.Equal(t, response, nil)
-	assert.NotEqual(t, radios, nil)
+	assert.NotNil(t, radios)
 	httpResponse := rec.Result()
 	defer httpResponse.Body.Close()
 	body, err := io.ReadAll(httpResponse.Body)
@@ -2610,7 +2610,9 @@ func TestUpdateMonitoringEmptyBody(t *testing.T) {
 	// Verify the valid, but empty response
 	response, radios := handleMonitoring(&event, app, d, clientcollection)
 	assert.Equal(t, response, nil)
-	assert.NotEqual(t, radios, nil)
+	// No radio information was carried by this request; updateRadios must not
+	// treat that as "every radio is down".
+	assert.Nil(t, radios)
 	httpResponse := rec.Result()
 	defer httpResponse.Body.Close()
 	body, err := io.ReadAll(httpResponse.Body)
@@ -2701,16 +2703,100 @@ func TestUpdateMonitoringOpenSoho(t *testing.T) {
 
 	event.Response = rec
 
-	// The endpoint accepts the payload with an empty 200 response.
+	// The endpoint accepts the payload with an empty 200 response. It carries
+	// radio data of its own (handled by handleOpenSohoMonitoring), not
+	// through the returned map; updateRadios must not treat that as "every
+	// radio is down".
 	response, radios := handleMonitoring(&event, app, d, clientcollection)
 	assert.Equal(t, nil, response)
-	assert.NotEqual(t, radios, nil)
+	assert.Nil(t, radios)
 	httpResponse := rec.Result()
 	defer httpResponse.Body.Close()
 	body, err := io.ReadAll(httpResponse.Body)
 	assert.Equal(t, nil, err)
 	assert.Equal(t, 200, httpResponse.StatusCode)
 	assert.Equal(t, "", string(body))
+}
+
+// Currently should be a nop, but will be implemented later
+func TestUpdateRadiosOnOpenSOHOData(t *testing.T) {
+	json := `
+{
+  "type": "OpenSoho",
+  "radios": [
+    {
+      "name": "radio0",
+      "phy": "phy0",
+      "disabled": "0",
+      "info": {
+        "channel": 36,
+        "frequency": 5180,
+        "txpower": 23,
+        "country": "BE",
+        "hwmodes": ["a", "n", "ac"],
+        "htmodes": ["HT20", "HT40", "VHT20", "VHT40", "VHT80"]
+      },
+      "freqlist": {"results": [{"channel": 36, "mhz": 5180, "restricted": false}]},
+      "txpowerlist": {"results": [{"dbm": 23, "mw": 199}]}
+    },
+    {
+      "name": "radio1",
+      "phy": "phy1",
+      "disabled": "1",
+      "info": {
+        "channel": 11,
+        "frequency": 2462,
+        "txpower": 20,
+        "country": "BE",
+        "hwmodes": ["b", "g", "n"],
+        "htmodes": ["HT20", "HT40"]
+      },
+      "freqlist": {"results": [{"channel": 1, "mhz": 2412, "restricted": false}]},
+      "txpowerlist": {"results": [{"dbm": 20, "mw": 100}]}
+    }
+  ]
+}`
+	var err error
+	app, _ := tests.NewTestApp()
+	event := core.RequestEvent{}
+	event.Request, err = http.NewRequest("POST", "/api/v1/monitoring/device/", strings.NewReader(json))
+	assert.Equal(t, err, nil)
+	event.Request.SetPathValue("key", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	event.Request.Header.Set("content-type", "application/json")
+	event.App = app
+	rec := httptest.NewRecorder()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	clientcollection := setupClientsCollection(t, app)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	radiocollection := setupRadioCollection(t, app, devicecollection)
+
+	d := core.NewRecord(devicecollection)
+	d.Set("name", "the_device1")
+	d.Set("health_status", "healthy")
+	assert.Equal(t, nil, app.Save(d))
+
+	for _, radionum := range []int{0, 1} {
+		r := core.NewRecord(radiocollection)
+		r.Set("device", d.Id)
+		r.Set("radio", radionum)
+		r.Set("enabled", true)
+		r.Set("tx_power_mode", "auto")
+		assert.Equal(t, nil, app.Save(r))
+	}
+
+	event.Response = rec
+
+	// Exactly the call-site pair from opensoho.go's monitoring endpoint.
+	_, radios := handleMonitoring(&event, app, d, clientcollection)
+	updateRadios(d, app, radios)
+
+	for _, radionum := range []int{0, 1} {
+		r, err := app.FindFirstRecordByData("radios", "radio", radionum)
+		assert.Equal(t, nil, err)
+		assert.Equal(t, true, r.GetBool("enabled"), "radio %d must stay enabled after an OpenSoho dump", radionum)
+	}
 }
 
 // Verify the OpenSoho payload decodes into the expected struct shape.
@@ -3734,6 +3820,35 @@ func TestUpdateRadiosWithoutFrequency(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, "", r.GetString("frequency"))
 	assert.Equal(t, "auto", r.GetString("tx_power_mode"))
+}
+
+func TestUpdateRadiosNilIsNop(t *testing.T) {
+	app, err := tests.NewTestApp()
+	assert.Nil(t, err)
+	defer app.Cleanup()
+
+	devicecollection := core.NewBaseCollection("devices")
+	assert.Nil(t, app.Save(devicecollection))
+	setupRadioCollection(t, app, devicecollection)
+
+	d := core.NewRecord(devicecollection)
+	assert.Nil(t, app.Save(d))
+
+	updateRadios(d, app, map[int]Radio{0: {Frequency: 2412, Channel: 1, TxPower: 20}})
+	radiocount, err := app.CountRecords("radios")
+	assert.Nil(t, err)
+	assert.Equal(t, int64(1), radiocount)
+
+	// Should not change anything
+	updateRadios(d, app, nil)
+
+	radiocount, err = app.CountRecords("radios")
+	assert.Nil(t, err)
+	assert.Equal(t, int64(1), radiocount, "a nil report must not touch any radio")
+
+	r, err := app.FindFirstRecordByData("radios", "radio", "0")
+	assert.Nil(t, err)
+	assert.Equal(t, true, r.GetBool("enabled"))
 }
 
 func TestFrequencyToChannel(t *testing.T) {

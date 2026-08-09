@@ -889,6 +889,12 @@ type WifiRecord struct {
 }
 
 func updateRadios(device *core.Record, app core.App, newradios map[int]Radio) {
+	// Nil means no radio data was sent, so return immediately
+	// Empty means no radios present, so continue
+	if newradios == nil {
+		return
+	}
+
 	// Radio has radio number as index, it is not an index in a list.
 	// Function modifies the existing newradios list, important for tests
 	oldradios, err := app.FindAllRecords("radios", dbx.HashExp{"device": device.GetString("id")})
@@ -946,7 +952,6 @@ func updateRadios(device *core.Record, app core.App, newradios map[int]Radio) {
 					fmt.Println("Failed to mark radio as disabled:", err)
 				}
 			}
-
 		}
 	}
 
@@ -2237,7 +2242,7 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 	// The openwisp agent marks the up-to-date info with current=true
 	// Only live data is published to Home Assistant does not support backfill over MQTT
 	current := e.Request.URL.Query().Get("current") == "true"
-	radios := make(map[int]Radio)
+	var radios map[int]Radio
 	var payload MonitoringData
 	if e.Request.Header.Get("Content-Length") == "0" {
 		app.Logger().Info("Ignored empty monitoring request 1", "userIP", e.RealIP())
@@ -2276,6 +2281,7 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 		fmt.Println(err)
 		return e.BadRequestError("Failed to parse json", err), radios
 	}
+	radios = make(map[int]Radio)
 	interfacecollection, _ := app.FindCollectionByNameOrId("interfaces")
 	wificollection, _ := app.FindCollectionByNameOrId("wifi_ssids")
 

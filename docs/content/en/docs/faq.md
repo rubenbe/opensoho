@@ -29,3 +29,10 @@ OPENSOHO_SHARED_SECRET=x ./opensoho superuser update <email> <new password>
 ## Can I reorder collections?
 
 No — this is a limitation of PocketBase. Collections can be **pinned** by clicking the pushpin icon next to the collection name in the collection list.
+
+
+## My device IPs are not correct when running behind a reverse proxy
+
+In `Settings` > `Application` you need to enable `User IP proxy headers`.
+You might also need to configure your proxy to forward the necessary headers.
+More information can be found in [the pocketbase documentation](https://pocketbase.io/docs/going-to-production/#using-reverse-proxy).

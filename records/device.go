@@ -45,3 +45,11 @@ func (d *Device) ConfigStatus() string {
 func (d *Device) IsConfigApplied() bool {
 	return d.ConfigStatus() == ConfigStatusApplied
 }
+
+func (d *Device) MarkConfigModified() bool {
+	if !d.IsConfigApplied() {
+		return false
+	}
+	d.Set("config_status", ConfigStatusModified)
+	return true
+}

@@ -48,6 +48,35 @@ func TestDeviceIsConfigApplied(t *testing.T) {
 	}
 }
 
+func TestDeviceMarkConfigModified(t *testing.T) {
+	scenarios := []struct {
+		status  string
+		flipped bool
+	}{
+		{ConfigStatusApplied, true},
+		{ConfigStatusModified, false},
+		{ConfigStatusError, false},
+		{ConfigStatusDeactivating, false},
+		{ConfigStatusDeactivated, false},
+	}
+
+	for _, s := range scenarios {
+		t.Run(s.status, func(t *testing.T) {
+			record := newDeviceRecord()
+			record.Set("config_status", s.status)
+
+			device := NewDevice(record)
+			assert.Equal(t, s.flipped, device.MarkConfigModified())
+
+			if s.flipped {
+				assert.Equal(t, ConfigStatusModified, device.ConfigStatus())
+			} else {
+				assert.Equal(t, s.status, device.ConfigStatus())
+			}
+		})
+	}
+}
+
 func TestDeviceConfigStatusUnset(t *testing.T) {
 	record := newDeviceRecord()
 	device := NewDevice(record)

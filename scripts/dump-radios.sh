@@ -12,13 +12,24 @@
 #
 # Pass -d (or --debug / --stdout) to print the JSON payload to stdout and skip
 # the file write, for debugging. This also bypasses the ACTION check.
+#
+# Pass -f (or --force) to skip the checksum comparison and always write/upload
+# the file, even if the signature is unchanged since the last run.
 
 debug=0
-case "$1" in
-	-d|--debug|--stdout) debug=1;;
-esac
+force=0
+for arg in "$@"; do
+	case "$arg" in
+		-d|--debug|--stdout) debug=1;;
+		-f|--force) force=1;;
+	esac
+done
 
-[ "$debug" = 1 ] || [ "$ACTION" = "end-of-cycle" ] || exit 0
+if [ "$debug" = 1 ] || [ "$force" = 1 ] || [ "$ACTION" = "end-of-cycle" ]; then :
+else
+	echo "use -f to force re-upload" >&2
+	exit 0
+fi
 
 STATE_DIR=/tmp/opensoho
 OUT_DIR=/tmp/openwisp/monitoring
@@ -77,7 +88,7 @@ fi
 new=$(printf '%s' "$sig" | md5sum | awk '{print $1}')
 old=$(cat "$SUM" 2>/dev/null)
 
-if [ "$new" = "$old" ]; then
+if [ "$force" != 1 ] && [ "$new" = "$old" ]; then
 	exit 0
 fi
 

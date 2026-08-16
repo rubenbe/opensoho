@@ -5357,6 +5357,7 @@ func TestGenerateWifiConfig(t *testing.T) {
 	clientcollection := setupClientsCollection(t, app)
 	devicecollection := setupDeviceCollection(t, app, wificollection)
 	clientsteeringcollection := setupClientSteeringCollection(t, app, clientcollection, devicecollection, wificollection)
+	radiocollection := setupRadioCollection(t, app, devicecollection)
 
 	// Add a vlan
 	v := core.NewRecord(vlancollection)
@@ -5401,8 +5402,17 @@ func TestGenerateWifiConfig(t *testing.T) {
 	err = app.Save(d2)
 	assert.Equal(t, nil, err)
 
+	// Add the radio the config is generated for
+	radio := core.NewRecord(radiocollection)
+	radio.Set("device", d.Id)
+	radio.Set("radio", 4)
+	radio.Set("tx_power_mode", "auto")
+	err = app.Save(radio)
+	assert.Equal(t, nil, err)
+	radioProxy := records.NewRadio(radio)
+
 	// Generate a config
-	wificonfig, has_psk := generateWifiConfig(wr, 3, 4, app, d)
+	wificonfig, has_psk := generateWifiConfig(wr, 3, 4, app, d, radioProxy)
 	assert.False(t, has_psk)
 	assert.Equal(t, wificonfig, `
 config wifi-iface 'wifi_3_radio4'
@@ -5434,7 +5444,7 @@ config wifi-iface 'wifi_3_radio4'
 	w.Set("isolate_clients", true)
 
 	// Generate a config
-	wificonfig, has_psk = generateWifiConfig(wr, 3, 4, app, d)
+	wificonfig, has_psk = generateWifiConfig(wr, 3, 4, app, d, radioProxy)
 	assert.False(t, has_psk)
 	assert.Equal(t, wificonfig, `
 config wifi-iface 'wifi_3_radio4'
@@ -5473,7 +5483,7 @@ config wifi-iface 'wifi_3_radio4'
 	w.Set("encryption", "")
 
 	// Generate a config
-	wificonfig, has_psk = generateWifiConfig(wr, 3, 4, app, d)
+	wificonfig, has_psk = generateWifiConfig(wr, 3, 4, app, d, radioProxy)
 	assert.False(t, has_psk)
 	assert.Equal(t, wificonfig, `
 config wifi-iface 'wifi_3_radio4'
@@ -5505,7 +5515,7 @@ config wifi-iface 'wifi_3_radio4'
 	err = app.Save(w)
 
 	// Generate a config
-	wificonfig, has_psk = generateWifiConfig(wr, 3, 4, app, d)
+	wificonfig, has_psk = generateWifiConfig(wr, 3, 4, app, d, radioProxy)
 	assert.False(t, has_psk)
 	assert.Equal(t, wificonfig, `
 config wifi-iface 'wifi_3_radio4'
@@ -5543,7 +5553,7 @@ config wifi-iface 'wifi_3_radio4'
 	assert.Equal(t, nil, err)
 	assert.Equal(t, []string{d2.Id}, cs.GetStringSlice("whitelist"))
 	// Generate a config
-	wificonfig, has_psk = generateWifiConfig(wr, 3, 4, app, d)
+	wificonfig, has_psk = generateWifiConfig(wr, 3, 4, app, d, radioProxy)
 	assert.False(t, has_psk)
 	assert.Equal(t, wificonfig, `
 config wifi-iface 'wifi_3_radio4'
@@ -5577,7 +5587,7 @@ config wifi-iface 'wifi_3_radio4'
 	// Explicitely set the time advertisement to disabled
 	w.Set("ieee80211v_time_advertisement", "Disabled")
 	// Generate a config
-	wificonfig, has_psk = generateWifiConfig(wr, 3, 4, app, d)
+	wificonfig, has_psk = generateWifiConfig(wr, 3, 4, app, d, radioProxy)
 	assert.False(t, has_psk)
 	assert.Equal(t, wificonfig, `
 config wifi-iface 'wifi_3_radio4'
@@ -5614,7 +5624,7 @@ config wifi-iface 'wifi_3_radio4'
 	w.Set("dtim_period", 3)
 
 	// Generate a config
-	wificonfig, has_psk = generateWifiConfig(wr, 3, 4, app, d)
+	wificonfig, has_psk = generateWifiConfig(wr, 3, 4, app, d, radioProxy)
 	assert.False(t, has_psk)
 	assert.Equal(t, wificonfig, `
 config wifi-iface 'wifi_3_radio4'
@@ -5652,7 +5662,7 @@ config wifi-iface 'wifi_3_radio4'
 	err = app.Save(psk1)
 	assert.Nil(t, err)
 
-	wificonfig, has_psk = generateWifiConfig(wr, 3, 4, app, d)
+	wificonfig, has_psk = generateWifiConfig(wr, 3, 4, app, d, radioProxy)
 	assert.True(t, has_psk)
 
 	assert.Equal(t, `
@@ -5689,7 +5699,7 @@ config wifi-station 'psk_somethingapsk03_0'
 
 	// Verify that a disabled wifi record generates option disabled '1'
 	w.Set("enabled", false)
-	wificonfig, _ = generateWifiConfig(wr, 3, 4, app, d)
+	wificonfig, _ = generateWifiConfig(wr, 3, 4, app, d, radioProxy)
 	assert.Equal(t, `
 config wifi-iface 'wifi_3_radio4'
         option device 'radio4'
@@ -5724,7 +5734,7 @@ config wifi-station 'psk_somethingapsk03_0'
 
 	// Re-enable and verify it generates option disabled '0'
 	w.Set("enabled", true)
-	wificonfig, _ = generateWifiConfig(wr, 3, 4, app, d)
+	wificonfig, _ = generateWifiConfig(wr, 3, 4, app, d, radioProxy)
 	assert.Equal(t, `
 config wifi-iface 'wifi_3_radio4'
         option device 'radio4'
@@ -5765,7 +5775,7 @@ config wifi-station 'psk_somethingapsk03_0'
 	err = app.Save(psk1)
 	assert.Nil(t, err)
 
-	wificonfig, has_psk = generateWifiConfig(wr, 3, 4, app, d)
+	wificonfig, has_psk = generateWifiConfig(wr, 3, 4, app, d, radioProxy)
 	assert.True(t, has_psk)
 	assert.Equal(t, `
 config wifi-iface 'wifi_3_radio4'

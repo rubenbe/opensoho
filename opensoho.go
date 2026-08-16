@@ -1172,7 +1172,7 @@ func uciQuote(value string) string {
 	return strings.ReplaceAll(value, "'", `'\''`)
 }
 
-func generateWifiConfig(wifirecord WifiRecord, wifiid int, radio uint, app core.App, device *core.Record) (string, bool) {
+func generateWifiConfig(wifirecord WifiRecord, wifiid int, radio uint, app core.App, device *core.Record, radioProxy *records.Radio) (string, bool) {
 	wifi := wifirecord.Record
 
 	ssid := wifi.GetString("ssid")
@@ -1353,7 +1353,11 @@ func generateWifiConfigs(wifis []WifiRecord, numradios uint, app core.App, devic
 			if radio != nil && !isWifiEnabledOnBand(wifi, frequencyToBand(radio.GetInt("frequency")), device, app) {
 				continue
 			}
-			config_output, has_vlan_config := generateWifiConfig(wifi, i, j, app, device)
+			var radioProxy *records.Radio
+			if radio != nil {
+				radioProxy = records.NewRadio(radio)
+			}
+			config_output, has_vlan_config := generateWifiConfig(wifi, i, j, app, device, radioProxy)
 			output += config_output
 			glob_has_vlan_config = glob_has_vlan_config || has_vlan_config
 		}

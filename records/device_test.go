@@ -20,6 +20,12 @@ func newDeviceRecord() *core.Record {
 			ConfigStatusDeactivated,
 		},
 	})
+	zero := 0.0
+	collection.Fields.Add(&core.NumberField{
+		Name:    "numradios",
+		Min:     &zero,
+		OnlyInt: true,
+	})
 
 	return core.NewRecord(collection)
 }
@@ -73,6 +79,32 @@ func TestDeviceMarkConfigModified(t *testing.T) {
 			} else {
 				assert.Equal(t, s.status, device.ConfigStatus())
 			}
+		})
+	}
+}
+
+func TestDeviceEnsureNumRadios(t *testing.T) {
+	scenarios := []struct {
+		name     string
+		current  int
+		detected int
+		changed  bool
+		expected int
+	}{
+		{"raises below detected", 1, 2, true, 2},
+		{"leaves equal alone", 2, 2, false, 2},
+		{"never lowers", 2, 1, false, 2},
+		{"leaves zero detection alone", 2, 0, false, 2},
+	}
+
+	for _, s := range scenarios {
+		t.Run(s.name, func(t *testing.T) {
+			record := newDeviceRecord()
+			record.Set("numradios", s.current)
+
+			device := NewDevice(record)
+			assert.Equal(t, s.changed, device.EnsureNumRadios(s.detected))
+			assert.Equal(t, s.expected, device.NumRadios())
 		})
 	}
 }

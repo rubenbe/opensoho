@@ -53,3 +53,16 @@ func (d *Device) MarkConfigModified() bool {
 	d.Set("config_status", ConfigStatusModified)
 	return true
 }
+
+func (d *Device) NumRadios() int {
+	return d.GetInt("numradios")
+}
+
+// Update the number of radios ONLY when we've found more than the user mentioned
+func (d *Device) EnsureNumRadios(detected int) bool {
+	if detected <= d.NumRadios() {
+		return false
+	}
+	d.Set("numradios", detected)
+	return true
+}

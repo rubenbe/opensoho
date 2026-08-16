@@ -38,6 +38,24 @@ func (r *Radio) Band() string {
 	return frequencyplan.FrequencyToBand(r.GetInt("frequency"))
 }
 
+// IsBand2Ghz reports whether the radio's configured frequency is in the
+// 2.4 GHz band.
+func (r *Radio) IsBand2Ghz() bool {
+	return r.Band() == "2.4"
+}
+
+// IsBand5GHz reports whether the radio's configured frequency is in the
+// 5 GHz band.
+func (r *Radio) IsBand5GHz() bool {
+	return r.Band() == "5"
+}
+
+// IsBand6GHz reports whether the radio's configured frequency is in the
+// 6 GHz band.
+func (r *Radio) IsBand6GHz() bool {
+	return r.Band() == "6"
+}
+
 func (r *Radio) ConfigChanged() bool {
 	original := r.Original()
 	for _, field := range radioConfigFields {

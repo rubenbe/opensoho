@@ -1178,8 +1178,13 @@ func generateWifiConfig(wifirecord WifiRecord, wifiid int, radio uint, app core.
 	ssid := wifi.GetString("ssid")
 	key := wifi.GetString("key")
 	encryption := wifi.GetString("encryption")
+
 	if len(encryption) == 0 {
 		encryption = "psk2+ccmp"
+	}
+
+	if radioProxy != nil && radioProxy.IsBand6GHz() {
+		encryption = records.EncryptionFor6GHz(encryption)
 	}
 
 	ifaceName := fmt.Sprintf("wifi_%d_radio%d", wifiid, radio)
@@ -1354,6 +1359,7 @@ func generateWifiConfigs(wifis []WifiRecord, numradios uint, app core.App, devic
 			if radio != nil {
 				radioProxy = records.NewRadio(radio)
 			}
+			// It is possible that there is no detailed radio data (yet)
 			if radioProxy != nil && !isWifiEnabledOnBand(wifi, radioProxy.Band(), device, app) {
 				continue
 			}

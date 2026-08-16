@@ -5810,6 +5810,65 @@ config wifi-station 'psk_somethingapsk03_0'
 `, wificonfig)
 }
 
+func TestGenerateWifiConfigEncryptionOn6GHz(t *testing.T) {
+	app, err := tests.NewTestApp()
+	defer app.Cleanup()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	clientcollection := setupClientsCollection(t, app)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	setupClientSteeringCollection(t, app, clientcollection, devicecollection, wificollection)
+	radiocollection := setupRadioCollection(t, app, devicecollection)
+
+	// Add a device
+	d := core.NewRecord(devicecollection)
+	d.Set("name", "the_device")
+	d.Set("health_status", "healthy")
+	err = app.Save(d)
+	assert.Equal(t, nil, err)
+
+	// Add a 6 GHz radio
+	radio := core.NewRecord(radiocollection)
+	radio.Set("device", d.Id)
+	radio.Set("radio", 4)
+	radio.Set("frequency", 6115)
+	radio.Set("tx_power_mode", "auto")
+	err = app.Save(radio)
+	assert.Equal(t, nil, err)
+	radioProxy := records.NewRadio(radio)
+	assert.True(t, radioProxy.IsBand6GHz())
+
+	scenarios := []struct {
+		encryption string
+		expected   string
+	}{
+		{"psk2+ccmp", "sae"},
+		{"psk-mixed", "sae"},
+		{"sae-mixed", "sae"},
+		{"sae", "sae"},
+		{"none", "sae"},
+		{"owe", "owe"},
+	}
+
+	for _, s := range scenarios {
+		t.Run(s.encryption, func(t *testing.T) {
+			w := core.NewRecord(wificollection)
+			w.Set("ssid", "the_ssid")
+			w.Set("key", "the_key")
+			w.Set("encryption", s.encryption)
+			w.Set("enabled", true)
+			w.Set("ieee80211r", true)
+			err = app.Save(w)
+			assert.Equal(t, nil, err)
+			wr := WifiRecord{Record: w}
+
+			wificonfig, _ := generateWifiConfig(wr, 3, 4, app, d, radioProxy)
+			assert.Contains(t, wificonfig, fmt.Sprintf("option encryption '%s'\n", s.expected))
+		})
+	}
+}
+
 func TestIsUnHealthyQuorumReached(t *testing.T) {
 	allofflineset := make(map[string]struct{})
 	allofflineset["device1"] = struct{}{}

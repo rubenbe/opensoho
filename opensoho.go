@@ -1350,12 +1350,12 @@ func generateWifiConfigs(wifis []WifiRecord, numradios uint, app core.App, devic
 					break
 				}
 			}
-			if radio != nil && !isWifiEnabledOnBand(wifi, frequencyToBand(radio.GetInt("frequency")), device, app) {
-				continue
-			}
 			var radioProxy *records.Radio
 			if radio != nil {
 				radioProxy = records.NewRadio(radio)
+			}
+			if radioProxy != nil && !isWifiEnabledOnBand(wifi, radioProxy.Band(), device, app) {
+				continue
 			}
 			config_output, has_vlan_config := generateWifiConfig(wifi, i, j, app, device, radioProxy)
 			output += config_output

@@ -1,6 +1,7 @@
 package records
 
 import (
+	"github.com/rubenbe/opensoho/frequencyplan"
 	"github.com/rubenbe/pocketbase/core"
 )
 
@@ -29,6 +30,12 @@ func NewRadio(record *core.Record) *Radio {
 
 func (r *Radio) DeviceId() string {
 	return r.GetString("device")
+}
+
+// Band returns the Wi-Fi band ("2.4", "5", "6", "60", or "unknown") the
+// radio's configured frequency falls into.
+func (r *Radio) Band() string {
+	return frequencyplan.FrequencyToBand(r.GetInt("frequency"))
 }
 
 func (r *Radio) ConfigChanged() bool {

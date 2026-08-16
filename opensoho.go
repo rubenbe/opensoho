@@ -716,6 +716,7 @@ func handleOpenSohoMonitoring(app core.App, device *core.Record, data OpenSohoDa
 		app.Logger().Error("Failed to find radio_ht_modes collection", "error", err)
 		return
 	}
+	deviceProxy := records.NewDevice(device)
 
 	for _, radio := range data.Radios {
 		idx, err := parseRadioName(radio.Name)
@@ -741,6 +742,13 @@ func handleOpenSohoMonitoring(app core.App, device *core.Record, data OpenSohoDa
 			app.Logger().Error("Failed to sync radio ht modes",
 				"device", device.GetString("id"), "radio", radio.Name, "error", err)
 			continue
+		}
+	}
+
+	if deviceProxy.EnsureNumRadios(len(data.Radios)) {
+		if err := app.Save(deviceProxy); err != nil {
+			app.Logger().Error("Failed to update numradios",
+				"device", device.GetString("id"), "error", err)
 		}
 	}
 

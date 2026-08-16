@@ -3951,6 +3951,55 @@ func TestUpdateRadiosNilIsNop(t *testing.T) {
 	assert.Equal(t, true, r.GetBool("enabled"))
 }
 
+func TestUpdateRadiosRaisesNumRadios(t *testing.T) {
+	app, err := tests.NewTestApp()
+	assert.Nil(t, err)
+	defer app.Cleanup()
+
+	devicecollection := core.NewBaseCollection("devices")
+	zero := 0.0
+	devicecollection.Fields.Add(&core.NumberField{
+		Name:    "numradios",
+		Min:     &zero,
+		OnlyInt: true,
+	})
+	assert.Nil(t, app.Save(devicecollection))
+	setupRadioFrequenciesCollection(t, app, devicecollection)
+	setupRadioTxPowersCollection(t, app, devicecollection)
+	setupRadioHtModesCollection(t, app, devicecollection)
+
+	d := core.NewRecord(devicecollection)
+	d.Set("numradios", 1)
+	assert.Nil(t, app.Save(d))
+
+	twoRadios := OpenSohoData{
+		Type: "OpenSoho",
+		Radios: []OpenSohoRadio{
+			{Name: "radio0", Disabled: "0", Info: IwinfoInfo{Frequency: 2412, Channel: 1, TxPower: 20}},
+			{Name: "radio1", Disabled: "0", Info: IwinfoInfo{Frequency: 5200, Channel: 40, TxPower: 20}},
+		},
+	}
+
+	// Two radios are detected, so numradios should be raised from 1 to 2.
+	handleOpenSohoMonitoring(app, d, twoRadios, false)
+
+	d, err = app.FindRecordById("devices", d.Id)
+	assert.Nil(t, err)
+	assert.Equal(t, 2, d.GetInt("numradios"), "numradios should be raised to match the detected radios")
+
+	// A later report with fewer radios (e.g. one temporarily went missing)
+	// must not lower numradios again.
+	oneRadio := OpenSohoData{
+		Type:   "OpenSoho",
+		Radios: []OpenSohoRadio{twoRadios.Radios[0]},
+	}
+	handleOpenSohoMonitoring(app, d, oneRadio, false)
+
+	d, err = app.FindRecordById("devices", d.Id)
+	assert.Nil(t, err)
+	assert.Equal(t, 2, d.GetInt("numradios"), "numradios must not be lowered")
+}
+
 func TestFrequencyToChannel(t *testing.T) {
 	tests := []struct {
 		freq            int

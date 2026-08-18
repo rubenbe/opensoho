@@ -2957,6 +2957,20 @@ table.table > thead > tr > th > div.col-header-content > span.txt
 		return e.Next()
 	})
 
+	app.OnRecordCreateRequest("wifi_aps").BindFunc(func(e *core.RecordRequestEvent) error {
+		if err := validateWifiApsBands(e.Record); err != nil {
+			return err
+		}
+		return e.Next()
+	})
+
+	app.OnRecordUpdateRequest("wifi_aps").BindFunc(func(e *core.RecordRequestEvent) error {
+		if err := validateWifiApsBands(e.Record); err != nil {
+			return err
+		}
+		return e.Next()
+	})
+
 	// OnRecordValidate (instead of the create/update request hooks) so internal
 	// app.Save() calls are covered too. The built-in field validation is bound
 	// with priority 99, so this runs first and its message wins over the raw
@@ -3029,6 +3043,24 @@ func validateWifiUsteer(record *core.Record) error {
 		return apis.NewBadRequestError("Failed to save record.", errs)
 	}
 	return nil
+}
+
+func validateWifiApsBands(record *core.Record) error {
+	bands := record.GetStringSlice("band")
+	// Only validate when 6GHz is selected.
+	if !slices.Contains(bands, "6") {
+		return nil
+	}
+	if slices.Contains(bands, "2.4") || slices.Contains(bands, "5") {
+		return nil
+	}
+	errs := validation.Errors{
+		"band": validation.NewError(
+			"validation_6ghz_requires_lower_band",
+			"6 GHz also requires selecting 2.4 GHz or 5 GHz, so clients can discover it via the Reduced Neighbor Report.",
+		),
+	}
+	return apis.NewBadRequestError("Failed to save record.", errs)
 }
 
 func validateDevice(record *core.Record) error {

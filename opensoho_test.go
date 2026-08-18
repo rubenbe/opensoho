@@ -1437,6 +1437,54 @@ func TestValidateWifiUsteer(t *testing.T) {
 	)
 }
 
+func TestValidateWifiApsBands(t *testing.T) {
+	collection := core.NewBaseCollection("wifi_aps")
+	collection.Fields.Add(&core.SelectField{
+		Name:      "band",
+		MaxSelect: 3,
+		Values:    []string{"2.4", "5", "6"},
+	})
+
+	newWifiAp := func(bands ...string) *core.Record {
+		r := core.NewRecord(collection)
+		r.Set("band", bands)
+		return r
+	}
+
+	assertFieldErrors := func(err error, present []string, absent []string) {
+		assert.Error(t, err)
+		var apiErr *router.ApiError
+		assert.True(t, errors.As(err, &apiErr))
+		errs, ok := apiErr.RawData().(validation.Errors)
+		assert.True(t, ok)
+		for _, f := range present {
+			assert.Contains(t, errs, f)
+		}
+		for _, f := range absent {
+			assert.NotContains(t, errs, f)
+		}
+	}
+
+	// No 6 GHz — never an error, regardless of what else is selected.
+	assert.Nil(t, validateWifiApsBands(newWifiAp()))
+	assert.Nil(t, validateWifiApsBands(newWifiAp("2.4")))
+	assert.Nil(t, validateWifiApsBands(newWifiAp("5")))
+	assert.Nil(t, validateWifiApsBands(newWifiAp("2.4", "5")))
+
+	// 6 GHz backed by 2.4 or 5 (in either order) — valid.
+	assert.Nil(t, validateWifiApsBands(newWifiAp("6", "5")))
+	assert.Nil(t, validateWifiApsBands(newWifiAp("5", "6")))
+	assert.Nil(t, validateWifiApsBands(newWifiAp("6", "2.4")))
+	assert.Nil(t, validateWifiApsBands(newWifiAp("2.4", "5", "6")))
+
+	// 6 GHz alone — rejected, error on "band" only.
+	assertFieldErrors(
+		validateWifiApsBands(newWifiAp("6")),
+		[]string{"band"},
+		[]string{},
+	)
+}
+
 // Test making a full map with the port tagging config
 func TestGenerateFullTaggingMap(t *testing.T) {
 	app, _ := tests.NewTestApp()
@@ -6768,8 +6816,8 @@ func setupWifiApsCollection(t *testing.T, app core.App, devicecollection *core.C
 	col.Fields.Add(&core.SelectField{
 		Name:      "band",
 		Required:  false,
-		MaxSelect: 4,
-		Values:    []string{"2.4", "5", "6", "60"},
+		MaxSelect: 3,
+		Values:    []string{"2.4", "5", "6"},
 	})
 	err := app.Save(col)
 	assert.Equal(t, nil, err)

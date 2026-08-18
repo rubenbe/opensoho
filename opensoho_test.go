@@ -5478,10 +5478,6 @@ config wifi-iface 'wifi_3_radio4'
         option reassociation_deadline '5000'
         option time_advertisement '0'
         option time_zone ''
-        option wnm_sleep_mode '0'
-        option wnm_sleep_mode_no_keys '0'
-        option proxy_arp '0'
-        option bss_transition '0'
         option dtim_period '1'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
@@ -5510,10 +5506,6 @@ config wifi-iface 'wifi_3_radio4'
         option reassociation_deadline '5000'
         option time_advertisement '0'
         option time_zone ''
-        option wnm_sleep_mode '0'
-        option wnm_sleep_mode_no_keys '0'
-        option proxy_arp '0'
-        option bss_transition '0'
         option dtim_period '1'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
@@ -5526,6 +5518,8 @@ config wifi-iface 'wifi_3_radio4'
 	w.Set("ieee80211r_reassoc_deadline", 0)
 	// and with 80211v enabled
 	w.Set("ieee80211v_bss_transition", true)
+	// usteer must be enabled for the 802.11v options to be emitted
+	w.Set("usteer", true)
 	err = app.Save(w)
 	// Verify the encryption defaults to WPA2
 	w.Set("encryption", "")

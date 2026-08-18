@@ -1206,6 +1206,20 @@ func generateWifiConfig(wifirecord WifiRecord, wifiid int, radio uint, app core.
 		disabled = 1
 	}
 
+	// Only enable usteer related options when enabled on the SSID
+	// If not wpad-basic rejects them which in turn disables the SSID/radio
+	usteerOptions := ""
+	if wifi.GetBool("usteer") {
+		usteerOptions = fmt.Sprintf(`        option wnm_sleep_mode '%d'
+        option wnm_sleep_mode_no_keys '0'
+        option proxy_arp '%d'
+        option bss_transition '%d'
+`,
+			wifi.GetInt("ieee80211v_wnm_sleep_mode"),
+			wifi.GetInt("ieee80211v_proxy_arp"),
+			wifi.GetInt("ieee80211v_bss_transition"))
+	}
+
 	return fmt.Sprintf(`
 config wifi-iface '%s'
         option device 'radio%d'
@@ -1222,11 +1236,7 @@ config wifi-iface '%s'
         option reassociation_deadline '%d'
         option time_advertisement '%d'
         option time_zone '%s'
-        option wnm_sleep_mode '%d'
-        option wnm_sleep_mode_no_keys '0'
-        option proxy_arp '%d'
-        option bss_transition '%d'
-        option dtim_period '%d'
+%s        option dtim_period '%d'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
 %s%s`,
@@ -1238,9 +1248,7 @@ config wifi-iface '%s'
 			wifi.GetInt("ieee80211r"),
 			rDeadLine,
 			vta_flag, vta_tz,
-			wifi.GetInt("ieee80211v_wnm_sleep_mode"),
-			wifi.GetInt("ieee80211v_proxy_arp"),
-			wifi.GetInt("ieee80211v_bss_transition"),
+			usteerOptions,
 			dtim,
 			steeringconfig, clientpskconfig),
 		len(clientpskconfig) > 0

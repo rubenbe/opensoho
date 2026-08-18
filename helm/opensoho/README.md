@@ -110,6 +110,7 @@ The command removes all the Kubernetes components associated with the chart and 
 | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------- |
 | `healthCheck.enabled`       | Enable readiness probe                                                                                                          | `true`  |
 | `livenessProbe.enabled`     | Enable liveness probe                                                                                                           | `true`  |
+| `startupProbe.enabled`      | Enable startup probe                                                                                                            | `true`  |
 
 ## Configuration and installation details
 

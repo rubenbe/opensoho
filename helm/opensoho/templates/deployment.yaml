@@ -50,7 +50,6 @@ spec:
             httpGet:
               path: /api/health
               port: http
-            initialDelaySeconds: {{ .Values.healthCheck.initialDelaySeconds }}
             periodSeconds: {{ .Values.healthCheck.periodSeconds }}
             timeoutSeconds: {{ .Values.healthCheck.timeoutSeconds }}
             failureThreshold: {{ .Values.healthCheck.failureThreshold }}
@@ -61,11 +60,20 @@ spec:
             httpGet:
               path: /api/health
               port: http
-            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
             timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
             failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
             successThreshold: {{ .Values.livenessProbe.successThreshold }}
+          {{- end }}
+          {{- if .Values.startupProbe.enabled }}
+          startupProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: {{ .Values.startupProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.startupProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.startupProbe.failureThreshold }}
+            successThreshold: {{ .Values.startupProbe.successThreshold }}
           {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}

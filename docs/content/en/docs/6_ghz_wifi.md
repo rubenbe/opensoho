@@ -2,6 +2,14 @@
 ## 6 GHz wifi needs to be advertised on 2.4 or 5 GHz
 Clients use the "Reduced Neighbor Report" on the lower frequencies to avoid needlessly scanning the 6GHz band.
 Therefore OpenSOHO Requires you to select at least a 2.4 and a 5 GHz in the Wifi APs collection when selecting a 6GHz band.
+
+## Recommended settings:
+* Ensure you set a valid `country` in `Settings`. This is a hard requirement, since 6GHz is a regulatory hellhole and your radio wants to know in which country it is before enabling at all.
+* For the radio:
+  * Keep the `tx_power_mode` on `auto`. This translates to Luci: `Maximum transmit power` on `driver default`
+  * Frequency `auto` works as expected
+  * Set `enabled` to `true`
+
 ## OpenWRT
 
 6GHz Wifi on OpenWRT is still a bit tricky, I first had to set these values via Luci, since they were not set and this prevented the radio from being enabled.

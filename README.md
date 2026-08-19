@@ -23,8 +23,8 @@ As OpenWisp mentioned:
 </p>
 
 The following versions are tested
-* OpenWRT 24.10.x DSA
-* OpenWRT 25.12.x DSA (beta support)
+* OpenWRT 24.10.x DSA (legacy support)
+* OpenWRT 25.12.x DSA
 
 # Getting Started with OpenSOHO
 ## Overview

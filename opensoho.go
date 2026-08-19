@@ -3279,6 +3279,10 @@ func apiFrequencyOverview(e *core.RequestEvent) error {
 	if err != nil {
 		return e.InternalServerError("Failed to load radio frequencies", err)
 	}
+	htModeRecords, err := e.App.FindAllRecords("radio_ht_modes")
+	if err != nil {
+		return e.InternalServerError("Failed to load radio ht modes", err)
+	}
 
 	var radios []frequencyplan.Radio
 	for _, r := range radioRecords {
@@ -3298,8 +3302,20 @@ func apiFrequencyOverview(e *core.RequestEvent) error {
 		}
 		freqs = append(freqs, frequencyplan.Frequency{
 			Device:    f.GetString("device"),
+			Radio:     f.GetInt("radio"),
 			Frequency: f.GetInt("frequency"),
 			Flags:     f.GetStringSlice("flags"),
+		})
+	}
+	var htModes []frequencyplan.HtModes
+	for _, h := range htModeRecords {
+		if !inScope(h.GetString("device")) {
+			continue
+		}
+		htModes = append(htModes, frequencyplan.HtModes{
+			Device: h.GetString("device"),
+			Radio:  h.GetInt("radio"),
+			Modes:  h.GetStringSlice("ht_modes"),
 		})
 	}
 
@@ -3317,7 +3333,7 @@ func apiFrequencyOverview(e *core.RequestEvent) error {
 	return e.JSON(200, map[string]any{
 		"scope":   scope,
 		"devices": devices,
-		"bands":   frequencyplan.BuildOverview(radios, freqs, deviceNames),
+		"bands":   frequencyplan.BuildOverview(radios, freqs, htModes, deviceNames),
 	})
 }
 

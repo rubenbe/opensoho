@@ -105,8 +105,10 @@ func TestWidthForbidden(t *testing.T) {
 	assert.True(t, WidthForbidden(40, []string{"no_ht40-", "no_ht40+"}))
 	assert.True(t, WidthForbidden(80, []string{"no_80mhz"}))
 	assert.True(t, WidthForbidden(160, []string{"no_160mhz"}))
+	assert.True(t, WidthForbidden(320, []string{"no_320mhz"}))
 	assert.True(t, WidthForbidden(20, []string{"no_20mhz"}))
 	assert.False(t, WidthForbidden(80, []string{"no_160mhz"}))
+	assert.False(t, WidthForbidden(320, []string{"no_160mhz"}))
 	assert.False(t, WidthForbidden(40, nil))
 }
 

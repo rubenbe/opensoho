@@ -15,8 +15,18 @@ type Radio struct {
 // Frequency is a hardware-advertised frequency row (already scope-filtered).
 type Frequency struct {
 	Device    string
+	Radio     int // per-device radio index, matches HtModes.Radio
 	Frequency int
 	Flags     []string
+}
+
+// HtModes lists the channel modes one radio advertises (iwinfo's htmodes),
+// already scope-filtered. A device with no entry for a radio has unknown
+// capabilities for that radio and is not constrained by it.
+type HtModes struct {
+	Device string
+	Radio  int
+	Modes  []string
 }
 
 // DeviceRef identifies a device for display and for linking to its radios.
@@ -57,23 +67,24 @@ type BandOverview struct {
 // BuildOverview turns the in-scope radios and advertised frequencies into the
 // per-band channel-bonding model the dashboard renders. It is a pure function:
 // scope filtering happens in the caller. Output ordering is deterministic.
-func BuildOverview(radios []Radio, freqs []Frequency, deviceNames map[string]string) []BandOverview {
+func BuildOverview(radios []Radio, freqs []Frequency, htModes []HtModes, deviceNames map[string]string) []BandOverview {
 	out := make([]BandOverview, 0, len(Bands))
 	for _, band := range Bands {
-		if b := buildBand(band, radios, freqs, deviceNames); b != nil {
+		if b := buildBand(band, radios, freqs, htModes, deviceNames); b != nil {
 			out = append(out, *b)
 		}
 	}
 	return out
 }
 
-func buildBand(band string, radios []Radio, freqs []Frequency, deviceNames map[string]string) *BandOverview {
+func buildBand(band string, radios []Radio, freqs []Frequency, htModes []HtModes, deviceNames map[string]string) *BandOverview {
 	// Per-device hardware capabilities for this band: which frequencies each
 	// device advertises and the flags on each. Support is evaluated per device
 	// and OR-ed across devices, so an aggregate scope only greys a mode when no
 	// in-scope device supports it.
 	deviceFreqs := map[string]map[int]bool{}     // device -> set(frequency)
 	deviceFlags := map[string]map[int][]string{} // device -> frequency -> flags
+	deviceRadios := map[string]map[int]bool{}    // device -> set(radio index) advertising in this band
 	for _, f := range freqs {
 		if FrequencyToBand(f.Frequency) != band {
 			continue
@@ -81,11 +92,43 @@ func buildBand(band string, radios []Radio, freqs []Frequency, deviceNames map[s
 		if deviceFreqs[f.Device] == nil {
 			deviceFreqs[f.Device] = map[int]bool{}
 			deviceFlags[f.Device] = map[int][]string{}
+			deviceRadios[f.Device] = map[int]bool{}
 		}
 		deviceFreqs[f.Device][f.Frequency] = true
 		deviceFlags[f.Device][f.Frequency] = f.Flags
+		deviceRadios[f.Device][f.Radio] = true
 	}
 	hasFreqData := len(deviceFreqs) > 0
+
+	// deviceWidths[device] is the set of widths advertised by that device's
+	// radios in this band, derived from their htmodes (e.g. "HE160" -> 160). A
+	// device absent from the map has no ht-mode data for any radio in this band
+	// yet and is left unconstrained by deviceSupportsWidth, mirroring the
+	// permissive fallback in supportedHtModes (opensoho.go).
+	htModesByDeviceRadio := map[string]map[int][]string{}
+	for _, h := range htModes {
+		if htModesByDeviceRadio[h.Device] == nil {
+			htModesByDeviceRadio[h.Device] = map[int][]string{}
+		}
+		htModesByDeviceRadio[h.Device][h.Radio] = h.Modes
+	}
+	deviceWidths := map[string]map[int]bool{}
+	for d, dRadios := range deviceRadios {
+		for r := range dRadios {
+			modes, ok := htModesByDeviceRadio[d][r]
+			if !ok {
+				continue
+			}
+			for _, m := range modes {
+				if w, ok := HtmodeWidth(m); ok {
+					if deviceWidths[d] == nil {
+						deviceWidths[d] = map[int]bool{}
+					}
+					deviceWidths[d][w] = true
+				}
+			}
+		}
+	}
 
 	// All in-scope device ids (those with advertised frequencies and/or a
 	// configured radio in this band) — used to OR support across devices.
@@ -159,7 +202,7 @@ func buildBand(band string, radios []Radio, freqs []Frequency, deviceNames map[s
 						devFlags[fl] = true
 					}
 				}
-				if advertisesAll && !WidthForbidden(width, sortedKeys(devFlags)) {
+				if advertisesAll && !WidthForbidden(width, sortedKeys(devFlags)) && deviceSupportsWidth(deviceWidths, d, width) {
 					anySupport = true
 					supporters[d] = true
 				} else {
@@ -241,6 +284,17 @@ func deviceRefs(ids map[string]bool, deviceNames map[string]string) []DeviceRef 
 		return refs[i].Id < refs[j].Id
 	})
 	return refs
+}
+
+// deviceSupportsWidth reports whether the device advertises an htmode of this
+// width in this band. A device with no ht-mode data has unknown capabilities
+// and is not constrained, mirroring supportedHtModes in opensoho.go.
+func deviceSupportsWidth(deviceWidths map[string]map[int]bool, device string, width int) bool {
+	widths, ok := deviceWidths[device]
+	if !ok {
+		return true
+	}
+	return widths[width]
 }
 
 func sortedKeys(m map[string]bool) []string {

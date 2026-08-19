@@ -12,11 +12,16 @@
 
     let canvas24;
     let canvas5;
+    let canvas6;
     let chart24;
     let chart5;
+    let chart6;
     let isLoading = false;
     let channels24 = [];
     let channels5 = [];
+    let channels6 = [];
+    let show6 = false;
+    let pendingData6 = null;
 
     function buildChartData(channelCounts) {
         const channels = Object.keys(channelCounts).map(Number).sort((a, b) => a - b);
@@ -65,12 +70,15 @@
 
             const counts24 = {};
             const counts5 = {};
+            const counts6 = {};
             for (const r of records) {
                 if (!r.channel) continue;
                 if (r.band === "2.4") {
                     counts24[r.channel] = (counts24[r.channel] || 0) + 1;
                 } else if (r.band === "5") {
                     counts5[r.channel] = (counts5[r.channel] || 0) + 1;
+                } else if (r.band === "6") {
+                    counts6[r.channel] = (counts6[r.channel] || 0) + 1;
                 }
             }
 
@@ -90,6 +98,20 @@
                 chart5.data.datasets[0].data = d5.data;
                 chart5.data.datasets[0].backgroundColor = d5.colors;
                 chart5.update();
+            }
+
+            const d6 = buildChartData(counts6);
+            channels6 = d6.channels;
+            show6 = channels6.length > 0;
+            if (show6) {
+                if (chart6) {
+                    chart6.data.labels = d6.labels;
+                    chart6.data.datasets[0].data = d6.data;
+                    chart6.data.datasets[0].backgroundColor = d6.colors;
+                    chart6.update();
+                } else {
+                    pendingData6 = d6;
+                }
             }
         } catch (err) {
             if (!err?.isAbort) {
@@ -111,6 +133,23 @@
         });
     }
 
+    // canvas6 only exists in the DOM once show6 becomes true, so chart6 is
+    // created lazily once both the flag and the canvas are available.
+    $: if (show6 && canvas6 && !chart6) {
+        chart6 = initChart(canvas6, "6", () => channels6);
+        if (pendingData6) {
+            chart6.data.labels = pendingData6.labels;
+            chart6.data.datasets[0].data = pendingData6.data;
+            chart6.data.datasets[0].backgroundColor = pendingData6.colors;
+            chart6.update();
+            pendingData6 = null;
+        }
+    }
+    $: if (!show6 && chart6) {
+        chart6.destroy();
+        chart6 = null;
+    }
+
     onMount(() => {
         Chart.register(ArcElement, PieController, Tooltip, Legend);
         chart24 = initChart(canvas24, "2.4", () => channels24);
@@ -121,6 +160,7 @@
         return () => {
             chart24?.destroy();
             chart5?.destroy();
+            chart6?.destroy();
         };
     });
 </script>
@@ -137,6 +177,12 @@
         <div class="band-label">5 GHz</div>
         <canvas bind:this={canvas5} class="chart-canvas" />
     </div>
+    {#if show6}
+        <div class="band-chart">
+            <div class="band-label">6 GHz</div>
+            <canvas bind:this={canvas6} class="chart-canvas" />
+        </div>
+    {/if}
 </div>
 
 <style>

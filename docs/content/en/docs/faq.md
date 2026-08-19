@@ -36,3 +36,21 @@ No — this is a limitation of PocketBase. Collections can be **pinned** by clic
 In `Settings` > `Application` you need to enable `User IP proxy headers`.
 You might also need to configure your proxy to forward the necessary headers.
 More information can be found in [the pocketbase documentation](https://pocketbase.io/docs/going-to-production/#using-reverse-proxy).
+
+## When I enable option `X` my radios get disabled.
+
+Certain wifi options require `wpad` instead of `wpad-basic`. E.g usteer is one of these options. Details can be found on the [usteer page](/docs/usteer/).
+
+Also see [this post](https://forum.openwrt.org/t/wifi-disabled-when-i-use-80211k-option/211100) on the OpenWrt forum.
+
+You'll see this in `logread` too:
+
+
+```sh
+# logread | grep unknown
+Tue Aug 18 18:40:52 2026 daemon.err hostapd: Line 77: unknown configuration item 'proxy_arp'
+Tue Aug 18 18:40:52 2026 daemon.err hostapd: Line 78: unknown configuration item 'bss_transition'
+Tue Aug 18 18:40:52 2026 daemon.err hostapd: Line 79: unknown configuration item 'wnm_sleep_mode'
+Tue Aug 18 18:40:52 2026 daemon.err hostapd: Line 80: unknown configuration item 'wnm_sleep_mode_no_keys'
+
+```

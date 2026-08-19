@@ -22,6 +22,9 @@
     let channels6 = [];
     let show6 = false;
     let pendingData6 = null;
+    let legend24 = [];
+    let legend5 = [];
+    let legend6 = [];
 
     function buildChartData(channelCounts) {
         const channels = Object.keys(channelCounts).map(Number).sort((a, b) => a - b);
@@ -29,6 +32,13 @@
         const data = channels.map((c) => channelCounts[c]);
         const colors = channels.map((_, i) => PALETTE[i % PALETTE.length]);
         return { channels, labels, data, colors };
+    }
+
+    // The chart itself is drawn with the legend disabled (see makeChartOptions)
+    // so the pie always fills the whole, fixed-height canvas and lines up with
+    // the other bands. The legend is instead rendered as plain HTML below it.
+    function buildLegendItems(d) {
+        return d.labels.map((label, i) => ({ label, value: d.data[i], color: d.colors[i] }));
     }
 
     function makeOnClick(band, getChannels) {
@@ -47,10 +57,7 @@
             maintainAspectRatio: false,
             onClick: makeOnClick(band, getChannels),
             plugins: {
-                legend: {
-                    position: "bottom",
-                    labels: { color: "#617079", boxWidth: 12, padding: 12 },
-                },
+                legend: { display: false },
                 tooltip: {
                     callbacks: {
                         label: (ctx) => ` ${ctx.label}: ${ctx.parsed}`,
@@ -84,6 +91,7 @@
 
             const d24 = buildChartData(counts24);
             channels24 = d24.channels;
+            legend24 = buildLegendItems(d24);
             if (chart24) {
                 chart24.data.labels = d24.labels;
                 chart24.data.datasets[0].data = d24.data;
@@ -93,6 +101,7 @@
 
             const d5 = buildChartData(counts5);
             channels5 = d5.channels;
+            legend5 = buildLegendItems(d5);
             if (chart5) {
                 chart5.data.labels = d5.labels;
                 chart5.data.datasets[0].data = d5.data;
@@ -102,6 +111,7 @@
 
             const d6 = buildChartData(counts6);
             channels6 = d6.channels;
+            legend6 = buildLegendItems(d6);
             show6 = channels6.length > 0;
             if (show6) {
                 if (chart6) {
@@ -171,16 +181,46 @@
     {/if}
     <div class="band-chart">
         <div class="band-label">2.4 GHz</div>
-        <canvas bind:this={canvas24} class="chart-canvas" />
+        <div class="chart-canvas-wrap">
+            <canvas bind:this={canvas24} class="chart-canvas" />
+        </div>
+        <div class="chart-legend">
+            {#each legend24 as item}
+                <span class="legend-item">
+                    <span class="legend-swatch" style="background:{item.color}" />
+                    {item.label}: {item.value}
+                </span>
+            {/each}
+        </div>
     </div>
     <div class="band-chart">
         <div class="band-label">5 GHz</div>
-        <canvas bind:this={canvas5} class="chart-canvas" />
+        <div class="chart-canvas-wrap">
+            <canvas bind:this={canvas5} class="chart-canvas" />
+        </div>
+        <div class="chart-legend">
+            {#each legend5 as item}
+                <span class="legend-item">
+                    <span class="legend-swatch" style="background:{item.color}" />
+                    {item.label}: {item.value}
+                </span>
+            {/each}
+        </div>
     </div>
     {#if show6}
         <div class="band-chart">
             <div class="band-label">6 GHz</div>
-            <canvas bind:this={canvas6} class="chart-canvas" />
+            <div class="chart-canvas-wrap">
+                <canvas bind:this={canvas6} class="chart-canvas" />
+            </div>
+            <div class="chart-legend">
+                {#each legend6 as item}
+                    <span class="legend-item">
+                        <span class="legend-swatch" style="background:{item.color}" />
+                        {item.label}: {item.value}
+                    </span>
+                {/each}
+            </div>
         </div>
     {/if}
 </div>
@@ -189,9 +229,10 @@
     .channel-charts {
         position: relative;
         display: flex;
+        align-items: flex-start;
         gap: var(--baseSpacing);
         width: 100%;
-        height: 260px;
+        min-height: 260px;
     }
     .channel-charts.loading .chart-canvas {
         opacity: 0.5;
@@ -217,9 +258,35 @@
         color: var(--txtHintColor);
         margin-bottom: 4px;
     }
+    /* Fixed height (rather than flex:1) so every pie renders at the same
+       size and sits flush against the top of its column, regardless of
+       how many legend rows wrap below it. */
+    .chart-canvas-wrap {
+        position: relative;
+        width: 100%;
+        height: 180px;
+    }
     .chart-canvas {
         cursor: pointer;
-        flex: 1;
-        min-height: 0;
+    }
+    .chart-legend {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 4px 12px;
+        margin-top: 8px;
+        font-size: var(--smFontSize);
+        color: var(--txtHintColor);
+    }
+    .legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+    }
+    .legend-swatch {
+        width: 10px;
+        height: 10px;
+        border-radius: 2px;
+        flex-shrink: 0;
     }
 </style>

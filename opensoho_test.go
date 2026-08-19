@@ -5518,8 +5518,6 @@ config wifi-iface 'wifi_3_radio4'
 	w.Set("ieee80211r_reassoc_deadline", 0)
 	// and with 80211v enabled
 	w.Set("ieee80211v_bss_transition", true)
-	// usteer must be enabled for the 802.11v options to be emitted
-	w.Set("usteer", true)
 	err = app.Save(w)
 	// Verify the encryption defaults to WPA2
 	w.Set("encryption", "")
@@ -5543,9 +5541,6 @@ config wifi-iface 'wifi_3_radio4'
         option reassociation_deadline '1000'
         option time_advertisement '0'
         option time_zone ''
-        option wnm_sleep_mode '0'
-        option wnm_sleep_mode_no_keys '0'
-        option proxy_arp '0'
         option bss_transition '1'
         option dtim_period '1'
         option ft_over_ds '0'
@@ -5575,9 +5570,6 @@ config wifi-iface 'wifi_3_radio4'
         option reassociation_deadline '1000'
         option time_advertisement '0'
         option time_zone ''
-        option wnm_sleep_mode '0'
-        option wnm_sleep_mode_no_keys '0'
-        option proxy_arp '0'
         option bss_transition '1'
         option dtim_period '1'
         option ft_over_ds '0'
@@ -5613,9 +5605,6 @@ config wifi-iface 'wifi_3_radio4'
         option reassociation_deadline '1000'
         option time_advertisement '0'
         option time_zone ''
-        option wnm_sleep_mode '0'
-        option wnm_sleep_mode_no_keys '0'
-        option proxy_arp '0'
         option bss_transition '1'
         option dtim_period '1'
         option ft_over_ds '0'
@@ -5649,7 +5638,6 @@ config wifi-iface 'wifi_3_radio4'
         option time_zone ''
         option wnm_sleep_mode '1'
         option wnm_sleep_mode_no_keys '0'
-        option proxy_arp '0'
         option bss_transition '1'
         option dtim_period '1'
         option ft_over_ds '0'
@@ -5907,6 +5895,92 @@ func TestGenerateWifiConfigEncryptionOn6GHz(t *testing.T) {
 
 			wificonfig, _ := generateWifiConfig(wr, 3, 4, app, d, radioProxy)
 			assert.Contains(t, wificonfig, fmt.Sprintf("option encryption '%s'\n", s.expected))
+		})
+	}
+}
+
+// TestGenerateWifiConfig80211vOptions verifies that wnm_sleep_mode,
+// proxy_arp and bss_transition are each only written to the generated
+// UCI config when their corresponding field is enabled - independently
+// of one another and of usteer - since wpad-basic rejects them outright.
+func TestGenerateWifiConfig80211vOptions(t *testing.T) {
+	app, err := tests.NewTestApp()
+	defer app.Cleanup()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	clientcollection := setupClientsCollection(t, app)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	setupClientSteeringCollection(t, app, clientcollection, devicecollection, wificollection)
+	radiocollection := setupRadioCollection(t, app, devicecollection)
+
+	// Add a device
+	d := core.NewRecord(devicecollection)
+	d.Set("name", "the_device")
+	d.Set("health_status", "healthy")
+	err = app.Save(d)
+	assert.Equal(t, nil, err)
+
+	// Add a radio
+	radio := core.NewRecord(radiocollection)
+	radio.Set("device", d.Id)
+	radio.Set("radio", 4)
+	radio.Set("tx_power_mode", "auto")
+	err = app.Save(radio)
+	assert.Equal(t, nil, err)
+	radioProxy := records.NewRadio(radio)
+
+	scenarios := []struct {
+		name           string
+		wnmSleepMode   bool
+		proxyArp       bool
+		bssTransition  bool
+		wantWnmSleep   bool
+		wantProxyArp   bool
+		wantBssTransit bool
+	}{
+		{"all disabled", false, false, false, false, false, false},
+		{"wnm_sleep_mode only", true, false, false, true, false, false},
+		{"proxy_arp only", false, true, false, false, true, false},
+		{"bss_transition only", false, false, true, false, false, true},
+		{"all enabled", true, true, true, true, true, true},
+	}
+
+	for _, s := range scenarios {
+		t.Run(s.name, func(t *testing.T) {
+			w := core.NewRecord(wificollection)
+			w.Set("ssid", "the_ssid")
+			w.Set("key", "the_key")
+			w.Set("encryption", "psk2+ccmp")
+			w.Set("enabled", true)
+			w.Set("ieee80211r", true)
+			w.Set("ieee80211v_wnm_sleep_mode", s.wnmSleepMode)
+			w.Set("ieee80211v_proxy_arp", s.proxyArp)
+			w.Set("ieee80211v_bss_transition", s.bssTransition)
+			err = app.Save(w)
+			assert.Equal(t, nil, err)
+			wr := WifiRecord{Record: w}
+
+			wificonfig, _ := generateWifiConfig(wr, 3, 4, app, d, radioProxy)
+
+			if s.wantWnmSleep {
+				assert.Contains(t, wificonfig, "        option wnm_sleep_mode '1'\n")
+				assert.Contains(t, wificonfig, "        option wnm_sleep_mode_no_keys '0'\n")
+			} else {
+				assert.NotContains(t, wificonfig, "wnm_sleep_mode")
+			}
+
+			if s.wantProxyArp {
+				assert.Contains(t, wificonfig, "        option proxy_arp '1'\n")
+			} else {
+				assert.NotContains(t, wificonfig, "proxy_arp")
+			}
+
+			if s.wantBssTransit {
+				assert.Contains(t, wificonfig, "        option bss_transition '1'\n")
+			} else {
+				assert.NotContains(t, wificonfig, "bss_transition")
+			}
 		})
 	}
 }

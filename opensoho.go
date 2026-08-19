@@ -1206,19 +1206,24 @@ func generateWifiConfig(wifirecord WifiRecord, wifiid int, radio uint, app core.
 		disabled = 1
 	}
 
-	// Only enable usteer related options when enabled on the SSID
-	// If not wpad-basic rejects them which in turn disables the SSID/radio
-	usteerOptions := ""
-	if wifi.GetBool("usteer") {
-		usteerOptions = fmt.Sprintf(`        option wnm_sleep_mode '%d'
-        option wnm_sleep_mode_no_keys '0'
-        option proxy_arp '%d'
-        option bss_transition '%d'
-`,
-			wifi.GetInt("ieee80211v_wnm_sleep_mode"),
-			wifi.GetInt("ieee80211v_proxy_arp"),
-			wifi.GetInt("ieee80211v_bss_transition"))
+	// wnm_sleep_mode/proxy_arp/bss_transition are only understood by the
+	// "full" wpad packages - wpad-basic-* rejects them with "unknown
+	// configuration item", which in turn disables the SSID/radio. Only
+	// emit each option when it's enabled (i.e. not at its default 'off'
+	// value) so wpad-basic installs are unaffected unless the feature is
+	// actually turned on.
+	var v80211vOptions strings.Builder
+	if wifi.GetBool("ieee80211v_wnm_sleep_mode") {
+		v80211vOptions.WriteString("        option wnm_sleep_mode '1'\n")
+		v80211vOptions.WriteString("        option wnm_sleep_mode_no_keys '0'\n")
 	}
+	if wifi.GetBool("ieee80211v_proxy_arp") {
+		v80211vOptions.WriteString("        option proxy_arp '1'\n")
+	}
+	if wifi.GetBool("ieee80211v_bss_transition") {
+		v80211vOptions.WriteString("        option bss_transition '1'\n")
+	}
+	ieee80211vOptions := v80211vOptions.String()
 
 	return fmt.Sprintf(`
 config wifi-iface '%s'
@@ -1248,7 +1253,7 @@ config wifi-iface '%s'
 			wifi.GetInt("ieee80211r"),
 			rDeadLine,
 			vta_flag, vta_tz,
-			usteerOptions,
+			ieee80211vOptions,
 			dtim,
 			steeringconfig, clientpskconfig),
 		len(clientpskconfig) > 0

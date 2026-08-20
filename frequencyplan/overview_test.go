@@ -222,6 +222,34 @@ func TestBuildOverviewHtModeCapsWidth(t *testing.T) {
 	assert.Equal(t, []string{"Predator"}, refNames(g320.UnsupportedBy))
 }
 
+func TestBuildOverviewHtModeAllowsWifi7Width(t *testing.T) {
+	// A genuine Wi-Fi 7 device (EHT320 in its advertised htmodes) sharing the
+	// same 6 GHz 1-61 range as a Wifi 6E device (HE160-only):
+	// the 320 MHz block should be counted
+	// as actively supported by the Wi-Fi 7 device via deviceWidths, not just
+	// left available by the absence-of-flag/no-data fallbacks, and the two
+	// devices' capabilities must be judged independently within the same
+	// aggregate scope.
+	var freqs []Frequency
+	for i := 0; i < 16; i++ {
+		freqs = append(freqs,
+			Frequency{Device: "wifi6eap", Radio: 1, Frequency: 5955 + 20*i},
+			Frequency{Device: "wifi7ap", Radio: 0, Frequency: 5955 + 20*i},
+		)
+	}
+	htModes := []HtModes{
+		{Device: "wifi6eap", Radio: 1, Modes: []string{"HE20", "HE40", "HE80", "HE160"}},
+		{Device: "wifi7ap", Radio: 0, Modes: []string{"HE20", "HE40", "HE80", "HE160", "EHT20", "EHT40", "EHT80", "EHT160", "EHT320"}},
+	}
+	names := map[string]string{"wifi6eap": "Wifi6E-AP", "wifi7ap": "Wifi7-AP"}
+	ov := BuildOverview(nil, freqs, htModes, names)
+
+	g320 := blockAt(findTier(findBand(ov, "6"), 320), 0)
+	assert.Equal(t, "available", g320.State)
+	assert.Equal(t, []string{"Wifi7-AP"}, refNames(g320.SupportedBy))
+	assert.Equal(t, []string{"Wifi6E-AP"}, refNames(g320.UnsupportedBy))
+}
+
 func TestBuildOverviewNoHtModeDataUnconstrained(t *testing.T) {
 	// Same advertised channels as TestBuildOverviewHtModeCapsWidth, but no
 	// radio_ht_modes row yet (e.g. the device hasn't re-dumped since that

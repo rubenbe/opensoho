@@ -37,6 +37,24 @@ In `Settings` > `Application` you need to enable `User IP proxy headers`.
 You might also need to configure your proxy to forward the necessary headers.
 More information can be found in [the pocketbase documentation](https://pocketbase.io/docs/going-to-production/#using-reverse-proxy).
 
+## When registering a device I get error "curl exit code X"
+
+This exit code often gives a good indication of the root cause of the problem. For example:
+
+```
+daemon.err: openwisp: Failed to connect to controller during registration: curl exit code 6
+```
+
+Search online these "curl exit codes", or open the manpage of curl on your machine.
+
+e.g. exit code 6 means 
+
+```
+6      Could not resolve host. The given remote host could not be resolved.
+```
+
+Check your AP's DNS settings in that case. This can differ from the what your main router is distributing via DHCP.
+
 ## When I enable option `X` my radios get disabled.
 
 Certain wifi options require `wpad` instead of `wpad-basic`. E.g usteer is one of these options. Details can be found on the [usteer page](/docs/usteer/).

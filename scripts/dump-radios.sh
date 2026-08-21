@@ -1,9 +1,12 @@
 #!/bin/sh
 # OpenWISP hotplug script, deployed to /etc/hotplug.d/openwisp/opensoho on the target.
 # On end-of-cycle, builds a JSON object with a "radios" array (one entry per
-# UCI wifi-device, each with name / phy / disabled and the raw iwinfo info /
-# freqlist / txpowerlist) and atomically writes it to
+# UCI wifi-device, each with name / phy / band / radio_index / disabled and the
+# raw iwinfo info / freqlist / txpowerlist) and atomically writes it to
 # /tmp/openwisp/monitoring/000000_opensoho.json.gz.
+#
+# "radio_index" mirrors UCI's "radio" option,
+# present only when the wiphy advertises multiple radios.
 #
 # The raw ubus outputs are embedded verbatim (the server ignores fields it
 # doesn't know). To avoid rewriting the file when only runtime values change,
@@ -38,15 +41,30 @@ SUM=$STATE_DIR/dump-radios.md5
 
 mkdir -p "$STATE_DIR" "$OUT_DIR"
 
+# Cut the freqlist down to one band. Only applied when radio_index is set
+# (confirmed single-wiphy multi-radio, e.g. MT7996) - a plain switchable
+# single radio (band pinned, no "radio" option) keeps its full freqlist.
+scope_freqlist() {
+	case "$3" in
+		"") printf '%s' "$1"; return;;
+	esac
+	case "$2" in
+		2g|5g|6g|60g) ;;
+		*) printf '%s' "$1"; return;;
+	esac
+	ghz=${2%g}
+	rows=$(printf '%s' "$1" | jsonfilter -e "@.results[@.band=$ghz]" | tr '\n' ',' | sed 's/,$//')
+	printf '{"results":[%s]}' "$rows"
+}
+
 payload='{"type":"OpenSoho","radios":['
 sig=""
 sep=""
 for cfg in $(uci -q show wireless | sed -n 's/^wireless\.\(radio[0-9]*\)=wifi-device$/\1/p'); do
+	# Bands are required by single-phy multi-radio e.g. MT7996.
+	band=$(uci -q get wireless."$cfg".band)
+	ridx=$(uci -q get wireless."$cfg".radio)
 	cpath=$(uci -q get wireless."$cfg".path)
-	# Combo chips expose several bands as separate phys sharing one device
-	# path; OpenWrt disambiguates them with a "<path>+N" suffix. readlink strips
-	# the +N (all such phys resolve to the same base path), so match the base
-	# path and pick the Nth phy (0-based) among those that share it.
 	base=${cpath%+*}
 	offset=${cpath##*+}
 	case "$offset" in ""|*[!0-9]*) offset=0;; esac
@@ -63,17 +81,17 @@ for cfg in $(uci -q show wireless | sed -n 's/^wireless\.\(radio[0-9]*\)=wifi-de
 	done
 	[ -n "$phy" ] || continue
 	info=$(ubus call iwinfo info "{\"device\":\"$phy\"}")
-	freqs=$(ubus call iwinfo freqlist "{\"device\":\"$phy\"}")
+	freqs=$(scope_freqlist "$(ubus call iwinfo freqlist "{\"device\":\"$phy\"}")" "$band" "$ridx")
 	txpowers=$(ubus call iwinfo txpowerlist "{\"device\":\"$phy\"}")
 	disabled=$(uci -q get wireless."$cfg".disabled || echo 0)
 
 	# Embed the raw ubus outputs verbatim; the server ignores unknown fields.
-	payload="$payload$sep{\"name\":\"$cfg\",\"phy\":\"$phy\",\"disabled\":\"$disabled\",\"info\":$info,\"freqlist\":$freqs,\"txpowerlist\":$txpowers}"
+	payload="$payload$sep{\"name\":\"$cfg\",\"phy\":\"$phy\",\"band\":\"$band\",\"radio_index\":\"$ridx\",\"disabled\":\"$disabled\",\"info\":$info,\"freqlist\":$freqs,\"txpowerlist\":$txpowers}"
 	sep=","
 
 	# Signature: only the stable capability fields, so runtime values
 	# (info.channel/txpower, results[].active, ...) don't trigger a rewrite.
-	sig="$sig|$cfg|$disabled"
+	sig="$sig|$cfg|$band|$ridx|$disabled"
 	sig="$sig|$(echo "$info" | jsonfilter -e '@.country' -e '@.hwmodes[*]' -e '@.htmodes[*]')"
 	sig="$sig|$(echo "$freqs" | jsonfilter -e '@.results[*].channel' -e '@.results[*].mhz' -e '@.results[*].restricted' -e '@.results[*].flags[*]')"
 	sig="$sig|$(echo "$txpowers" | jsonfilter -e '@.results[*].dbm' -e '@.results[*].mw')"

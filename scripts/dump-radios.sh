@@ -1,12 +1,13 @@
 #!/bin/sh
 # OpenWISP hotplug script, deployed to /etc/hotplug.d/openwisp/opensoho on the target.
 # On end-of-cycle, builds a JSON object with a "radios" array (one entry per
-# UCI wifi-device, each with name / phy / band / radio_index / disabled and the
-# raw iwinfo info / freqlist / txpowerlist) and atomically writes it to
-# /tmp/openwisp/monitoring/000000_opensoho.json.gz.
+# UCI wifi-device, each with name / phy / ifname / band / radio_index /
+# disabled and the raw iwinfo info / freqlist / txpowerlist) and atomically
+# writes it to /tmp/openwisp/monitoring/000000_opensoho.json.gz.
 #
-# "radio_index" mirrors UCI's "radio" option,
-# present only when the wiphy advertises multiple radios.
+# "radio_index" mirrors UCI's "radio" option, present only when the wiphy
+# advertises multiple radios. "ifname" is the real interface iwinfo was
+# queried against - see radio_ifname()/radio_capability_from_board() below.
 #
 # The raw ubus outputs are embedded verbatim (the server ignores fields it
 # doesn't know). To avoid rewriting the file when only runtime values change,
@@ -41,6 +42,51 @@ SUM=$STATE_DIR/dump-radios.md5
 
 mkdir -p "$STATE_DIR" "$OUT_DIR"
 
+# Real per-radio interface names, so iwinfo can be queried per radio instead
+# of per (possibly shared) phy. Fetched once and cached.
+wireless_status=$(ubus call network.wireless status 2>/dev/null)
+
+# ifname of the first up interface on a UCI wifi-device section, or "" if the
+# radio is disabled/unconfigured.
+radio_ifname() {
+	printf '%s' "$wireless_status" | jsonfilter -e "@.$1.interfaces[0].ifname" 2>/dev/null
+}
+
+# Fallback to static boards.json
+board_json=$(cat /etc/board.json 2>/dev/null)
+
+radio_capability_from_board() {
+	phy=$1
+	ridx=$2
+	# Only meaningful on confirmed single-wiphy multi-radio hardware.
+	[ -n "$ridx" ] || return 1
+	[ -n "$board_json" ] || return 1
+
+	phy_info=$(printf '%s' "$board_json" | jsonfilter -e "@.wlan[\"$phy\"].info" 2>/dev/null)
+	[ -n "$phy_info" ] || return 1
+
+	radio=$(printf '%s' "$phy_info" | jsonfilter -e "@.radios[@.index=$ridx]" 2>/dev/null)
+	[ -n "$radio" ] || return 1
+
+	band_name=""
+	for b in 2G 5G 6G 60G; do
+		v=$(printf '%s' "$radio" | jsonfilter -e "@.bands[\"$b\"]" 2>/dev/null)
+		case "$v" in ""|false) ;; *) band_name=$b; break;; esac
+	done
+	[ -n "$band_name" ] || return 1
+
+	band=$(printf '%s' "$phy_info" | jsonfilter -e "@.bands[\"$band_name\"]" 2>/dev/null)
+	[ -n "$band" ] || return 1
+
+	# board.json already lists the exact supported modes per band.
+	# "NOHT" isn't a real htmode so it's dropped.
+	modes=$(printf '%s' "$band" | jsonfilter -e '@.modes[*]' 2>/dev/null | \
+		grep -v '^NOHT$' | sed 's/.*/"&"/' | tr '\n' ',' | sed 's/,$//')
+	[ -n "$modes" ] || return 1
+
+	printf '{"htmodes":[%s]}' "$modes"
+}
+
 # Cut the freqlist down to one band. Only applied when radio_index is set
 # (confirmed single-wiphy multi-radio, e.g. MT7996) - a plain switchable
 # single radio (band pinned, no "radio" option) keeps its full freqlist.
@@ -64,29 +110,28 @@ for cfg in $(uci -q show wireless | sed -n 's/^wireless\.\(radio[0-9]*\)=wifi-de
 	# Bands are required by single-phy multi-radio e.g. MT7996.
 	band=$(uci -q get wireless."$cfg".band)
 	ridx=$(uci -q get wireless."$cfg".radio)
-	cpath=$(uci -q get wireless."$cfg".path)
-	base=${cpath%+*}
-	offset=${cpath##*+}
-	case "$offset" in ""|*[!0-9]*) offset=0;; esac
-	phy=""
-	n=0
-	for p in $(find /sys/class/ieee80211 -maxdepth 1 -name 'phy*' 2>/dev/null | sort -V); do
-		[ -e "$p" ] || continue
-		rp=$(readlink -f "$p/device" 2>/dev/null)
-		case "$rp" in
-			*/$base)
-				[ "$n" = "$offset" ] && { phy=${p##*/}; break; }
-				n=$((n+1));;
-		esac
-	done
+
+	# Resolve the phy via iwinfo's own resolver.
+	phy=$(ubus call iwinfo phyname "{\"section\":\"$cfg\"}" 2>/dev/null | jsonfilter -e '@.phyname' 2>/dev/null)
 	[ -n "$phy" ] || continue
-	info=$(ubus call iwinfo info "{\"device\":\"$phy\"}")
-	freqs=$(scope_freqlist "$(ubus call iwinfo freqlist "{\"device\":\"$phy\"}")" "$band" "$ridx")
-	txpowers=$(ubus call iwinfo txpowerlist "{\"device\":\"$phy\"}")
+
+	# Prefer the real per-radio interface over the phy; falls back to the
+	# phy when the radio has no interface up yet.
+	ifname=$(radio_ifname "$cfg")
+	iwinfo_dev=${ifname:-$phy}
+
+	if [ -n "$ifname" ]; then
+		info=$(ubus call iwinfo info "{\"device\":\"$ifname\"}")
+	else
+		info=$(radio_capability_from_board "$phy" "$ridx")
+		[ -n "$info" ] || info=$(ubus call iwinfo info "{\"device\":\"$phy\"}")
+	fi
+	freqs=$(scope_freqlist "$(ubus call iwinfo freqlist "{\"device\":\"$iwinfo_dev\"}")" "$band" "$ridx")
+	txpowers=$(ubus call iwinfo txpowerlist "{\"device\":\"$iwinfo_dev\"}")
 	disabled=$(uci -q get wireless."$cfg".disabled || echo 0)
 
 	# Embed the raw ubus outputs verbatim; the server ignores unknown fields.
-	payload="$payload$sep{\"name\":\"$cfg\",\"phy\":\"$phy\",\"band\":\"$band\",\"radio_index\":\"$ridx\",\"disabled\":\"$disabled\",\"info\":$info,\"freqlist\":$freqs,\"txpowerlist\":$txpowers}"
+	payload="$payload$sep{\"name\":\"$cfg\",\"phy\":\"$phy\",\"ifname\":\"$ifname\",\"band\":\"$band\",\"radio_index\":\"$ridx\",\"disabled\":\"$disabled\",\"info\":$info,\"freqlist\":$freqs,\"txpowerlist\":$txpowers}"
 	sep=","
 
 	# Signature: only the stable capability fields, so runtime values

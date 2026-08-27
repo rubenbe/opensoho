@@ -6,15 +6,44 @@
 // https://github.com/openwrt/iwinfo/blob/66bdd1a071895d91babc9b9228bb84626bbce226/iwinfo_nl80211.c#L3341-L3418
 package htmodes
 
-import "sort"
+import (
+	"encoding/json"
+	"fmt"
+	"sort"
+)
+
+// CapPHY is a raw PHY capability element (NL80211_BAND_IFTYPE_ATTR_HE_CAP_PHY
+// / EHT_CAP_PHY). ucode's nl80211 module renders these DT_U8|DF_ARRAY
+// attributes as a JSON array of numbers, not the base64 string
+// encoding/json uses for a plain []byte.
+type CapPHY []byte
+
+func (c *CapPHY) UnmarshalJSON(data []byte) error {
+	if string(data) == "null" { // matches encoding/json's usual no-op for a null slice.
+		return nil
+	}
+	var nums []uint16
+	if err := json.Unmarshal(data, &nums); err != nil {
+		return err
+	}
+	b := make([]byte, len(nums))
+	for i, n := range nums {
+		if n > 0xff {
+			return fmt.Errorf("htmodes: byte %d out of range: %d", i, n)
+		}
+		b[i] = byte(n)
+	}
+	*c = b
+	return nil
+}
 
 // Capabilities holds the raw per-band nl80211 capability fields for a
-// single radio, exactly as reported over netlink.
+// single radio, as reported by scripts/dump-radios.uc's radio_caps().
 type Capabilities struct {
-	HTCapa    uint16 // NL80211_BAND_ATTR_HT_CAPA verbatim; 0 = absent.
-	VHTCapa   uint32 // NL80211_BAND_ATTR_VHT_CAPA verbatim; 0 = absent.
-	HECapPHY  []byte // NL80211_BAND_IFTYPE_ATTR_HE_CAP_PHY; only byte 0 is used.
-	EHTCapPHY []byte // NL80211_BAND_IFTYPE_ATTR_EHT_CAP_PHY; only byte 0 is used.
+	HTCapa    uint16 `json:"ht_capa"`     // NL80211_BAND_ATTR_HT_CAPA verbatim; 0 = absent.
+	VHTCapa   uint32 `json:"vht_capa"`    // NL80211_BAND_ATTR_VHT_CAPA verbatim; 0 = absent.
+	HECapPHY  CapPHY `json:"he_cap_phy"`  // only byte 0 is used.
+	EHTCapPHY CapPHY `json:"eht_cap_phy"` // only byte 0 is used.
 }
 
 // Modes returns the htmode values this radio supports on the given band

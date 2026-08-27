@@ -1,6 +1,7 @@
 package htmodes
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -8,10 +9,10 @@ import (
 
 func TestModes(t *testing.T) {
 	tests := []struct {
-		name  string
-		caps  Capabilities
-		band  string
-		want  []string
+		name string
+		caps Capabilities
+		band string
+		want []string
 	}{
 		{
 			// Capture from WRT3200ACM, cross-checked against
@@ -154,4 +155,46 @@ func TestModesIsDeterministic(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		assert.Equal(t, first, caps.Modes("6"), "Modes must return the same order every call")
 	}
+}
+
+// TestCapabilitiesUnmarshalJSON exercises the wire shape scripts/dump-radios.uc's
+// radio_caps() actually produces: ucode's nl80211 module renders HE/EHT PHY
+// capability elements as a JSON array of numbers, not base64.
+func TestCapabilitiesUnmarshalJSON(t *testing.T) {
+	t.Run("real capture - openwrt-garage radio0", func(t *testing.T) {
+		var c Capabilities
+		err := json.Unmarshal([]byte(`{"ht_capa":6255,"vht_capa":865827190}`), &c)
+		assert.NoError(t, err)
+		assert.Equal(t, Capabilities{HTCapa: 6255, VHTCapa: 865827190}, c)
+		assert.ElementsMatch(t, []string{"HT20", "HT40", "VHT20", "VHT40", "VHT80", "VHT160"}, c.Modes("5"))
+	})
+
+	t.Run("he_cap_phy is a number array, not base64", func(t *testing.T) {
+		var c Capabilities
+		err := json.Unmarshal([]byte(`{"he_cap_phy":[2,26,0,8,0,0,0,0,0]}`), &c)
+		assert.NoError(t, err)
+		assert.Equal(t, CapPHY{2, 26, 0, 8, 0, 0, 0, 0, 0}, c.HECapPHY)
+	})
+
+	t.Run("absent HE/EHT attributes decode to nil", func(t *testing.T) {
+		var c Capabilities
+		err := json.Unmarshal([]byte(`{"ht_capa":4591}`), &c)
+		assert.NoError(t, err)
+		assert.Nil(t, c.HECapPHY)
+		assert.Nil(t, c.EHTCapPHY)
+	})
+
+	t.Run("null HE/EHT attributes decode to nil", func(t *testing.T) {
+		var c Capabilities
+		err := json.Unmarshal([]byte(`{"ht_capa":4591,"he_cap_phy":null,"eht_cap_phy":null}`), &c)
+		assert.NoError(t, err)
+		assert.Nil(t, c.HECapPHY)
+		assert.Nil(t, c.EHTCapPHY)
+	})
+
+	t.Run("out-of-range byte value errors", func(t *testing.T) {
+		var c Capabilities
+		err := json.Unmarshal([]byte(`{"he_cap_phy":[2,300]}`), &c)
+		assert.Error(t, err)
+	})
 }

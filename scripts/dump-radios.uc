@@ -2,12 +2,16 @@
 // OpenWISP hotplug script, deployed to /etc/hotplug.d/openwisp/opensoho on
 // the target. On end-of-cycle, builds a JSON object with a "radios" array
 // (one entry per UCI wifi-device, each with name / phy / ifname / band /
-// radio_index / disabled and the raw iwinfo info / freqlist / txpowerlist)
-// and atomically writes it to /tmp/openwisp/monitoring/000000_opensoho.json.gz.
+// radio_index / disabled and the raw iwinfo info / freqlist / txpowerlist /
+// caps) and atomically writes it to
+// /tmp/openwisp/monitoring/000000_opensoho.json.gz.
 //
 // "radio_index" mirrors UCI's "radio" option, present only when the wiphy
 // advertises multiple radios. "ifname" is the real interface iwinfo was
-// queried against - see radio_ifname()/radio_capability_from_board() below.
+// queried against - see radio_ifname() below. "caps" is the raw per-band
+// nl80211 capability fields - see radio_caps() below - decoded server-side by
+// the htmodes Go package, since iwinfo's own htmode list is a whole-wiphy
+// union and wrong on a shared wiphy.
 //
 // The raw ubus outputs are embedded verbatim (the server ignores fields it
 // doesn't know). To avoid rewriting the file when only runtime values change,
@@ -23,6 +27,7 @@
 import * as fs from 'fs';
 import * as ucilib from 'uci';
 import * as libubus from 'ubus';
+import * as libnl from 'nl80211';
 import * as digest from 'digest';
 
 let debug = false, force = false;
@@ -58,47 +63,40 @@ function radio_ifname(cfg) {
 	return wireless_status[cfg]?.interfaces?.[0]?.ifname;
 }
 
-// Fallback for a disabled/unconfigured radio (no ifname): backfills htmodes
-// from /etc/board.json, the same per-radio data mac80211.uc used to write
-// this radio's "option band"/"option htmode" into UCI in the first place.
-// Static file, no interface needed.
-const board_raw = fs.readfile('/etc/board.json');
-const board = board_raw ? json(board_raw) : null;
+const BAND_IDX = { '2g': 0, '5g': 1, '6g': 2, '60g': 3 };
 
-function radio_capability_from_board(phy, ridx) {
-	// Only meaningful on confirmed single-wiphy multi-radio hardware.
-	if (ridx === null || ridx === '' || !board)
+// One GET_WIPHY dump for all phys, indexed by phy name. split_wiphy_dump is
+// required - without it the kernel's reply is truncated to a single wiphy.
+const nl = libnl.request(libnl.const.NL80211_CMD_GET_WIPHY, libnl.const.NLM_F_DUMP,
+	{ split_wiphy_dump: true }) ?? [];
+let wiphy = {};
+for (let p in nl)
+	if (p.wiphy_name && p.wiphy_bands)
+		wiphy[p.wiphy_name] = p;
+
+// Raw per-band capability fields for one radio, the input to the htmodes Go
+// package. wiphy_bands is sparse and indexed by nl80211 band enum, so an
+// object type() check is needed - a phy without that band has a null there.
+function radio_caps(phy, uciband) {
+	let b = wiphy[phy]?.wiphy_bands?.[BAND_IDX[uciband]];
+	if (type(b) != 'object')
 		return null;
 
-	let phy_info = board?.wlan?.[phy]?.info;
-	if (!phy_info)
-		return null;
+	let caps = {};
+	if (b.ht_capa != null)
+		caps.ht_capa = b.ht_capa;
+	if (b.vht_capa != null)
+		caps.vht_capa = b.vht_capa;
 
-	let radio = filter(phy_info.radios ?? [], r => r.index == ridx)[0];
-	if (!radio)
-		return null;
-
-	let band_name = null;
-	for (let b in ['2G', '5G', '6G', '60G']) {
-		if (radio.bands?.[b] != null) {
-			band_name = b;
-			break;
-		}
+	// AP is the iftype opensoho configures; fall back to the first entry.
+	let d = filter(b.iftype_data ?? [], e => e.iftypes?.ap)[0] ?? b.iftype_data?.[0];
+	if (d) {
+		if (d.he_cap_phy)
+			caps.he_cap_phy = d.he_cap_phy;
+		if (d.eht_cap_phy)
+			caps.eht_cap_phy = d.eht_cap_phy;
 	}
-	if (!band_name)
-		return null;
-
-	let band = phy_info.bands?.[band_name];
-	if (!band)
-		return null;
-
-	// board.json already lists the exact supported modes per band; "NOHT"
-	// isn't a real htmode so it's dropped.
-	let modes = filter(band.modes ?? [], m => m != 'NOHT');
-	if (!length(modes))
-		return null;
-
-	return { htmodes: modes };
+	return length(caps) ? caps : null;
 }
 
 // Cut the freqlist down to one band. Only applied when radio_index is set
@@ -134,12 +132,8 @@ for (let cfg, s in wireless) {
 	let ifname = radio_ifname(cfg);
 	let iwinfo_dev = ifname ?? phy;
 
-	let info;
-	if (ifname) {
-		info = ubus.call('iwinfo', 'info', { device: ifname }) ?? {};
-	} else {
-		info = radio_capability_from_board(phy, ridx) ?? ubus.call('iwinfo', 'info', { device: phy }) ?? {};
-	}
+	let info = ubus.call('iwinfo', 'info', { device: iwinfo_dev }) ?? {};
+	let caps = radio_caps(phy, band);
 	let freqs = scope_freqlist(ubus.call('iwinfo', 'freqlist', { device: iwinfo_dev }), band, ridx);
 	let txpowers = ubus.call('iwinfo', 'txpowerlist', { device: iwinfo_dev }) ?? {};
 	let disabled = s.disabled ?? '0';
@@ -152,6 +146,7 @@ for (let cfg, s in wireless) {
 		radio_index: ridx,
 		disabled: disabled,
 		info: info,
+		caps: caps,
 		freqlist: freqs,
 		txpowerlist: txpowers,
 	});
@@ -159,7 +154,7 @@ for (let cfg, s in wireless) {
 	// Signature: only the stable capability fields, so runtime values
 	// (info.channel/txpower, results[].active, ...) don't trigger a rewrite.
 	sig += sprintf('|%s|%s|%s|%s', cfg, band, ridx, disabled);
-	sig += sprintf('|%s|%J|%J', info.country ?? '', info.hwmodes ?? [], info.htmodes ?? []);
+	sig += sprintf('|%s|%J|%J|%J', info.country ?? '', info.hwmodes ?? [], info.htmodes ?? [], caps);
 	for (let f in freqs.results ?? [])
 		sig += sprintf('|%d|%d|%d|%J', f.channel, f.mhz, f.restricted ? 1 : 0, f.flags ?? []);
 	for (let p in txpowers.results ?? [])

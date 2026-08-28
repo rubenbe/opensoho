@@ -23,6 +23,41 @@ func TestModes(t *testing.T) {
 			want: []string{"HT20", "HT40", "VHT20", "VHT40", "VHT80", "VHT160"},
 		},
 		{
+			// Real capture: MT7996E 2.4 GHz radio (issue #59).
+			name: "BT8 MT7996E - 2.4 GHz radio (index 0)",
+			caps: Capabilities{
+				HTCapa:    0x9ff,
+				HECapPHY:  []byte{0x22, 0x70, 0x4e, 0x92, 0x0d, 0x01, 0xf3, 0x0e, 0x4e, 0x3f, 0x00},
+				EHTCapPHY: []byte{0xe8, 0x01, 0x01, 0x7e, 0x18, 0x60, 0x08, 0x12, 0x00},
+			},
+			band: "2.4",
+			want: []string{"HT20", "HT40", "HE20", "HE40", "EHT20", "EHT40"},
+		},
+		{
+			// Same device, 5 GHz radio.
+			name: "BT8 MT7996E - 5 GHz radio (index 1)",
+			caps: Capabilities{
+				HTCapa:    0x9ff,
+				VHTCapa:   0x339a79f6,
+				HECapPHY:  []byte{0x0c, 0x20, 0x4e, 0x92, 0x6f, 0x12, 0xaf, 0xd4, 0x00, 0x0c, 0x00},
+				EHTCapPHY: []byte{0xe8, 0x0d, 0x12, 0x7e, 0x28, 0x60, 0x18, 0x36, 0x00},
+			},
+			band: "5",
+			want: []string{"HT20", "HT40", "VHT20", "VHT40", "VHT80", "VHT160",
+				"HE20", "HE40", "HE80", "HE160", "EHT20", "EHT40", "EHT80", "EHT160"},
+		},
+		{
+			// Same device, 6 GHz radio - EHT320 despite max_width 160.
+			name: "BT8 MT7996E - 6 GHz radio (index 2)",
+			caps: Capabilities{
+				HECapPHY:  []byte{0x0c, 0x20, 0x4e, 0x92, 0x6f, 0x12, 0xaf, 0xd4, 0x00, 0x0c, 0x00},
+				EHTCapPHY: []byte{0xea, 0x6d, 0x92, 0x7e, 0x28, 0x60, 0x08, 0x7e, 0x00},
+			},
+			band: "6",
+			want: []string{"HE20", "HE40", "HE80", "HE160",
+				"EHT20", "EHT40", "EHT80", "EHT160", "EHT320"},
+		},
+		{
 			name: "no capabilities at all",
 			caps: Capabilities{},
 			band: "2.4",

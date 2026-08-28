@@ -1,3 +1,12 @@
+{{- if ne (int .Values.replicaCount) 1 }}
+{{- fail "replicaCount must be 1 because OpenSOHO uses a single PocketBase database" }}
+{{- end }}
+{{- if and .Values.sharedSecret.value .Values.sharedSecret.existingSecret }}
+{{- fail "set only one of sharedSecret.value or sharedSecret.existingSecret" }}
+{{- end }}
+{{- if hasKey .Values.env "OPENSOHO_SHARED_SECRET" }}
+{{- fail "configure OPENSOHO_SHARED_SECRET through sharedSecret, not env" }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -5,9 +14,7 @@ metadata:
   labels:
     {{- include "opensoho.labels" . | nindent 4 }}
 spec:
-  {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
-  {{- end }}
   selector:
     matchLabels:
       {{- include "opensoho.selectorLabels" . | nindent 6 }}
@@ -27,6 +34,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "opensoho.serviceAccountName" . }}
+      automountServiceAccountToken: false
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
@@ -40,6 +48,11 @@ spec:
               containerPort: {{ .Values.service.targetPort }}
               protocol: TCP
           env:
+            - name: OPENSOHO_SHARED_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "opensoho.sharedSecretName" . }}
+                  key: {{ include "opensoho.sharedSecretKey" . | quote }}
             {{- range $key, $value := .Values.env }}
             - name: {{ $key }}
               value: {{ $value | quote }}
@@ -97,4 +110,3 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-

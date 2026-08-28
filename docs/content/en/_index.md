@@ -26,6 +26,7 @@ Compatible with <strong>openwisp-config</strong> and <strong>openwisp-monitoring
   <ul class="mt-3">
     <li>Wifi SSID and encryption management</li>
     <li>VLAN configuration across all devices</li>
+    <li>Static DHCP reservations</li>
     <li>Radio frequency tuning</li>
     <li>LED control</li>
     <li>Real-time device health monitoring</li>

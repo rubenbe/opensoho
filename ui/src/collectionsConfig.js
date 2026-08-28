@@ -20,7 +20,7 @@ export default [
     },
     {
         name: "Network",
-        items: ["bridges", "ethernet", "dhcp_leases", "lldp"],
+        items: ["bridges", "ethernet", "dhcp_reservations", "dhcp_leases", "lldp"],
     },
     {
         name: "VLAN",

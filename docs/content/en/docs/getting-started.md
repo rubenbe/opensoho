@@ -98,6 +98,14 @@ Connected OpenWRT devices.
 * **Numradios** — number of radios on the device; must be set manually.
 * **Name** — a human-friendly label (e.g. `Office Router`). It is automatically rewritten to a valid hostname in the uci config (spaces and underscores become hyphens, Unicode is transliterated to ASCII (e.g. `büro` → `buro`).
 
+### DHCP Reservations
+
+Create an entry with a hostname, MAC address, IPv4 address, and one or more
+DHCP servers. OpenSOHO adds the same static `config host` section to
+`/etc/config/dhcp` on every selected server. Clear the DHCP server selection to
+disable the reservation without deleting it. Reservation names, MAC addresses,
+and IP addresses must be unique.
+
 ### Radios
 
 Set the frequency for each radio. Do not modify the band field.

@@ -63,3 +63,20 @@ Request a new token before the old one expires:
 curl -X POST -H "Authorization: OLDTOKEN" \
   http://192.168.1.1:8090/api/collections/api_users/auth-refresh
 ```
+
+## MQTT: PoE Power Sensors
+
+OpenSOHO can also publish per-port PoE power consumption to Home Assistant
+via MQTT (using autodiscovery). Only live readings are published.
+
+Add these rows to the `settings` collection:
+
+| name            | value                        |
+|-----------------|-------------------------------|
+| `mqtt_enabled`  | `true`                        |
+| `mqtt_broker`   | `tcp://broker-host:1883`      |
+| `mqtt_username` | *(optional)*                  |
+| `mqtt_password` | *(optional)*                  |
+
+OpenSOHO connects to the broker and for each PoE-capable device publishes a power sensor.
+Since there is autodiscovery, devices appear automatically.

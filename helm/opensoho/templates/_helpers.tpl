@@ -6,6 +6,20 @@ Expand the name of the chart.
 {{- end }}
 
 {{/*
+Name of the Secret containing the device registration shared secret.
+*/}}
+{{- define "opensoho.sharedSecretName" -}}
+{{- default (include "opensoho.fullname" .) .Values.sharedSecret.existingSecret }}
+{{- end }}
+
+{{/*
+Key in the Secret containing the device registration shared secret.
+*/}}
+{{- define "opensoho.sharedSecretKey" -}}
+{{- default "OPENSOHO_SHARED_SECRET" .Values.sharedSecret.existingSecretKey }}
+{{- end }}
+
+{{/*
 Create a default fully qualified app name.
 We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
 If release name contains chart name it will be used as a full name.
@@ -60,4 +74,3 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
-

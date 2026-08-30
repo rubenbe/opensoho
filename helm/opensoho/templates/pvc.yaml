@@ -5,6 +5,10 @@ metadata:
   name: {{ include "opensoho.fullname" . }}-data
   labels:
     {{- include "opensoho.labels" . | nindent 4 }}
+  {{- if .Values.persistence.resourcePolicyKeep }}
+  annotations:
+    helm.sh/resource-policy: keep
+  {{- end }}
 spec:
   accessModes:
     - {{ .Values.persistence.accessMode }}
@@ -15,4 +19,3 @@ spec:
   storageClassName: {{ .Values.persistence.storageClass }}
   {{- end }}
 {{- end }}
-

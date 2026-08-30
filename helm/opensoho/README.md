@@ -10,10 +10,15 @@ This Helm chart deploys OpenSoho, an OpenWrt management platform built on Pocket
 
 ## Installing the Chart
 
-To install the chart with the release name `my-opensoho`:
+To install the chart with the release name `my-opensoho`, first create a long
+random device registration secret:
 
 ```bash
-helm install my-opensoho ./helm/opensoho
+kubectl create secret generic opensoho-registration \
+  --from-literal=OPENSOHO_SHARED_SECRET="$(openssl rand -hex 32)"
+
+helm install my-opensoho ./helm/opensoho \
+  --set sharedSecret.existingSecret=opensoho-registration
 ```
 
 The command deploys OpenSoho on the Kubernetes cluster in the default configuration. The [Parameters](#parameters) section lists the parameters that can be configured during installation.
@@ -28,7 +33,9 @@ To uninstall/delete the `my-opensoho` deployment:
 helm delete my-opensoho
 ```
 
-The command removes all the Kubernetes components associated with the chart and deletes the release.
+The command removes the Kubernetes components associated with the release. By
+default, the PocketBase PVC is retained to prevent accidental data loss. Delete
+it manually only after taking a backup.
 
 ## Parameters
 
@@ -43,7 +50,7 @@ The command removes all the Kubernetes components associated with the chart and 
 
 | Name                | Description                                                                 | Value          |
 | ------------------- | --------------------------------------------------------------------------- | -------------- |
-| `image.repository`  | OpenSoho image repository                                                   | `opensoho`     |
+| `image.repository`  | OpenSoho image repository                                                   | `ghcr.io/opensoho/opensoho` |
 | `image.tag`         | OpenSoho image tag (immutable tags are recommended)                        | `""`           |
 | `image.pullPolicy`  | OpenSoho image pull policy                                                  | `IfNotPresent` |
 
@@ -51,11 +58,11 @@ The command removes all the Kubernetes components associated with the chart and 
 
 | Name                                    | Description                                                                                                                      | Value           |
 | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | --------------- |
-| `replicaCount`                          | Number of OpenSoho replicas to deploy                                                                                           | `1`             |
+| `replicaCount`                          | Number of OpenSoho replicas to deploy; PocketBase requires this to remain `1`                                                   | `1`             |
 | `podAnnotations`                        | Annotations for OpenSoho pods                                                                                                   | `{}`            |
 | `podSecurityContext`                    | Security context for OpenSoho pods                                                                                              | `{}`            |
 | `securityContext`                       | Security context for OpenSoho containers                                                                                        | `{}`            |
-| `serviceAccount.create`                 | Specifies whether a service account should be created                                                                            | `true`          |
+| `serviceAccount.create`                 | Specifies whether a service account should be created                                                                            | `false`         |
 | `serviceAccount.annotations`            | Annotations to add to the service account                                                                                        | `{}`            |
 | `serviceAccount.name`                   | The name of the service account to use                                                                                          | `""`            |
 
@@ -83,11 +90,6 @@ The command removes all the Kubernetes components associated with the chart and 
 | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------- |
 | `resources.limits`         | The resources limits for the OpenSoho containers                                                                                | `{}`    |
 | `resources.requests`       | The requested resources for the OpenSoho containers                                                                             | `{}`    |
-| `autoscaling.enabled`      | Enable Horizontal POD autoscaling for OpenSoho                                                                                 | `false` |
-| `autoscaling.minReplicas`  | Minimum number of OpenSoho replicas                                                                                             | `1`     |
-| `autoscaling.maxReplicas`  | Maximum number of OpenSoho replicas                                                                                             | `100`   |
-| `autoscaling.targetCPUUtilizationPercentage` | Target CPU utilization percentage                                                                                    | `80`    |
-
 ### Storage parameters
 
 | Name                        | Description                                                                                                                      | Value   |
@@ -96,13 +98,17 @@ The command removes all the Kubernetes components associated with the chart and 
 | `persistence.storageClass`  | Persistent Volume storage class                                                                                                 | `""`    |
 | `persistence.accessMode`    | Persistent Volume access mode                                                                                                   | `ReadWriteOnce` |
 | `persistence.size`          | Persistent Volume size                                                                                                          | `10Gi`  |
-| `persistence.mountPath`     | Mount path for persistent data                                                                                                  | `/app/pb_data` |
+| `persistence.mountPath`     | Mount path for persistent data                                                                                                  | `/ko-app/pb_data` |
+| `persistence.resourcePolicyKeep` | Retain the PVC when the Helm release is uninstalled                                                                        | `true` |
 
-### Environment parameters
+### Authentication and environment parameters
 
 | Name                        | Description                                                                                                                      | Value   |
 | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------- |
-| `env.OPENSOHO_SHARED_SECRET` | OpenSoho shared secret for authentication                                                                                      | `testtest` |
+| `sharedSecret.value` | Device registration secret stored in a chart-managed Kubernetes Secret | `""` |
+| `sharedSecret.existingSecret` | Name of an existing Kubernetes Secret | `""` |
+| `sharedSecret.existingSecretKey` | Key containing the registration secret | `OPENSOHO_SHARED_SECRET` |
+| `env` | Additional non-secret environment variables | `{}` |
 
 ### Health check parameters
 
@@ -113,20 +119,31 @@ The command removes all the Kubernetes components associated with the chart and 
 
 ## Configuration and installation details
 
+### Use an existing Secret
+
+Instead of putting the registration secret in Helm values, create a Secret and
+reference it:
+
+```bash
+kubectl create secret generic opensoho-registration \
+  --from-literal=OPENSOHO_SHARED_SECRET="$(openssl rand -hex 32)"
+
+helm install my-opensoho ./helm/opensoho \
+  --set sharedSecret.existingSecret=opensoho-registration
+```
+
 ### Additional environment variables
 
 You can add more environment variables using the `env` section in `values.yaml`:
 
 ```yaml
 env:
-  OPENSOHO_SHARED_SECRET: "your-secret-here"
-  # Add other environment variables as needed
   CUSTOM_VAR: "value"
 ```
 
 ### Persistence
 
-The chart mounts a [Persistent Volume](http://kubernetes.io/docs/user-guide/persistent-volumes/) at the `/app/pb_data` path. The volume is created using dynamic volume provisioning.
+The chart mounts a [Persistent Volume](https://kubernetes.io/docs/concepts/storage/persistent-volumes/) at `/ko-app/pb_data`. The volume is created using dynamic volume provisioning and retained on uninstall by default. Back up this volume before upgrading OpenSOHO.
 
 ### Ingress
 
@@ -137,15 +154,16 @@ This chart provides support for Ingress resources. If you have an available Ingr
 ### Basic installation
 
 ```bash
-helm install my-opensoho ./helm/opensoho
+helm install my-opensoho ./helm/opensoho \
+  --set sharedSecret.existingSecret=opensoho-registration
 ```
 
 ### Installation with custom values
 
 ```bash
 helm install my-opensoho ./helm/opensoho \
-  --set image.tag=v1.0.0 \
-  --set env.OPENSOHO_SHARED_SECRET=my-secret \
+  --set image.tag=v0.15.0 \
+  --set sharedSecret.existingSecret=opensoho-registration \
   --set service.type=LoadBalancer \
   --set ingress.enabled=true
 ```
@@ -179,4 +197,3 @@ kubectl get svc -l app.kubernetes.io/name=opensoho
 ## License
 
 This chart is licensed under the same license as the OpenSoho project.
-

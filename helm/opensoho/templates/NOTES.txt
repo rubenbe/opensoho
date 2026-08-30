@@ -22,7 +22,7 @@
 {{- end }}
 
 2. OpenSoho is now running with the following configuration:
-   - Shared Secret: {{ .Values.env.OPENSOHO_SHARED_SECRET }}
+   - Device registration secret: configured from Kubernetes Secret {{ include "opensoho.sharedSecretName" . }}
    - Port: {{ .Values.service.port }}
    - Persistent Storage: {{ if .Values.persistence.enabled }}Enabled ({{ .Values.persistence.size }}){{ else }}Disabled{{ end }}
 
@@ -35,4 +35,3 @@
 
 5. To view logs:
    kubectl logs -l app.kubernetes.io/name={{ include "opensoho.name" . }} -l app.kubernetes.io/instance={{ .Release.Name }}
-

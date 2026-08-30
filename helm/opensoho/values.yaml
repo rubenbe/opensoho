@@ -16,7 +16,7 @@ fullnameOverride: ""
 
 serviceAccount:
   # Specifies whether a service account should be created
-  create: true
+  create: false
   # Annotations to add to the service account
   annotations: {}
   # The name of the service account to use.
@@ -27,8 +27,11 @@ podAnnotations: {}
 
 podSecurityContext:
   fsGroup: 1001
+  seccompProfile:
+    type: RuntimeDefault
 
 securityContext:
+  allowPrivilegeEscalation: false
   capabilities:
     drop:
     - ALL
@@ -65,23 +68,20 @@ resources:
     cpu: 250m
     memory: 256Mi
 
-autoscaling:
-  enabled: false
-  minReplicas: 1
-  maxReplicas: 100
-  targetCPUUtilizationPercentage: 80
-  # targetMemoryUtilizationPercentage: 80
-
 nodeSelector: {}
 
 tolerations: []
 
 affinity: {}
 
-# Environment variables
-env:
-  OPENSOHO_SHARED_SECRET: "testtest"
-  # Add other environment variables as needed
+# Device registration secret. Set exactly one of value or existingSecret.
+sharedSecret:
+  value: ""
+  existingSecret: ""
+  existingSecretKey: OPENSOHO_SHARED_SECRET
+
+# Additional non-secret environment variables.
+env: {}
 
 # Persistent volume for data storage
 persistence:
@@ -91,6 +91,8 @@ persistence:
   size: 10Gi
   # Mount path for persistent data
   mountPath: /ko-app/pb_data
+  # Keep the PocketBase database when the Helm release is uninstalled.
+  resourcePolicyKeep: true
 
 # Health checks
 healthCheck:
@@ -109,4 +111,3 @@ livenessProbe:
   timeoutSeconds: 5
   failureThreshold: 3
   successThreshold: 1
-

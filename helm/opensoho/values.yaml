@@ -94,20 +94,27 @@ persistence:
   # Keep the PocketBase database when the Helm release is uninstalled.
   resourcePolicyKeep: true
 
-# Health checks
+# readinessProbe, should traffic go to this replica?
 healthCheck:
   enabled: true
-  initialDelaySeconds: 30
   periodSeconds: 10
   timeoutSeconds: 5
   failureThreshold: 3
   successThreshold: 1
 
-# Liveness probe
+# Liveness probe, should we kill this replica?
 livenessProbe:
   enabled: true
-  initialDelaySeconds: 30
   periodSeconds: 10
   timeoutSeconds: 5
   failureThreshold: 3
+  successThreshold: 1
+
+# Startup probe, is this replica ready for service?
+startupProbe:
+  enabled: true
+  periodSeconds: 10
+  timeoutSeconds: 5
+  # 30 * 10 => 5 minutes to start up, before giving up
+  failureThreshold: 30
   successThreshold: 1

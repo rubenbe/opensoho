@@ -16,7 +16,7 @@
 # uploads-and-removes files in lexical (≈ within-day chronological) order, a
 # "now" name sorts after the in-flight collect files and is therefore evaluated
 # when it is the only file left, so the agent stamps the upload with
-# `&current=true`. See scripts/dump-radios.sh for the sibling radios dump.
+# `&current=true`. See scripts/dump-radios.uc for the sibling radios dump.
 #
 # -d (or --debug / --stdout) to print the JSON payload to stdout and skip
 # the file write, for debugging. This also bypasses the ACTION check.

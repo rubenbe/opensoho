@@ -24,6 +24,7 @@ import (
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"github.com/liyue201/goqr"
 	"github.com/pocketbase/dbx"
+	"github.com/rubenbe/opensoho/htmodes"
 	"github.com/rubenbe/opensoho/lldp"
 	"github.com/rubenbe/opensoho/records"
 	"github.com/rubenbe/pocketbase/core"
@@ -2777,7 +2778,7 @@ func TestUpdateMonitoringEmptyBody(t *testing.T) {
 	assert.Equal(t, "", string(body))
 }
 
-// Verify the OpenSoho radio dump (scripts/dump-radios.sh) is accepted and
+// Verify the OpenSoho radio dump (scripts/dump-radios.uc) is accepted and
 // parsed by the monitoring endpoint.
 func TestUpdateMonitoringOpenSoho(t *testing.T) {
 	json := `
@@ -3058,9 +3059,10 @@ func TestUpdateRadiosOnOpenSOHOData(t *testing.T) {
 // Verify the OpenSoho payload decodes into the expected struct shape.
 func TestParseOpenSohoData(t *testing.T) {
 	payload := `{"type":"OpenSoho","radios":[` +
-		`{"name":"radio0","phy":"phy0","disabled":"0",` +
+		`{"name":"radio0","phy":"phy0","band":"5g","radio_index":"0","disabled":"0",` +
 		`"info":{"channel":36,"frequency":5180,"txpower":23,"country":"BE",` +
 		`"hwmodes":["a","n","ac"],"htmodes":["HT20","VHT80"]},` +
+		`"caps":{"ht_capa":6255,"vht_capa":865827190},` +
 		`"freqlist":{"results":[{"channel":36,"mhz":5180,"restricted":false},` +
 		`{"channel":52,"mhz":5260,"restricted":true}]},` +
 		`"txpowerlist":{"results":[{"dbm":0,"mw":1},{"dbm":23,"mw":199}]}}]}`
@@ -3074,6 +3076,8 @@ func TestParseOpenSohoData(t *testing.T) {
 	r := data.Radios[0]
 	assert.Equal(t, "radio0", r.Name)
 	assert.Equal(t, "phy0", r.Phy)
+	assert.Equal(t, "5g", r.Band)
+	assert.Equal(t, "0", r.RadioIndex)
 	assert.Equal(t, "0", r.Disabled)
 	assert.Equal(t, 36, r.Info.Channel)
 	assert.Equal(t, 5180, r.Info.Frequency)
@@ -3081,12 +3085,31 @@ func TestParseOpenSohoData(t *testing.T) {
 	assert.Equal(t, "BE", r.Info.Country)
 	assert.Equal(t, []string{"a", "n", "ac"}, r.Info.HwModes)
 	assert.Equal(t, []string{"HT20", "VHT80"}, r.Info.HtModes)
+	if assert.NotNil(t, r.Caps) {
+		assert.Equal(t, htmodes.Capabilities{HTCapa: 6255, VHTCapa: 865827190}, *r.Caps)
+	}
 	assert.Equal(t, 2, len(r.FreqList.Results))
 	assert.Equal(t, 52, r.FreqList.Results[1].Channel)
 	assert.Equal(t, true, r.FreqList.Results[1].Restricted)
 	assert.Equal(t, 2, len(r.TxPowerList.Results))
 	assert.Equal(t, 23, r.TxPowerList.Results[1].Dbm)
 	assert.Equal(t, 199, r.TxPowerList.Results[1].Mw)
+}
+
+// A payload missing "caps"/"band" (e.g. a mid-rollout device still running
+// the previous agent) must decode cleanly with Caps left nil, not error.
+func TestParseOpenSohoDataNoCaps(t *testing.T) {
+	payload := `{"type":"OpenSoho","radios":[` +
+		`{"name":"radio0","phy":"phy0","disabled":"0",` +
+		`"info":{"channel":36,"frequency":5180,"txpower":23,"country":"BE",` +
+		`"htmodes":["HT20","VHT80"]}}]}`
+
+	var data OpenSohoData
+	assert.Nil(t, json.Unmarshal([]byte(payload), &data))
+	r := data.Radios[0]
+	assert.Equal(t, "", r.Band)
+	assert.Nil(t, r.Caps)
+	assert.Equal(t, []string{"HT20", "VHT80"}, radioHtModes(r))
 }
 
 func TestParseOpenSohoDataIgnoresUnknownFlags(t *testing.T) {
@@ -3147,6 +3170,32 @@ func TestRadioBands(t *testing.T) {
 
 	// An empty frequency list yields an empty (non-nil) slice.
 	assert.Equal(t, []string{}, radioBands(OpenSohoRadio{}))
+}
+
+func TestRadioHtModes(t *testing.T) {
+	caps := &htmodes.Capabilities{HTCapa: 6255, VHTCapa: 865827190}
+
+	// Caps decodes per-band, ignoring Info.HtModes' whole-wiphy union.
+	radio := OpenSohoRadio{Band: "5g", Caps: caps}
+	radio.Info.HtModes = []string{"HT20", "HE20", "EHT20"}
+	assert.ElementsMatch(t, []string{"HT20", "HT40", "VHT20", "VHT40", "VHT80", "VHT160"}, radioHtModes(radio))
+
+	// No Caps: fall back to Info.HtModes.
+	radio = OpenSohoRadio{Band: "5g"}
+	radio.Info.HtModes = []string{"HT20", "HT40"}
+	assert.Equal(t, []string{"HT20", "HT40"}, radioHtModes(radio))
+
+	// Caps present but no (or unresolvable) band: fall back too, rather than
+	// guessing or crashing.
+	radio = OpenSohoRadio{Caps: caps}
+	radio.Info.HtModes = []string{"HT20", "HT40"}
+	assert.Equal(t, []string{"HT20", "HT40"}, radioHtModes(radio))
+
+	// Caps decode to nothing (all-zero capability fields): fall back rather
+	// than reporting no modes at all.
+	radio = OpenSohoRadio{Band: "5g", Caps: &htmodes.Capabilities{}}
+	radio.Info.HtModes = []string{"HT20", "HT40"}
+	assert.Equal(t, []string{"HT20", "HT40"}, radioHtModes(radio))
 }
 
 const realOpenSohoPayload = `{"type":"OpenSoho","poe":{
@@ -3471,6 +3520,72 @@ func TestHandleOpenSohoMonitoring(t *testing.T) {
 	htrecs, err = app.FindAllRecords("radio_ht_modes", dbx.HashExp{"device": d.Id, "radio": 0})
 	assert.Nil(t, err)
 	assert.Empty(t, htrecs)
+}
+
+// On single-wiphy multi-radio hardware (issue #59), all radios on the wiphy
+// report the same Info.HtModes union. Each radio's "caps" decodes a
+// different, correctly band-scoped list instead.
+func TestHandleOpenSohoMonitoringSharedWiphyCaps(t *testing.T) {
+	app, err := tests.NewTestApp()
+	assert.Nil(t, err)
+	defer app.Cleanup()
+
+	devicecollection := core.NewBaseCollection("devices")
+	assert.Nil(t, app.Save(devicecollection))
+	setupRadioFrequenciesCollection(t, app, devicecollection)
+	setupRadioTxPowersCollection(t, app, devicecollection)
+	setupRadioHtModesCollection(t, app, devicecollection)
+
+	d := core.NewRecord(devicecollection)
+	assert.Nil(t, app.Save(d))
+
+	// iwinfo folds all three bands of the shared phy0 into one union.
+	wiphyUnion := []string{"HT20", "HT40", "VHT20", "VHT40", "VHT80", "VHT160",
+		"HE20", "HE40", "HE80", "HE160", "EHT20", "EHT40", "EHT80", "EHT160", "EHT320"}
+
+	radio0 := OpenSohoRadio{Name: "radio0", Phy: "phy0", Band: "2g"}
+	radio0.Info.HtModes = wiphyUnion
+	radio0.Caps = &htmodes.Capabilities{
+		HTCapa:    0x9ff,
+		HECapPHY:  []byte{0x22, 0x70, 0x4e, 0x92, 0x0d, 0x01, 0xf3, 0x0e, 0x4e, 0x3f, 0x00},
+		EHTCapPHY: []byte{0xe8, 0x01, 0x01, 0x7e, 0x18, 0x60, 0x08, 0x12, 0x00},
+	}
+
+	radio1 := OpenSohoRadio{Name: "radio1", Phy: "phy0", Band: "5g"}
+	radio1.Info.HtModes = wiphyUnion
+	radio1.Caps = &htmodes.Capabilities{
+		HTCapa:    0x9ff,
+		VHTCapa:   0x339a79f6,
+		HECapPHY:  []byte{0x0c, 0x20, 0x4e, 0x92, 0x6f, 0x12, 0xaf, 0xd4, 0x00, 0x0c, 0x00},
+		EHTCapPHY: []byte{0xe8, 0x0d, 0x12, 0x7e, 0x28, 0x60, 0x18, 0x36, 0x00},
+	}
+
+	radio2 := OpenSohoRadio{Name: "radio2", Phy: "phy0", Band: "6g"}
+	radio2.Info.HtModes = wiphyUnion
+	radio2.Caps = &htmodes.Capabilities{
+		HECapPHY:  []byte{0x0c, 0x20, 0x4e, 0x92, 0x6f, 0x12, 0xaf, 0xd4, 0x00, 0x0c, 0x00},
+		EHTCapPHY: []byte{0xea, 0x6d, 0x92, 0x7e, 0x28, 0x60, 0x08, 0x7e, 0x00},
+	}
+
+	data := OpenSohoData{Type: "OpenSoho", Radios: []OpenSohoRadio{radio0, radio1, radio2}}
+	handleOpenSohoMonitoring(app, d, data, false)
+
+	get := func(idx int) []string {
+		recs, err := app.FindAllRecords("radio_ht_modes", dbx.HashExp{"device": d.Id, "radio": idx})
+		assert.Nil(t, err)
+		if !assert.Equal(t, 1, len(recs)) {
+			return nil
+		}
+		return recs[0].GetStringSlice("ht_modes")
+	}
+
+	assert.ElementsMatch(t, []string{"HT20", "HT40", "HE20", "HE40", "EHT20", "EHT40"}, get(0))
+	assert.ElementsMatch(t, []string{"HT20", "HT40", "VHT20", "VHT40", "VHT80", "VHT160",
+		"HE20", "HE40", "HE80", "HE160", "EHT20", "EHT40", "EHT80", "EHT160"}, get(1))
+	// 6 GHz: no HT20 despite the shared union carrying it, and EHT320 that the
+	// union's max_width-160 summary can't express.
+	assert.ElementsMatch(t, []string{"HE20", "HE40", "HE80", "HE160",
+		"EHT20", "EHT40", "EHT80", "EHT160", "EHT320"}, get(2))
 }
 
 func TestUpdateInterface(t *testing.T) {

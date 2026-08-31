@@ -39,6 +39,7 @@ import (
 	//"github.com/rubenbe/pocketbase/plugins/ghupdate"
 	"github.com/reugn/wifiqr"
 	"github.com/rubenbe/opensoho/frequencyplan"
+	"github.com/rubenbe/opensoho/htmodes"
 	"github.com/rubenbe/opensoho/lldp"
 	"github.com/rubenbe/opensoho/mqtt"
 	"github.com/rubenbe/opensoho/poe"
@@ -64,7 +65,7 @@ var internalFiles embed.FS
 
 // Hotplug script pushed to the router at /etc/hotplug.d/openwisp/opensoho
 //
-//go:embed scripts/dump-radios.sh
+//go:embed scripts/dump-radios.uc
 var dumpRadiosScript string
 
 // Hotplug script pushed to the router at /etc/hotplug.d/openwisp/opensoho-poe
@@ -183,6 +184,24 @@ func frequencyToUciBand(frequency int) string {
 		return "6g"
 	case "60":
 		return "60g"
+	default:
+		return ""
+	}
+}
+
+// uciBandToBand is the inverse of frequencyToUciBand, mapping the UCI
+// wifi-device "band" option to the band vocabulary frequencyplan/htmodes use
+// (e.g. "5g" -> "5"). Returns "" for unknown bands.
+func uciBandToBand(uciband string) string {
+	switch uciband {
+	case "2g":
+		return "2.4"
+	case "5g":
+		return "5"
+	case "6g":
+		return "6"
+	case "60g":
+		return "60"
 	default:
 		return ""
 	}
@@ -602,7 +621,7 @@ type MonitoringData struct {
 	DHCPLeases []DHCPLease `json:"dhcp_leases,omitempty"`
 }
 
-// OpenSoho monitoring payload, produced by scripts/dump-radios.sh.
+// OpenSoho monitoring payload, produced by scripts/dump-radios.uc.
 // Shape: {"type":"OpenSoho","radios":[{"name":"radio0",...},...]} where each
 // entry mirrors a UCI wifi-device augmented with iwinfo info / freqlist.
 
@@ -632,11 +651,14 @@ type IwinfoTxPower struct {
 
 // OpenSohoRadio is one wifi-device entry of the OpenSoho payload.
 type OpenSohoRadio struct {
-	Name     string     `json:"name"`
-	Phy      string     `json:"phy"`
-	Disabled string     `json:"disabled"`
-	Info     IwinfoInfo `json:"info"`
-	FreqList struct {
+	Name       string                `json:"name"`
+	Phy        string                `json:"phy"`
+	Band       string                `json:"band"`
+	RadioIndex string                `json:"radio_index"`
+	Disabled   string                `json:"disabled"`
+	Info       IwinfoInfo            `json:"info"`
+	Caps       *htmodes.Capabilities `json:"caps"`
+	FreqList   struct {
 		Results []IwinfoFreq `json:"results"`
 	} `json:"freqlist"`
 	TxPowerList struct {
@@ -645,7 +667,7 @@ type OpenSohoRadio struct {
 }
 
 // OpenSohoData is the decoded OpenSoho payload. The radios dump
-// (scripts/dump-radios.sh) carries "radios"; the PoE dump
+// (scripts/dump-radios.uc) carries "radios"; the PoE dump
 // (scripts/dump-poe.sh) carries "poe". Both share type "OpenSoho", so one
 // struct decodes either: the absent key simply stays nil/empty.
 type OpenSohoData struct {
@@ -697,6 +719,22 @@ func radioBands(radio OpenSohoRadio) []string {
 	return bands
 }
 
+// radioHtModes returns the HT/VHT/HE/EHT modes advertised for one radio,
+// decoded per-band from the raw nl80211 capability fields in radio.Caps.
+// Info.HtModes is iwinfo's whole-wiphy union - wrong on shared-wiphy hardware
+// (issue #59) - and is only used as a fallback so a radio without a resolvable
+// band/caps still gets a value instead of none.
+func radioHtModes(radio OpenSohoRadio) []string {
+	band := uciBandToBand(radio.Band)
+	if radio.Caps == nil || band == "" {
+		return radio.Info.HtModes
+	}
+	if modes := radio.Caps.Modes(band); len(modes) > 0 {
+		return modes
+	}
+	return radio.Info.HtModes
+}
+
 // handleOpenSohoMonitoring is the entry point for parsed OpenSoho radio dumps.
 // It persists each radio's advertised frequency list into the
 // radio_frequencies collection, keyed by (device, radio index).
@@ -738,7 +776,7 @@ func handleOpenSohoMonitoring(app core.App, device *core.Record, data OpenSohoDa
 			continue
 		}
 
-		if err := syncRadioHtModes(app, htColl, device, idx, radio.Info.HtModes); err != nil {
+		if err := syncRadioHtModes(app, htColl, device, idx, radioHtModes(radio)); err != nil {
 			app.Logger().Error("Failed to sync radio ht modes",
 				"device", device.GetString("id"), "radio", radio.Name, "error", err)
 			continue
@@ -2339,7 +2377,7 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 		return e.BadRequestError("Failed to parse json", err), radios
 	}
 	if envelope.Type == "OpenSoho" {
-		// Radio dump produced by scripts/dump-radios.sh.
+		// Radio dump produced by scripts/dump-radios.uc.
 		var osd OpenSohoData
 		if err := json.Unmarshal(body, &osd); err != nil {
 			fmt.Println(err)

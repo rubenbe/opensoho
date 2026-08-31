@@ -2705,6 +2705,13 @@ func bindAppHooks(app core.App, shared_secret string, enableNewDevices bool) {
 		mqtt.Close()
 		return e.Next()
 	})
+
+	app.OnRecordCreateExecute("devices").BindFunc(func(e *core.RecordEvent) error {
+		if err := updateAndStoreDeviceConfig(e.App, e.Record); err != nil {
+			return err
+		}
+		return e.Next()
+	})
 }
 
 func saveDeviceConfig(app core.App, record *core.Record, data []byte, checksum string) error {
@@ -2719,9 +2726,14 @@ func saveDeviceConfig(app core.App, record *core.Record, data []byte, checksum s
 		fmt.Println(filename)
 		record.Set("config", f)
 		record.Set("config_status", "modified")
-		err = app.Save(record)
-		if err != nil {
-			return err
+
+		// A new record isn't persisted yet, so app.Save() here would re-enter
+		// the create pipeline - including this same hook - and recurse forever
+		// (issue #62). Just set the fields; the in-flight create saves them.
+		if !record.IsNew() {
+			if err := app.Save(record); err != nil {
+				return err
+			}
 		}
 		fmt.Println("SAVED NEW CONFIG TO RECORD", record.GetString("config"), filename)
 	} else {
@@ -3017,14 +3029,6 @@ table.table > thead > tr > th > div.col-header-content > span.txt
 	}
 	app.OnRecordAfterUpdateSuccess("settings").BindFunc(reconnectMQTT)
 	app.OnRecordAfterCreateSuccess("settings").BindFunc(reconnectMQTT)
-
-	app.OnRecordCreateExecute("devices").BindFunc(func(e *core.RecordEvent) error {
-		fmt.Println()
-		if err := updateAndStoreDeviceConfig(e.App, e.Record); err != nil {
-			return err
-		}
-		return e.Next()
-	})
 
 	app.Cron().MustAdd("updateDeviceHealth", "* * * * *", func() {
 		fmt.Println("Update Device health")

@@ -28,6 +28,7 @@ import (
 	"github.com/rubenbe/opensoho/records"
 	"github.com/rubenbe/pocketbase/core"
 	"github.com/rubenbe/pocketbase/tests"
+	"github.com/rubenbe/pocketbase/tools/hook"
 	"github.com/rubenbe/pocketbase/tools/router"
 	"github.com/rubenbe/pocketbase/tools/types"
 	"github.com/stretchr/testify/assert"
@@ -166,20 +167,7 @@ func TestReportStatusEndpoint(t *testing.T) {
 
 func TestRegenerateAllDeviceConfigs(t *testing.T) {
 	app, _ := tests.NewTestApp()
-	vlancollection := setupVlanCollection(t, app)
-	wificollection := setupWifiCollection(t, app, vlancollection)
-	clientcollection := setupClientsCollection(t, app)
-	devicecollection := setupDeviceCollection(t, app, wificollection)
-	// generateDeviceConfig queries all of these; any missing collection cancels
-	// the db context and makes the subsequent config save fail silently.
-	setupWifiApsCollection(t, app, devicecollection, wificollection)
-	setupClientSteeringCollection(t, app, clientcollection, devicecollection, wificollection)
-	setupRadioCollection(t, app, devicecollection)
-	setupSettingsCollection(t, app)
-	setupSshKeyCollection(t, app)
-	ledscollection := core.NewBaseCollection("leds")
-	ledscollection.Fields.Add(&core.TextField{Name: "name"})
-	assert.Nil(t, app.Save(ledscollection))
+	devicecollection := setupConfigGenCollections(t, app)
 
 	// A device whose stored config is empty: regeneration must produce a
 	// config and flip config_status to "modified".
@@ -212,6 +200,50 @@ func TestRegenerateAllDeviceConfigs(t *testing.T) {
 	assert.Equal(t, storedConfig, record.GetString("config"))
 }
 
+// TestDeviceCreateDoesNotRecurse guards against issue #62: creating a device
+// recursed forever and crashed with a stack overflow. A real regression here
+// is an unrecoverable crash rather than a failing assertion, so instead of
+// waiting for that, a guard hook at a lower priority (runs before the
+// production hook) counts entries and fails fast on the second one.
+func TestDeviceCreateDoesNotRecurse(t *testing.T) {
+	app, _ := tests.NewTestApp()
+	devicecollection := setupConfigGenCollections(t, app)
+	bindAppHooks(app, "testsecret", true)
+
+	var entries atomic.Int32
+	app.OnRecordCreateExecute("devices").Bind(&hook.Handler[*core.RecordEvent]{
+		Id: "issue62_guard",
+		Func: func(e *core.RecordEvent) error {
+			if entries.Add(1) > 1 {
+				return errors.New("devices create hook re-entered: config save recursed (issue #62)")
+			}
+			return e.Next()
+		},
+		Priority: -100,
+	})
+
+	d := core.NewRecord(devicecollection)
+	d.Set("name", "the_device1")
+	d.Set("health_status", "healthy")
+	d.Set("key", "aaaabbbbccccddddaaaabbbbccccdddd")
+	assert.NoError(t, app.Save(d))
+	assert.EqualValues(t, 1, entries.Load())
+
+	// The create must have actually gone through: the record is persisted...
+	record, err := app.FindRecordById("devices", d.Id)
+	assert.NoError(t, err)
+	assert.Equal(t, "modified", record.GetString("config_status"))
+	assert.NotEmpty(t, record.GetString("config"))
+
+	// ...and the generated tarball reached storage, not just the DB column.
+	fsys, err := app.NewFilesystem()
+	assert.NoError(t, err)
+	defer fsys.Close()
+	exists, err := fsys.Exists(record.BaseFilesPath() + "/" + record.GetString("config"))
+	assert.NoError(t, err)
+	assert.True(t, exists)
+}
+
 func TestRegisterEndpoint(t *testing.T) {
 	// setup the test ApiScenario app instance
 	setupTestApp := func(t testing.TB) *tests.TestApp {
@@ -222,6 +254,7 @@ func TestRegisterEndpoint(t *testing.T) {
 		// no need to cleanup since scenario.Test() will do that for us
 		// defer testApp.Cleanup()
 
+		setupConfigGenCollections(t, testApp)
 		bindAppHooks(testApp, "testsecret", true)
 
 		return testApp
@@ -267,16 +300,17 @@ func TestRegisterEndpoint(t *testing.T) {
 			TestAppFactory:  setupTestApp,
 		},
 		{
+			// Regression test for issue #62 (previously hung forever).
 			Name:           "POST with valid data",
 			Method:         http.MethodPost,
 			URL:            "/controller/register/",
-			ExpectedStatus: 400, // TODO when DB is properly set up this should be 200
+			ExpectedStatus: 201,
 			Headers: map[string]string{
 				"Content-Type": "application/x-www-form-urlencoded",
 			},
 			Body: strings.NewReader(url.Values{
 				"backend":     {"netjsonconfig.OpenWrt"},
-				"key":         {""},
+				"key":         {"0123456789abcdef0123456789abcdef"},
 				"secret":      {"testsecret"},
 				"name":        {""},
 				"hardware_id": {""},
@@ -285,7 +319,7 @@ func TestRegisterEndpoint(t *testing.T) {
 				"os":          {""},
 				"system":      {""},
 			}.Encode()),
-			ExpectedContent: []string{"\"data\":{}"},
+			ExpectedContent: []string{"registration-result: success", "is-new: 1"},
 			TestAppFactory:  setupTestApp,
 		},
 	}
@@ -616,9 +650,8 @@ func TestHandleDeviceInfoUpdate(t *testing.T) {
 
 func TestHandleDeviceRegistration(t *testing.T) {
 	app, _ := tests.NewTestApp()
-	vlancollection := setupVlanCollection(t, app)
-	wificollection := setupWifiCollection(t, app, vlancollection)
-	_ = setupDeviceCollection(t, app, wificollection)
+	setupConfigGenCollections(t, app)
+	bindAppHooks(app, "testsecret", true)
 
 	extracted_uuid := "dummy"
 
@@ -666,6 +699,8 @@ is-new: 1
 		record, err := app.FindRecordById("devices", pbID)
 		assert.Equal(t, nil, err)
 		assert.Equal(t, true, record.GetBool("enabled"))
+		// Regression test for issue #62: the config must actually be generated.
+		assert.NotEmpty(t, record.GetString("config"))
 	}
 
 	// Reregistration of the same device, ensure enabled flag is not overwritten
@@ -4530,6 +4565,29 @@ config wifi-device 'radio1'
         option country 'DE'
 `, generateRadioConfigs(d, app))
 
+}
+
+// setupConfigGenCollections seeds every collection generateDeviceConfig
+// queries; a missing one silently cancels the db context and fails the
+// config save without an error. Returns the devices collection.
+func setupConfigGenCollections(t testing.TB, app core.App) *core.Collection {
+	tt, ok := t.(*testing.T)
+	if !ok {
+		t.Fatal("setupConfigGenCollections requires a *testing.T")
+	}
+	vlancollection := setupVlanCollection(tt, app)
+	wificollection := setupWifiCollection(tt, app, vlancollection)
+	clientcollection := setupClientsCollection(tt, app)
+	devicecollection := setupDeviceCollection(tt, app, wificollection)
+	setupWifiApsCollection(tt, app, devicecollection, wificollection)
+	setupClientSteeringCollection(tt, app, clientcollection, devicecollection, wificollection)
+	setupRadioCollection(tt, app, devicecollection)
+	setupSettingsCollection(tt, app)
+	setupSshKeyCollection(tt, app)
+	ledscollection := core.NewBaseCollection("leds")
+	ledscollection.Fields.Add(&core.TextField{Name: "name"})
+	assert.Nil(t, app.Save(ledscollection))
+	return devicecollection
 }
 
 func setupSshKeyCollection(t *testing.T, app core.App) *core.Collection {

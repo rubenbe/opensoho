@@ -1397,8 +1397,19 @@ func hexToPocketBaseID(hexStr string) (string, error) {
 	}
 	bigInt := new(big.Int).SetBytes(bytes)
 
-	// Convert to Base36
-	return bigInt.Text(36)[0:15], nil
+	// Convert to Base36, left-padded to 15 characters. Padding keeps this
+	// deterministic for near-zero keys, whose base36 text would otherwise be
+	// shorter than 15 chars and panic on the slice below.
+	//
+	// This only keeps the leading ~77 of the key's 128 bits, so distinct
+	// keys can collide on the resulting id - callers must not treat an id
+	// match as proof of key ownership. See handleDeviceRegistration, which
+	// re-checks the full key with security.Equal.
+	txt := bigInt.Text(36)
+	if len(txt) < 15 {
+		txt = strings.Repeat("0", 15-len(txt)) + txt
+	}
+	return txt[0:15], nil
 }
 func getDeviceRecord(e *core.RequestEvent, key string) (*core.Record, error) {
 	if len(key) != 32 {
@@ -2533,6 +2544,13 @@ func handleDeviceRegistration(e *core.RequestEvent, shared_secret string, enable
 		return e.BadRequestError("Bad key", err)
 	}
 	record, err := e.App.FindRecordById("devices", pbID)
+
+	// hexToPocketBaseID only keeps ~77 of the key's 128 bits, so a different
+	// key can collide on pbID. Don't hand out an existing device's identity
+	// to whoever presents a colliding key - require the full key to match.
+	if err == nil && !security.Equal(record.GetString("key"), data.Key) {
+		return e.BadRequestError("Registration failed!", "key mismatch")
+	}
 
 	isNew := 1
 	var device_uuid string = uuid.New().String()

@@ -800,6 +800,79 @@ is-new: 1
 	}
 }
 
+// hexToPocketBaseID only keeps the leading ~77 of a key's 128 bits, so two
+// distinct keys can map to the same PocketBase record id. Registering the
+// second key must not be treated as a re-registration of the first device:
+// no key match must mean no identity is handed out.
+func TestHandleDeviceRegistrationKeyCollisionRejected(t *testing.T) {
+	app, _ := tests.NewTestApp()
+	setupConfigGenCollections(t, app)
+	bindAppHooks(app, "testsecret", true)
+
+	keyA := "11111111111111111111111111111101"
+	keyB := "11111111111111111111111111111102"
+	idA, err := hexToPocketBaseID(keyA)
+	assert.Equal(t, nil, err)
+	idB, err := hexToPocketBaseID(keyB)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, idA, idB, "test keys must collide on the truncated id for this test to be meaningful")
+
+	// Register device A.
+	{
+		reqbody := strings.NewReader(url.Values{
+			"backend": {"netjsonconfig.OpenWrt"},
+			"key":     {keyA},
+			"secret":  {"testsecret"},
+			"name":    {"device-a"},
+		}.Encode())
+		event := core.RequestEvent{}
+		event.Request, err = http.NewRequest("POST", "/controller/register/", reqbody)
+		assert.Equal(t, nil, err)
+		event.Request.Header.Set("content-type", "application/x-www-form-urlencoded")
+		event.App = app
+		rec := httptest.NewRecorder()
+		event.Response = rec
+		err = handleDeviceRegistration(&event, "testsecret", true)
+		assert.Equal(t, nil, err)
+		assert.Equal(t, 201, rec.Result().StatusCode)
+	}
+
+	// A colliding key from a different device must be rejected, not treated
+	// as device A re-registering.
+	{
+		reqbody := strings.NewReader(url.Values{
+			"key":    {keyB},
+			"secret": {"testsecret"},
+			"name":   {"device-b"},
+		}.Encode())
+		event := core.RequestEvent{}
+		event.Request, err = http.NewRequest("POST", "/controller/register/", reqbody)
+		assert.Equal(t, nil, err)
+		event.Request.Header.Set("content-type", "application/x-www-form-urlencoded")
+		event.App = app
+		rec := httptest.NewRecorder()
+		event.Response = rec
+		err = handleDeviceRegistration(&event, "testsecret", true)
+		apiErr, ok := err.(*router.ApiError)
+		assert.Equal(t, true, ok)
+		assert.Equal(t, 400, apiErr.Status)
+	}
+
+	// Device A's record must be untouched.
+	record, err := app.FindRecordById("devices", idA)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, "device-a", record.GetString("name"))
+	assert.Equal(t, keyA, record.GetString("key"))
+}
+
+// Near-zero keys used to panic in hexToPocketBaseID (base36 text shorter
+// than the 15-char slice). They must now produce a stable, left-padded id.
+func TestHexToPocketBaseIDShortValue(t *testing.T) {
+	id, err := hexToPocketBaseID("00000000000000000000000000000001")
+	assert.Equal(t, nil, err)
+	assert.Equal(t, "000000000000001", id)
+}
+
 // Test that the default VLAN is present
 func TestInterfacesConfigDefaultNoVLAN(t *testing.T) {
 	app, _ := tests.NewTestApp()

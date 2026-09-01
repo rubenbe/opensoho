@@ -31,18 +31,30 @@ const BAND_IDX = { '2g': 0, '5g': 1, '6g': 2, '60g': 3 };
 
 // One GET_WIPHY dump for all phys, indexed by phy name. split_wiphy_dump is
 // required - without it the kernel's reply is truncated to a single wiphy.
+// It also means the kernel is free to fragment one phy's reply across
+// several messages when it doesn't fit in one (e.g. a tri-band 6 GHz/EHT
+// phy) - each fragment carries a different subset of wiphy_bands populated
+// and the rest null, so bands must be merged across fragments, not just
+// keep the last message (which dropped the 6 GHz band's caps - issue #59).
 const nl = libnl.request(libnl.const.NL80211_CMD_GET_WIPHY, libnl.const.NLM_F_DUMP,
 	{ split_wiphy_dump: true }) ?? [];
 let wiphy = {};
-for (let p in nl)
-	if (p.wiphy_name && p.wiphy_bands)
-		wiphy[p.wiphy_name] = p;
+for (let p in nl) {
+	if (!p.wiphy_name)
+		continue;
+	if (!wiphy[p.wiphy_name])
+		wiphy[p.wiphy_name] = [];
+	let bands = wiphy[p.wiphy_name];
+	for (let idx, band in (p.wiphy_bands ?? []))
+		if (type(band) == 'object')
+			bands[idx] = band;
+}
 
 // Raw per-band capability fields for one radio, the input to the htmodes Go
-// package. wiphy_bands is sparse and indexed by nl80211 band enum, so an
+// package. wiphy[phy] is sparse and indexed by nl80211 band enum, so an
 // object type() check is needed - a phy without that band has a null there.
 function radio_caps(phy, uciband) {
-	let b = wiphy[phy]?.wiphy_bands?.[BAND_IDX[uciband]];
+	let b = wiphy[phy]?.[BAND_IDX[uciband]];
 	if (type(b) != 'object')
 		return null;
 

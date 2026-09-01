@@ -68,6 +68,13 @@ var internalFiles embed.FS
 //go:embed scripts/dump-radios.uc
 var dumpRadiosScript string
 
+// Companion to dumpRadiosScript, pushed to /usr/share/opensoho/dump-radios-caps.uc.
+// Split out because it imports nl80211/digest, which aren't installed on
+// wifi-less hardware - see dump-radios.uc's header.
+//
+//go:embed scripts/dump-radios-caps.uc
+var dumpRadiosCapsScript string
+
 // Hotplug script pushed to the router at /etc/hotplug.d/openwisp/opensoho-poe
 //
 //go:embed scripts/dump-poe.sh
@@ -2148,6 +2155,7 @@ func generateDeviceConfig(app core.App, record *core.Record) ([]byte, string, er
 		configfiles["etc/config/openwisp-monitoring"] = generateMonitoringConfig()
 		configfiles["etc/config/openwisp"] = generateOpenWispConfig()
 		configfiles["etc/hotplug.d/openwisp/opensoho"] = dumpRadiosScript
+		configfiles["usr/share/opensoho/dump-radios-caps.uc"] = dumpRadiosCapsScript
 		configfiles["etc/hotplug.d/openwisp/opensoho-poe"] = dumpPoeScript
 	}
 	{

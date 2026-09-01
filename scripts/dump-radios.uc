@@ -1,9 +1,11 @@
 #!/usr/bin/ucode
-// OpenWISP hotplug script, deployed to /etc/hotplug.d/openwisp/opensoho on
-// the target. On end-of-cycle, builds a JSON object with a "radios" array
-// (one entry per UCI wifi-device, each with name / phy / ifname / band /
-// radio_index / disabled and the raw iwinfo info / freqlist / txpowerlist /
-// caps) and atomically writes it to
+// Deployed to /usr/share/opensoho/dump-radios.uc and run as a child process
+// of dump-radios-hotplug.sh (the actual /etc/hotplug.d/openwisp/opensoho
+// entry point - hotplug-call sources scripts there as shell, so this can't
+// be deployed at that path itself; see that file for why). On end-of-cycle,
+// builds a JSON object with a "radios" array (one entry per UCI wifi-device,
+// each with name / phy / ifname / band / radio_index / disabled and the raw
+// iwinfo info / freqlist / txpowerlist / caps) and atomically writes it to
 // /tmp/openwisp/monitoring/000000_opensoho.json.gz.
 //
 // This file only imports modules ucode itself always ships (fs/uci). The

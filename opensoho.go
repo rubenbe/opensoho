@@ -63,7 +63,9 @@ var embeddedFiles embed.FS
 //go:embed favicon.png logo.svg
 var internalFiles embed.FS
 
-// Hotplug script pushed to the router at /etc/hotplug.d/openwisp/opensoho
+// The actual radio-dump logic, pushed to /usr/share/opensoho/dump-radios.uc.
+// Not deployed at the hotplug.d entry point itself - see
+// dumpRadiosHotplugShim below for why.
 //
 //go:embed scripts/dump-radios.uc
 var dumpRadiosScript string
@@ -74,6 +76,15 @@ var dumpRadiosScript string
 //
 //go:embed scripts/dump-radios-caps.uc
 var dumpRadiosCapsScript string
+
+// The actual hotplug script pushed to /etc/hotplug.d/openwisp/opensoho.
+// /sbin/hotplug-call sources scripts there with shell `.` (dot-sourcing),
+// not exec - it ignores the shebang and parses the file as shell syntax
+// directly, so a ucode file can't be deployed at this path itself. This
+// shim is real shell that hands off to dumpRadiosScript as a child process.
+//
+//go:embed scripts/dump-radios-hotplug.sh
+var dumpRadiosHotplugShim string
 
 // Hotplug script pushed to the router at /etc/hotplug.d/openwisp/opensoho-poe
 //
@@ -2154,7 +2165,8 @@ func generateDeviceConfig(app core.App, record *core.Record) ([]byte, string, er
 		// Currently the monitoring config is static
 		configfiles["etc/config/openwisp-monitoring"] = generateMonitoringConfig()
 		configfiles["etc/config/openwisp"] = generateOpenWispConfig()
-		configfiles["etc/hotplug.d/openwisp/opensoho"] = dumpRadiosScript
+		configfiles["etc/hotplug.d/openwisp/opensoho"] = dumpRadiosHotplugShim
+		configfiles["usr/share/opensoho/dump-radios.uc"] = dumpRadiosScript
 		configfiles["usr/share/opensoho/dump-radios-caps.uc"] = dumpRadiosCapsScript
 		configfiles["etc/hotplug.d/openwisp/opensoho-poe"] = dumpPoeScript
 	}

@@ -27,7 +27,12 @@ function radio_ifname(cfg) {
 	return wireless_status[cfg]?.interfaces?.[0]?.ifname;
 }
 
-const BAND_IDX = { '2g': 0, '5g': 1, '6g': 2, '60g': 3 };
+// nl80211's band enum is declaration order, not frequency order: 60 GHz
+// (802.11ad) predates 6 GHz (802.11ax) in the kernel's UAPI header, and
+// existing enum values are never renumbered (ABI stability), so 6 GHz was
+// appended after 60 GHz - index 3, not 2. Getting this backwards reads the
+// (absent, so null) 60 GHz slot instead of the real 6 GHz data - issue #59.
+const BAND_IDX = { '2g': 0, '5g': 1, '60g': 2, '6g': 3 };
 
 // One GET_WIPHY dump for all phys, indexed by phy name. split_wiphy_dump is
 // required - without it the kernel's reply is truncated to a single wiphy.

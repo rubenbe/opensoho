@@ -2270,6 +2270,115 @@ config dhcp 'guest'
 	assert.Equal(t, ``, generateDhcpConfigForDeviceVLAN("guest", 25))
 }
 
+func TestGenerateStaticDhcpReservations(t *testing.T) {
+	app, err := tests.NewTestApp()
+	assert.Nil(t, err)
+	defer app.Cleanup()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	reservationcollection := setupDhcpReservationCollection(t, app, devicecollection)
+
+	d1 := core.NewRecord(devicecollection)
+	d1.Id = "somethindevice1"
+	d1.Set("name", "router-one")
+	d1.Set("health_status", "healthy")
+	assert.Nil(t, app.Save(d1))
+
+	d2 := core.NewRecord(devicecollection)
+	d2.Id = "somethindevice2"
+	d2.Set("name", "router-two")
+	d2.Set("health_status", "healthy")
+	assert.Nil(t, app.Save(d2))
+
+	shared := core.NewRecord(reservationcollection)
+	shared.Id = "aaaaabbbbbccccc"
+	shared.Set("name", "NAS-Server")
+	shared.Set("mac_address", "aa:bb:cc:dd:ee:ff")
+	shared.Set("ip_address", "192.168.10.20")
+	shared.Set("dhcp_server", []string{d1.Id, d2.Id})
+	assert.Nil(t, validateDhcpReservation(shared))
+	assert.Nil(t, app.Save(shared))
+
+	secondRouterOnly := core.NewRecord(reservationcollection)
+	secondRouterOnly.Id = "dddddeeeeefffff"
+	secondRouterOnly.Set("name", "printer")
+	secondRouterOnly.Set("mac_address", "02:11:22:33:44:55")
+	secondRouterOnly.Set("ip_address", "192.168.10.30")
+	secondRouterOnly.Set("dhcp_server", []string{d2.Id})
+	assert.Nil(t, validateDhcpReservation(secondRouterOnly))
+	assert.Nil(t, app.Save(secondRouterOnly))
+
+	inactive := core.NewRecord(reservationcollection)
+	inactive.Id = "ggggghhhhhiiiii"
+	inactive.Set("name", "inactive-host")
+	inactive.Set("mac_address", "02:11:22:33:44:66")
+	inactive.Set("ip_address", "192.168.10.40")
+	assert.Nil(t, validateDhcpReservation(inactive))
+	assert.Nil(t, app.Save(inactive))
+
+	assert.Equal(t, `
+config host 'opensoho_aaaaabbbbbccccc'
+        option name 'nas-server'
+        list mac 'AA:BB:CC:DD:EE:FF'
+        option ip '192.168.10.20'
+`, generateStaticDhcpReservations(app, d1))
+
+	assert.Equal(t, `
+config host 'opensoho_aaaaabbbbbccccc'
+        option name 'nas-server'
+        list mac 'AA:BB:CC:DD:EE:FF'
+        option ip '192.168.10.20'
+
+config host 'opensoho_dddddeeeeefffff'
+        option name 'printer'
+        list mac '02:11:22:33:44:55'
+        option ip '192.168.10.30'
+`, generateStaticDhcpReservations(app, d2))
+}
+
+func TestValidateDhcpReservation(t *testing.T) {
+	app, err := tests.NewTestApp()
+	assert.Nil(t, err)
+	defer app.Cleanup()
+
+	devicecollection := core.NewBaseCollection("devices")
+	assert.Nil(t, app.Save(devicecollection))
+	reservationcollection := setupDhcpReservationCollection(t, app, devicecollection)
+
+	valid := core.NewRecord(reservationcollection)
+	valid.Set("name", "NAS-01")
+	valid.Set("mac_address", "aa:bb:cc:dd:ee:ff")
+	valid.Set("ip_address", "192.168.1.10")
+	assert.Nil(t, validateDhcpReservation(valid))
+	assert.Equal(t, "nas-01", valid.GetString("name"))
+	assert.Equal(t, "AA:BB:CC:DD:EE:FF", valid.GetString("mac_address"))
+	assert.Equal(t, "192.168.1.10", valid.GetString("ip_address"))
+
+	tests := []struct {
+		field string
+		value string
+	}{
+		{"name", "not a hostname"},
+		{"mac_address", "01:00:5E:00:00:01"},
+		{"mac_address", "00:00:00:00:00:00"},
+		{"ip_address", "::1"},
+		{"ip_address", "127.0.0.1"},
+		{"ip_address", "255.255.255.255"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.field+"/"+tc.value, func(t *testing.T) {
+			record := core.NewRecord(reservationcollection)
+			record.Set("name", "host")
+			record.Set("mac_address", "02:11:22:33:44:55")
+			record.Set("ip_address", "192.168.1.10")
+			record.Set(tc.field, tc.value)
+			assert.Error(t, validateDhcpReservation(record))
+		})
+	}
+}
+
 func TestInterfacesConfig(t *testing.T) {
 	app, _ := tests.NewTestApp()
 
@@ -5406,6 +5515,22 @@ func setupDhcpLeaseCollection(t *testing.T, app core.App) *core.Collection {
 	err := app.Save(dhcpcollection)
 	assert.Equal(t, err, nil)
 	return dhcpcollection
+}
+
+func setupDhcpReservationCollection(t *testing.T, app core.App, devicecollection *core.Collection) *core.Collection {
+	collection := core.NewBaseCollection("dhcp_reservations")
+	collection.Fields.Add(&core.TextField{Name: "name", Required: true})
+	collection.Fields.Add(&core.TextField{Name: "mac_address", Required: true})
+	collection.Fields.Add(&core.TextField{Name: "ip_address", Required: true})
+	collection.Fields.Add(&core.RelationField{
+		Name:         "dhcp_server",
+		MaxSelect:    999,
+		Required:     false,
+		CollectionId: devicecollection.Id,
+	})
+	err := app.Save(collection)
+	assert.Nil(t, err)
+	return collection
 }
 
 func setupClientSteeringCollection(t *testing.T, app core.App, clientcollection *core.Collection, devicecollection *core.Collection, wificollection *core.Collection) *core.Collection {

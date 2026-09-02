@@ -150,6 +150,14 @@ These are the connected devices.
 * Numradios allows to set the number of radios on the device. This is not initially sent by OpenWisp, so this needs to be set by the user.
 * Wifis allows to select a SSIDs to apply on this device.
 
+### DHCP reservations
+
+Create a reservation with a hostname, MAC address, IPv4 address, and one or
+more DHCP servers. OpenSOHO adds the same named `config host` section to
+`/etc/config/dhcp` on every selected server. Clear the DHCP server selection to
+disable the reservation without deleting it. Names, MAC addresses, and IP
+addresses are unique across the reservation list.
+
 ### Leds
 
 * Basic LED configuration (more of a POC at this moment)

@@ -1612,6 +1612,74 @@ func generateDhcpConfigForDevice(app core.App, device *core.Record, vlan *core.R
 	return generateDhcpConfigForDeviceVLAN(vlanname, prefixsize)
 }
 
+func normalizeDhcpReservationName(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if len(value) == 0 || len(value) > 63 || !validHostnameLabelRegexp.MatchString(value) {
+		return "", errors.New("name must be a valid single-label hostname")
+	}
+	return strings.ToLower(value), nil
+}
+
+func normalizeDhcpReservationMAC(value string) (string, error) {
+	mac, err := net.ParseMAC(strings.TrimSpace(value))
+	if err != nil || len(mac) != 6 {
+		return "", errors.New("MAC address must contain six octets")
+	}
+	allZero := true
+	for _, octet := range mac {
+		allZero = allZero && octet == 0
+	}
+	if allZero || mac[0]&1 != 0 {
+		return "", errors.New("MAC address must be a non-zero unicast address")
+	}
+	return strings.ToUpper(mac.String()), nil
+}
+
+func normalizeDhcpReservationIP(value string) (string, error) {
+	ip := net.ParseIP(strings.TrimSpace(value))
+	ip4 := ip.To4()
+	if ip4 == nil || ip4[0] == 0 || ip4.IsLoopback() || ip4.IsLinkLocalUnicast() || ip4.IsMulticast() || ip4.Equal(net.IPv4bcast) {
+		return "", errors.New("IP address must be a usable IPv4 host address")
+	}
+	return ip4.String(), nil
+}
+
+func generateStaticDhcpReservation(reservation *core.Record) string {
+	name, nameErr := normalizeDhcpReservationName(reservation.GetString("name"))
+	mac, macErr := normalizeDhcpReservationMAC(reservation.GetString("mac_address"))
+	ip, ipErr := normalizeDhcpReservationIP(reservation.GetString("ip_address"))
+	if nameErr != nil || macErr != nil || ipErr != nil {
+		return ""
+	}
+	return fmt.Sprintf(`
+config host 'opensoho_%s'
+        option name '%s'
+        list mac '%s'
+        option ip '%s'
+`, reservation.Id, uciQuote(name), mac, ip)
+}
+
+func generateStaticDhcpReservations(app core.App, device *core.Record) string {
+	if _, err := app.FindCollectionByNameOrId("dhcp_reservations"); err != nil {
+		return ""
+	}
+	reservations, err := app.FindRecordsByFilter(
+		"dhcp_reservations",
+		"dhcp_server ~ {:dhcpServer}",
+		"name", 0, 0,
+		dbx.Params{"dhcpServer": device.Id},
+	)
+	if err != nil {
+		fmt.Println(err)
+		return ""
+	}
+	var output strings.Builder
+	for _, reservation := range reservations {
+		output.WriteString(generateStaticDhcpReservation(reservation))
+	}
+	return output.String()
+}
+
 func generateDhcpConfig(app core.App, device *core.Record) string {
 	vlans, err := app.FindRecordsByFilter(
 		"vlan",                           // collection
@@ -1630,6 +1698,7 @@ func generateDhcpConfig(app core.App, device *core.Record) string {
 	for _, vlan := range vlans {
 		output += generateDhcpConfigForDevice(app, device, vlan)
 	}
+	output += generateStaticDhcpReservations(app, device)
 	return output
 }
 
@@ -3083,6 +3152,13 @@ table.table > thead > tr > th > div.col-header-content > span.txt
 		return e.Next()
 	})
 
+	app.OnRecordValidate("dhcp_reservations").BindFunc(func(e *core.RecordEvent) error {
+		if err := validateDhcpReservation(e.Record); err != nil {
+			return err
+		}
+		return e.Next()
+	})
+
 	app.OnRecordUpdateRequest("settings").BindFunc(func(e *core.RecordRequestEvent) error {
 		err := validateSetting(e.Record)
 		if err != nil {
@@ -3212,6 +3288,36 @@ func validateGatewayIPConfig(cidr string) error {
 		)
 	}
 
+	return nil
+}
+
+func validateDhcpReservation(record *core.Record) error {
+	errs := validation.Errors{}
+
+	name, err := normalizeDhcpReservationName(record.GetString("name"))
+	if err != nil {
+		errs["name"] = validation.NewError("validation_invalid_hostname", "Set a valid hostname containing only letters, digits, and hyphens.")
+	} else {
+		record.Set("name", name)
+	}
+
+	mac, err := normalizeDhcpReservationMAC(record.GetString("mac_address"))
+	if err != nil {
+		errs["mac_address"] = validation.NewError("validation_invalid_mac", "Set a valid unicast MAC address, e.g. AA:BB:CC:DD:EE:FF.")
+	} else {
+		record.Set("mac_address", mac)
+	}
+
+	ip, err := normalizeDhcpReservationIP(record.GetString("ip_address"))
+	if err != nil {
+		errs["ip_address"] = validation.NewError("validation_invalid_ipv4", "Set a usable IPv4 host address, e.g. 192.168.1.10.")
+	} else {
+		record.Set("ip_address", ip)
+	}
+
+	if len(errs) > 0 {
+		return errs
+	}
 	return nil
 }
 

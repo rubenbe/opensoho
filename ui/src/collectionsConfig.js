@@ -20,7 +20,7 @@ export default [
     },
     {
         name: "Network",
-        items: ["bridges", "ethernet", "dhcp_leases"],
+        items: ["bridges", "ethernet", "dhcp_leases", "lldp"],
     },
     {
         name: "VLAN",
@@ -28,10 +28,10 @@ export default [
     },
     {
         name: "System",
-        items: ["ssh_keys", "client_steering", "leds", "settings", "api_users"],
+        items: ["ssh_keys", "client_steering", "leds", "settings", "poe", "api_users"],
     },
     {
         name: "Capabilities",
-        items: ["radio_frequencies", "radio_tx_powers"],
+        items: ["radio_frequencies", "radio_ht_modes", "radio_tx_powers"],
     },
 ];

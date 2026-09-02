@@ -1199,6 +1199,7 @@ export default class CommonHelper {
         case "interfaces":
         case "radios":
         case "radio_frequencies":
+        case "radio_ht_modes":
         case "radio_tx_powers":
         return true;
             default:
@@ -1296,8 +1297,13 @@ export default class CommonHelper {
 		return "ri-git-fork-line"
 	    case "interfaces":
 		return "ri-base-station-line"
+	    case "lldp":
+		return "ri-phone-find-line"
+	    case "poe":
+		return "ri-flashlight-line"
 	    case "radios":
 	    case "radio_frequencies":
+	    case "radio_ht_modes":
 	    case "radio_tx_powers":
                 return "ri-broadcast-line"
 	    case "leds":

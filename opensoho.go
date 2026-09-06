@@ -378,6 +378,12 @@ func highestHtModeAllowedOnChannel(app core.App, device string, radio int, frequ
 // device hasn't reported a freqlist for this radio yet (no rows), validation is
 // skipped so the radio can still be configured.
 func validateRadioFrequency(app core.App, device string, radio int, frequency int) error {
+	if frequency > 0 {
+		if _, ok := frequencyplan.FrequencyToChannel(frequency); !ok {
+			return validation.NewError("validation_invalid_value", "Frequency does not map to a known channel")
+		}
+	}
+
 	freqs, err := app.FindAllRecords("radio_frequencies",
 		dbx.HashExp{"device": device, "radio": radio})
 	if err != nil {
@@ -1100,13 +1106,22 @@ func generateRadioConfig(app core.App, radio *core.Record, country_code string) 
 	band_txt := ""
 	if radio.GetBool("auto_frequency") != true {
 		frequency := radio.GetInt("frequency")
-		if channel, ok := frequencyToChannel(frequency); ok == true {
+		channel, channelOk := frequencyToChannel(frequency)
+		if channelOk {
 			frequency_txt = fmt.Sprintf("        option channel '%d'\n", channel)
 		}
 		// A specific frequency pins the band; emit it so the driver picks
 		// the right radio band (e.g. option band '2g').
-		if band := frequencyToUciBand(frequency); len(band) > 0 {
+		band := frequencyToUciBand(frequency)
+		if len(band) > 0 {
 			band_txt = fmt.Sprintf("        option band '%[1]s'\n", band)
+		}
+		if frequency > 0 && (!channelOk || len(band) == 0) {
+			// frequencyplan couldn't map this frequency; falling through to
+			// 'auto' would silently move the radio off what the UI shows, so
+			// log it instead of letting it pass unnoticed.
+			app.Logger().Error("Radio frequency does not map to a channel/band; emitting auto",
+				"device", radio.GetString("device"), "radio", radio.GetInt("radio"), "frequency", frequency)
 		}
 	}
 	htmode_txt := ""

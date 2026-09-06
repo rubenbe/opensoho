@@ -1258,6 +1258,21 @@ func TestValidateRadio(t *testing.T) {
 	r.Set("radio", 1)
 	assert.Nil(t, validateRadio(app, r))
 
+	// An unmappable frequency is rejected even when the radio has advertised
+	// nothing yet (radio 1) - the channel/band check runs before the lenient
+	// no-rows fallback.
+	r.Set("frequency", 5905)
+	r.Set("htmode", "")
+	err = validateRadio(app, r)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "does not map to a known channel")
+
+	// Also rejected against radio 0, which does have advertised rows.
+	r.Set("radio", 0)
+	err = validateRadio(app, r)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "does not map to a known channel")
+
 	// Flag the 5180 row so 40 MHz is impossible (both directions blocked).
 	f5180, err := app.FindFirstRecordByFilter("radio_frequencies",
 		"device = {:device} && radio = 0 && frequency = 5180",
@@ -3635,6 +3650,54 @@ func TestHandleOpenSohoMonitoring(t *testing.T) {
 	assert.Empty(t, htrecs)
 }
 
+// U-NII-4 (channels 169/173/177) sits above frequencyToChannel's old 5825 MHz
+// ceiling; a real dump advertising it (bug/radio_dump.json) must still sync
+// into radio_frequencies with the right channel and a resolvable band.
+func TestHandleOpenSohoMonitoringUnii4Frequencies(t *testing.T) {
+	app, err := tests.NewTestApp()
+	assert.Nil(t, err)
+	defer app.Cleanup()
+
+	devicecollection := core.NewBaseCollection("devices")
+	assert.Nil(t, app.Save(devicecollection))
+	setupRadioFrequenciesCollection(t, app, devicecollection)
+	setupRadioTxPowersCollection(t, app, devicecollection)
+	setupRadioHtModesCollection(t, app, devicecollection)
+
+	d := core.NewRecord(devicecollection)
+	assert.Nil(t, app.Save(d))
+
+	var radio1 OpenSohoRadio
+	radio1.Name = "radio1"
+	radio1.FreqList.Results = []IwinfoFreq{
+		{Channel: 36, MHz: 5180},
+		{Channel: 165, MHz: 5825, Flags: []string{"no_160mhz"}},
+		{Channel: 169, MHz: 5845, Flags: []string{"no_ht40-", "no_160mhz"}},
+		{Channel: 173, MHz: 5865, Flags: []string{"no_160mhz"}},
+	}
+	handleOpenSohoMonitoring(app, d, OpenSohoData{Type: "OpenSoho", Radios: []OpenSohoRadio{radio1}}, false)
+
+	recs, err := app.FindAllRecords("radio_frequencies", dbx.HashExp{"device": d.Id, "radio": 1})
+	assert.Nil(t, err)
+	assert.Equal(t, 4, len(recs))
+
+	for _, tt := range []struct {
+		freq, channel int
+	}{
+		{5845, 169},
+		{5865, 173},
+	} {
+		rec, err := app.FindFirstRecordByFilter("radio_frequencies",
+			"device = {:device} && radio = 1 && frequency = {:freq}",
+			dbx.Params{"device": d.Id, "freq": tt.freq})
+		assert.Nil(t, err, tt.freq)
+		assert.Equal(t, tt.channel, rec.GetInt("channel"), tt.freq)
+		// The stored frequency must still resolve to the 5 GHz band, not
+		// "unknown" - that's the divergence this test guards against.
+		assert.Equal(t, "5", frequencyToBand(rec.GetInt("frequency")), tt.freq)
+	}
+}
+
 // On single-wiphy multi-radio hardware (issue #59), all radios on the wiphy
 // report the same Info.HtModes union. Each radio's "caps" decodes a
 // different, correctly band-scoped list instead.
@@ -3892,8 +3955,15 @@ func TestFrequencyToBand(t *testing.T) {
 	}{
 		{2412, "2.4"},
 		{2472, "2.4"},
+		{5160, "5"},
+		{5170, "5"},
 		{5180, "5"},
 		{5825, "5"},
+		{5845, "5"},
+		{5865, "5"},
+		{5885, "5"},
+		{5905, "unknown"}, // gap between the 5 GHz and 6 GHz bands
+		{5935, "6"},
 		{5955, "6"},
 		{6975, "6"},
 		{58320, "60"},
@@ -3914,8 +3984,15 @@ func TestFrequencyToUciBand(t *testing.T) {
 	}{
 		{2412, "2g"},
 		{2472, "2g"},
+		{5160, "5g"},
+		{5170, "5g"},
 		{5180, "5g"},
 		{5825, "5g"},
+		{5845, "5g"},
+		{5865, "5g"},
+		{5885, "5g"},
+		{5905, ""}, // gap between the 5 GHz and 6 GHz bands
+		{5935, "6g"},
 		{5955, "6g"},
 		{6975, "6g"},
 		{58320, "60g"},
@@ -4395,11 +4472,19 @@ func TestFrequencyToChannel(t *testing.T) {
 		{2412, 1, true}, // 2.4 GHz
 		{2437, 6, true},
 		{2484, 14, true},
-		{5180, 36, true}, // 5 GHz
+		{5160, 32, true}, // 5 GHz
+		{5170, 34, true}, // arithmetic only: 34 isn't a real allocated channel
+		{5180, 36, true},
 		{5200, 40, true},
 		{5500, 100, true},
 		{5825, 165, true},
-		{5955, 1, true}, // 6 GHz
+		{5845, 169, true},
+		{5865, 173, true},
+		{5885, 177, true},
+		{5895, 0, false}, // band "5" but past the last channel center
+		{5935, 2, true},  // 6 GHz channel 2, below the 5950+5n grid
+		{5945, 0, false}, // band "6" but in the gap before channel 1
+		{5955, 1, true},
 		{6110, 32, true},
 		{7115, 233, true},
 		{58320, 1, true}, // 60 GHz
@@ -4927,10 +5012,11 @@ func setupRadioCollection(t *testing.T, app core.App, devicecollection *core.Col
 		MaxSelect: 1,
 		Values: []string{
 			"2412", "2417", "2422", "2427", "2432", "2437", "2442", "2447",
-			"2452", "2457", "2462", "2467", "2472", "2484", "5180", "5200",
-			"5220", "5240", "5260", "5280", "5300", "5320", "5500", "5520",
-			"5540", "5560", "5580", "5600", "5620", "5640", "5660", "5680",
-			"5700", "5720", "5745", "5765", "5785", "5805", "5825", "5935",
+			"2452", "2457", "2462", "2467", "2472", "2484", "5160",
+			"5180", "5200", "5220", "5240", "5260", "5280", "5300", "5320",
+			"5500", "5520", "5540", "5560", "5580", "5600", "5620", "5640",
+			"5660", "5680", "5700", "5720", "5745", "5765", "5785", "5805",
+			"5825", "5845", "5865", "5885", "5935",
 			"5955", "5975", "5995", "6015", "6035", "6055", "6075", "6095",
 			"6115", "6135", "6155", "6175", "6195", "6215", "6235", "6255",
 			"6275", "6295", "6315", "6335", "6355", "6375", "6395", "6415",

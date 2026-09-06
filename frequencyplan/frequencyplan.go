@@ -49,15 +49,29 @@ func channels24() []Channel {
 
 func channels5() []Channel {
 	chans := []int{
+		32, // U-NII-1's extra low channel; 20 MHz-only, see nonBondable below.
 		36, 40, 44, 48, 52, 56, 60, 64,
 		100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 144,
-		149, 153, 157, 161, 165,
+		149, 153, 157, 161, 165, 169, 173, 177, // U-NII-3 runs straight into U-NII-4.
 	}
 	list := make([]Channel, 0, len(chans))
 	for _, ch := range chans {
 		list = append(list, Channel{Number: ch, Frequency: 5000 + ch*5})
 	}
 	return list
+}
+
+// nonBondable lists channels that exist as standalone 20 MHz channels but have
+// no defined wider combination in the standard channelization - not merely
+// unavailable in some region, but structurally absent (marked "n/a", where
+// e.g. an unavailable-but-defined combination is marked "no"). Verified
+// against Wikipedia's "List of WLAN channels": channel 32's 40/80/160 MHz
+// columns are all "n/a", unlike every other 5/6 GHz channel in this plan.
+// BondingGroups keeps such a channel out of the runs used to build wider
+// tiers, even though it sits exactly 20 MHz from its neighbour like any other
+// frequency-contiguous channel.
+var nonBondable = map[string]map[int]bool{
+	"5": {32: true},
 }
 
 func channels6() []Channel {
@@ -82,7 +96,7 @@ var bandRanges = []struct {
 	min, max int
 }{
 	{"2.4", 2400, 2500},
-	{"5", 5170, 5835},
+	{"5", 5150, 5895},
 	{"6", 5925, 7125},
 	{"60", 57000, 71000},
 }
@@ -121,9 +135,13 @@ func FrequencyToChannel(freqMHz int) (int, bool) {
 		}
 		return (freqMHz - 2407) / 5, true
 
-	// 5 GHz band: Channels 36–165
-	case freqMHz >= 5180 && freqMHz <= 5825:
+	// 5 GHz band: Channels 32–177
+	case freqMHz >= 5160 && freqMHz <= 5885:
 		return (freqMHz - 5000) / 5, true
+
+	// 6 GHz channel 2 sits below channel 1 and is not on the 5950+5n grid.
+	case freqMHz == 5935:
+		return 2, true
 
 	// 6 GHz band: Channels 1–233 (starting at 5955 MHz, 5 MHz spacing)
 	case freqMHz >= 5955 && freqMHz <= 7115:
@@ -174,11 +192,13 @@ type BondingGroup struct {
 
 // BondingGroups returns the channel-bonding groups for a band at a given width,
 // in column order. For 5/6 GHz, channels are grouped within frequency-contiguous
-// runs (consecutive plan entries 20 MHz apart) into chunks of width/20; this
-// prevents bonding across band gaps (e.g. the 5 GHz 64->100 jump and the
-// 144->149 boundary). For 2.4 GHz, whose channels overlap at 5 MHz spacing,
-// groups are consecutive adjacent-channel chunks (an accepted approximation). A
-// trailing chunk shorter than width/20 has Complete == false.
+// runs (consecutive plan entries 20 MHz apart, excluding nonBondable channels)
+// into chunks of width/20; this prevents bonding across band gaps (e.g. the
+// 5 GHz 64->100 jump and the 144->149 boundary) and across a nonBondable
+// channel that happens to sit exactly 20 MHz from its neighbour (5 GHz 32->36).
+// For 2.4 GHz, whose channels overlap at 5 MHz spacing, groups are consecutive
+// adjacent-channel chunks (an accepted approximation). A trailing chunk shorter
+// than width/20 has Complete == false.
 func BondingGroups(band string, width int) []BondingGroup {
 	plan := standardChannels[band]
 	k := width / 20
@@ -196,11 +216,14 @@ func BondingGroups(band string, width int) []BondingGroup {
 	}
 
 	// Split into contiguous runs of plan indices. 2.4 GHz is one run (overlapping
-	// channels); 5/6 GHz break runs where the frequency step != 20.
+	// channels); 5/6 GHz break runs where the frequency step != 20, or where
+	// either channel on either side of the step is nonBondable.
+	nb := nonBondable[band]
 	var runs [][]int
 	var run []int
 	for i := range plan {
-		contiguous := len(run) == 0 || band == "2.4" || plan[i].Frequency-plan[i-1].Frequency == 20
+		contiguous := len(run) == 0 || band == "2.4" ||
+			(plan[i].Frequency-plan[i-1].Frequency == 20 && !nb[plan[i].Number] && !nb[plan[i-1].Number])
 		if !contiguous {
 			runs = append(runs, run)
 			run = nil

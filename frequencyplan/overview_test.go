@@ -59,22 +59,20 @@ func TestBuildOverviewFallbackNoFreqData(t *testing.T) {
 	b5 := findBand(ov, "5")
 	assert.NotNil(t, b5)
 
-	// 40 MHz tier, ch36-40 group (index 1: channel 32 occupies the nonBondable
-	// leading slot at index 0) is in use by AP-1.
-	used := blockAt(findTier(b5, 40), 1)
+	// 40 MHz tier, first group (ch36-40) is in use by AP-1.
+	used := blockAt(findTier(b5, 40), 0)
 	assert.NotNil(t, used)
 	assert.Equal(t, "used", used.State)
 	assert.Equal(t, "36–40", used.Label)
 	assert.Equal(t, []string{"AP-1"}, refNames(used.Devices))
 	assert.Equal(t, "dev1", used.Devices[0].Id)
 
-	// 20 MHz tier, ch36 (plan index 1) is valid but unused (no radio_frequencies
-	// data -> available).
-	avail := blockAt(findTier(b5, 20), 1)
+	// 20 MHz tier, ch36 is valid but unused (no radio_frequencies data -> available).
+	avail := blockAt(findTier(b5, 20), 0)
 	assert.Equal(t, "available", avail.State)
 
-	// 160 MHz tier, 36-64 group (index 1) is complete -> available even without freq data.
-	g160 := blockAt(findTier(b5, 160), 1)
+	// 160 MHz tier, first group (36-64) is complete -> available even without freq data.
+	g160 := blockAt(findTier(b5, 160), 0)
 	assert.Equal(t, "available", g160.State)
 
 	// 2.4 GHz ch6 in use at 20 MHz.
@@ -94,16 +92,16 @@ func TestBuildOverviewMissingChannelInvalid(t *testing.T) {
 	b5 := findBand(ov, "5")
 	assert.NotNil(t, b5)
 
-	// ch36 (index 1) advertised -> available; ch44 (index 3) not advertised -> invalid.
-	assert.Equal(t, "available", blockAt(findTier(b5, 20), 1).State)
-	assert.Equal(t, "invalid", blockAt(findTier(b5, 20), 3).State)
+	// ch36 advertised -> available; ch44 (index 2) not advertised -> invalid.
+	assert.Equal(t, "available", blockAt(findTier(b5, 20), 0).State)
+	assert.Equal(t, "invalid", blockAt(findTier(b5, 20), 2).State)
 
 	// 40 MHz: 36-40 advertised+complete -> available; 44-48 has missing member -> invalid.
-	assert.Equal(t, "available", blockAt(findTier(b5, 40), 1).State)
-	assert.Equal(t, "invalid", blockAt(findTier(b5, 40), 3).State)
+	assert.Equal(t, "available", blockAt(findTier(b5, 40), 0).State)
+	assert.Equal(t, "invalid", blockAt(findTier(b5, 40), 2).State)
 
 	// 80 MHz: 36-48 group has missing members 44/48 -> invalid.
-	assert.Equal(t, "invalid", blockAt(findTier(b5, 80), 1).State)
+	assert.Equal(t, "invalid", blockAt(findTier(b5, 80), 0).State)
 }
 
 func TestBuildOverviewFlagForbidsWidth(t *testing.T) {
@@ -118,9 +116,9 @@ func TestBuildOverviewFlagForbidsWidth(t *testing.T) {
 	b5 := findBand(ov, "5")
 
 	// 40 MHz over 36-40 is allowed.
-	assert.Equal(t, "available", blockAt(findTier(b5, 40), 1).State)
+	assert.Equal(t, "available", blockAt(findTier(b5, 40), 0).State)
 	// 80 MHz over 36-48 is forbidden by the no_80mhz flag -> no supporter.
-	g80 := blockAt(findTier(b5, 80), 1)
+	g80 := blockAt(findTier(b5, 80), 0)
 	assert.Equal(t, "invalid", g80.State)
 	assert.Empty(t, g80.SupportedBy)
 }
@@ -138,18 +136,18 @@ func TestBuildOverviewAggregateAnyDeviceSupports(t *testing.T) {
 	ov := BuildOverview(nil, freqs, nil, names)
 	tier80 := findTier(findBand(ov, "5"), 80)
 
-	gLow := blockAt(tier80, 1) // 36-48
+	gLow := blockAt(tier80, 0) // 36-48
 	assert.Equal(t, "available", gLow.State)
 	assert.Equal(t, []string{"AP-A"}, refNames(gLow.SupportedBy))
 	assert.Equal(t, "A", gLow.SupportedBy[0].Id)
 	assert.Equal(t, []string{"AP-B"}, refNames(gLow.UnsupportedBy)) // B has rows but not 36-48
 
-	gHigh := blockAt(tier80, 21) // 149-161
+	gHigh := blockAt(tier80, 20) // 149-161
 	assert.Equal(t, "available", gHigh.State)
 	assert.Equal(t, []string{"AP-B"}, refNames(gHigh.SupportedBy))
 	assert.Equal(t, []string{"AP-A"}, refNames(gHigh.UnsupportedBy))
 
-	gMid := blockAt(tier80, 9) // 100-112, supported by neither
+	gMid := blockAt(tier80, 8) // 100-112, supported by neither
 	assert.Equal(t, "invalid", gMid.State)
 	assert.Empty(t, gMid.SupportedBy)
 	assert.Equal(t, []string{"AP-A", "AP-B"}, refNames(gMid.UnsupportedBy))
@@ -167,12 +165,12 @@ func TestBuildOverviewAggregateFlagRescuedByOtherDevice(t *testing.T) {
 	ov := BuildOverview(nil, freqs, nil, names)
 	b5 := findBand(ov, "5")
 
-	g80 := blockAt(findTier(b5, 80), 1) // 36-48: A forbidden, B supports
+	g80 := blockAt(findTier(b5, 80), 0) // 36-48: A forbidden, B supports
 	assert.Equal(t, "available", g80.State)
 	assert.Equal(t, []string{"AP-B"}, refNames(g80.SupportedBy))
 	assert.Equal(t, []string{"AP-A"}, refNames(g80.UnsupportedBy))
 
-	g40 := blockAt(findTier(b5, 40), 1) // 36-40: 40 MHz allowed for both
+	g40 := blockAt(findTier(b5, 40), 0) // 36-40: 40 MHz allowed for both
 	assert.Equal(t, "available", g40.State)
 	assert.Equal(t, []string{"AP-A", "AP-B"}, refNames(g40.SupportedBy))
 }
@@ -188,7 +186,7 @@ func TestBuildOverviewUnknownCapabilityDevicePreventsGreying(t *testing.T) {
 	names := map[string]string{"A": "AP-A", "B": "AP-B"}
 	ov := BuildOverview(radios, freqs, nil, names)
 
-	g80 := blockAt(findTier(findBand(ov, "5"), 80), 9) // 100-112
+	g80 := blockAt(findTier(findBand(ov, "5"), 80), 8) // 100-112
 	assert.Equal(t, "available", g80.State)
 	assert.Empty(t, g80.SupportedBy)
 	assert.Equal(t, []string{"AP-A"}, refNames(g80.UnsupportedBy)) // A known-but-missing; B unknown, not listed
@@ -285,12 +283,12 @@ func TestBuildOverviewHtModeCapsWidth5GHz(t *testing.T) {
 	b5 := findBand(ov, "5")
 
 	// 80 MHz: the 36-48 group is within VHT80 -> still supported.
-	g80 := blockAt(findTier(b5, 80), 1)
+	g80 := blockAt(findTier(b5, 80), 0)
 	assert.Equal(t, "available", g80.State)
 	assert.Equal(t, []string{"AP"}, refNames(g80.SupportedBy))
 
 	// 160 MHz: the 36-64 group is complete but VHT80 caps the device out.
-	g160 := blockAt(findTier(b5, 160), 1)
+	g160 := blockAt(findTier(b5, 160), 0)
 	assert.Equal(t, "invalid", g160.State)
 	assert.Empty(t, g160.SupportedBy)
 	assert.Equal(t, []string{"AP"}, refNames(g160.UnsupportedBy))

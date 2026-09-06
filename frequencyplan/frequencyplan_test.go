@@ -154,17 +154,10 @@ func channelsOf(g BondingGroup) []int {
 
 func TestBondingGroups5GHz(t *testing.T) {
 	g40 := BondingGroups("5", 40)
-	// Channel 32 is nonBondable: it sits alone as an incomplete leading block
-	// even though it's exactly 20 MHz below 36.
-	assert.Equal(t, []int{32}, channelsOf(g40[0]))
-	assert.False(t, g40[0].Complete)
+	assert.Equal(t, []int{36, 40}, channelsOf(g40[0]))
+	assert.True(t, g40[0].Complete)
 	assert.Equal(t, 0, g40[0].StartIndex)
-	assert.Equal(t, 1, g40[0].Span)
-
-	assert.Equal(t, []int{36, 40}, channelsOf(g40[1]))
-	assert.True(t, g40[1].Complete)
-	assert.Equal(t, 1, g40[1].StartIndex)
-	assert.Equal(t, 2, g40[1].Span)
+	assert.Equal(t, 2, g40[0].Span)
 
 	// U-NII-4 (169/173/177) is frequency-contiguous with U-NII-3 (up to 165),
 	// so the run now pairs cleanly all the way through - no more trailing
@@ -174,29 +167,25 @@ func TestBondingGroups5GHz(t *testing.T) {
 	assert.True(t, last.Complete)
 
 	g80 := BondingGroups("5", 80)
-	assert.Equal(t, []int{32}, channelsOf(g80[0]))
-	assert.False(t, g80[0].Complete)
-	assert.Equal(t, []int{36, 40, 44, 48}, channelsOf(g80[1]))
-	assert.True(t, g80[1].Complete)
+	assert.Equal(t, []int{36, 40, 44, 48}, channelsOf(g80[0]))
+	assert.True(t, g80[0].Complete)
 	// 165-177 is a real 80 MHz block (center channel 171).
 	last80 := g80[len(g80)-1]
 	assert.Equal(t, []int{165, 169, 173, 177}, channelsOf(last80))
 	assert.True(t, last80.Complete)
 
 	g160 := BondingGroups("5", 160)
-	assert.Equal(t, []int{32}, channelsOf(g160[0]))
-	assert.False(t, g160[0].Complete)
-	assert.Equal(t, []int{36, 40, 44, 48, 52, 56, 60, 64}, channelsOf(g160[1]))
+	assert.Equal(t, []int{36, 40, 44, 48, 52, 56, 60, 64}, channelsOf(g160[0]))
+	assert.True(t, g160[0].Complete)
+	assert.Equal(t, []int{100, 104, 108, 112, 116, 120, 124, 128}, channelsOf(g160[1]))
 	assert.True(t, g160[1].Complete)
-	assert.Equal(t, []int{100, 104, 108, 112, 116, 120, 124, 128}, channelsOf(g160[2]))
-	assert.True(t, g160[2].Complete)
 	// 132–144 (only 4 channels left before the 149 boundary) cannot form 160 MHz.
-	assert.Equal(t, []int{132, 136, 140, 144}, channelsOf(g160[3]))
-	assert.False(t, g160[3].Complete)
+	assert.Equal(t, []int{132, 136, 140, 144}, channelsOf(g160[2]))
+	assert.False(t, g160[2].Complete)
 	// 149-177 (channel 163) is a real 160 MHz block, confirmed via the
 	// standard channelization table (U-NII-3 running straight into U-NII-4).
-	assert.Equal(t, []int{149, 153, 157, 161, 165, 169, 173, 177}, channelsOf(g160[4]))
-	assert.True(t, g160[4].Complete)
+	assert.Equal(t, []int{149, 153, 157, 161, 165, 169, 173, 177}, channelsOf(g160[3]))
+	assert.True(t, g160[3].Complete)
 }
 
 func TestBondingGroups24GHz(t *testing.T) {

@@ -3752,9 +3752,11 @@ func TestUpdateInterface(t *testing.T) {
 	assert.Equal(t, "somethingabcdef", interfaces[0].GetString("wifi")) // Make this a reference>
 	assert.Equal(t, "phy1-ap0", interfaces[0].GetString("interface"))
 	assert.Equal(t, "2.4", interfaces[0].GetString("band"))
-	created := interfaces[0].GetString("created")
+	// PocketBase fills "created" and "updated" from two separate clock reads,
+	// so on an unlucky millisecond boundary they differ. Use the value
+	// "updated" got on insert as the baseline for "record was not touched".
 	updated := interfaces[0].GetString("updated")
-	assert.Equal(t, created, updated)
+	inserted := updated
 
 	// Send another, identical record
 	err = updateInterface(app, iface, deviceId, interfacesCollection)
@@ -3762,7 +3764,7 @@ func TestUpdateInterface(t *testing.T) {
 	interfaces, err = app.FindAllRecords("interfaces")
 	assert.Equal(t, nil, err)
 	updated = interfaces[0].GetString("updated")
-	assert.Equal(t, created, updated)
+	assert.Equal(t, inserted, updated)
 
 	time.Sleep(1 * time.Millisecond)
 	{
@@ -3775,7 +3777,7 @@ func TestUpdateInterface(t *testing.T) {
 		assert.Equal(t, nil, err)
 		updated = interfaces[0].GetString("updated")
 		// Record should not be updated
-		assert.Equal(t, created, updated)
+		assert.Equal(t, inserted, updated)
 	}
 	time.Sleep(1 * time.Millisecond)
 	{
@@ -3789,7 +3791,7 @@ func TestUpdateInterface(t *testing.T) {
 		updated = interfaces[0].GetString("updated")
 		mac := interfaces[0].GetString("mac_address")
 		// Record should be updated
-		assert.NotEqual(t, created, updated)
+		assert.NotEqual(t, inserted, updated)
 		assert.Equal(t, "00:bb:cc:dd:ee", mac)
 	}
 	time.Sleep(1 * time.Millisecond)
@@ -3805,7 +3807,7 @@ func TestUpdateInterface(t *testing.T) {
 		mac := interfaces[0].GetString("mac_address")
 		ssid := interfaces[0].GetString("wifi")
 		// Record should be updated
-		assert.NotEqual(t, created, updated2)
+		assert.NotEqual(t, inserted, updated2)
 		assert.NotEqual(t, updated, updated2)
 		assert.Equal(t, "00:bb:cc:dd:ee", mac)
 		assert.Equal(t, "fffffffffffffff", ssid)

@@ -2312,6 +2312,36 @@ func handleBridgeMonitoring(app core.App, iface Interface, device *core.Record, 
 	return err
 }
 
+// bridgeMemberNames collects every interface named as a member of a bridge in
+// this payload.
+func bridgeMemberNames(interfaces []Interface) map[string]bool {
+	members := map[string]bool{}
+	for _, iface := range interfaces {
+		if iface.Type != "bridge" {
+			continue
+		}
+		for _, membername := range iface.BridgeMembers {
+			members[membername] = true
+		}
+	}
+	return members
+}
+
+// isWiredPort reports whether an interface should be recorded in the ethernet
+// collection. netjson-monitoring can only label a port "ethernet" when the
+// driver exposes ethtool link modes; virtio and similar NICs fall back to
+// "other". Membership of a bridge is what tells us such an interface is a real
+// wired port rather than a tunnel.
+func isWiredPort(iface Interface, bridgeMembers map[string]bool) bool {
+	switch iface.Type {
+	case "ethernet":
+		return true
+	case "other":
+		return bridgeMembers[iface.Name]
+	}
+	return false
+}
+
 func handleEthernetMonitoring(app core.App, iface Interface, device *core.Record, ethernetcollection *core.Collection) {
 	record := findFirstOrNewByFilter(app, ethernetcollection, "device = {:device} && name = {:name}", dbx.Params{"device": device.Id}, dbx.Params{"name": iface.Name})
 	record.Set("name", iface.Name)
@@ -2427,6 +2457,8 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 	ethernetcollection, _ := app.FindCollectionByNameOrId("ethernet")
 	bridgescollection, _ := app.FindCollectionByNameOrId("bridges")
 
+	bridgeMembers := bridgeMemberNames(payload.Interfaces)
+
 	for _, iface := range payload.Interfaces {
 		if iface.Type == "wireless" && iface.Wireless != nil {
 			if interfacecollection != nil && wificollection != nil {
@@ -2469,7 +2501,7 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 				}
 			}
 		}
-		if iface.Type == "ethernet" {
+		if isWiredPort(iface, bridgeMembers) {
 			handleEthernetMonitoring(app, iface, device, ethernetcollection)
 		}
 	}

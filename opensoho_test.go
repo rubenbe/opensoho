@@ -2736,6 +2736,119 @@ func TestUpdateMonitoring(t *testing.T) {
 	assert.Equal(t, Radio{Frequency: 2462, Channel: 11, HTmode: "HT20", TxPower: 22}, radio)
 }
 
+func TestIsWiredPort(t *testing.T) {
+	// Modelled on a real dump: netjson-monitoring labels eth0 "other" because
+	// the virtio driver exposes no ethtool link modes, while wg0 is recognised
+	// as virtual through its wireguard address.
+	payload := []Interface{
+		{Name: "wg0", Type: "virtual"},
+		{Name: "eth0", Type: "other"},
+		{Name: "gre4-tun", Type: "other"},
+		{Name: "lan1", Type: "ethernet"},
+		{Name: "wan", Type: "ethernet"},
+		{Name: "phy0-ap0", Type: "wireless"},
+		{Name: "br-lan", Type: "bridge", BridgeMembers: []string{"eth0", "lan1", "phy0-ap0"}},
+	}
+	members := bridgeMemberNames(payload)
+	assert.Equal(t, map[string]bool{"eth0": true, "lan1": true, "phy0-ap0": true}, members)
+
+	expected := map[string]bool{
+		"wg0":      false,
+		"eth0":     true, // unclassified, but a bridge member: a real port
+		"gre4-tun": false,
+		"lan1":     true,
+		"wan":      true, // classified, bridged or not
+		"phy0-ap0": false,
+		"br-lan":   false,
+	}
+	for _, iface := range payload {
+		assert.Equal(t, expected[iface.Name], isWiredPort(iface, members), iface.Name)
+	}
+}
+
+// An ethernet port the agent could not classify (reported as type "other")
+// must still be registered and linked to its bridge.
+func TestUpdateMonitoringUnclassifiedEthernet(t *testing.T) {
+	json := `
+{
+  "type": "DeviceMonitoring",
+  "general": {
+    "local_time": 1788874000,
+    "uptime": 3897728,
+    "hostname": "Wireguard-Server"
+  },
+  "interfaces": [
+    {
+      "mac": "00:00:00:00:00:00",
+      "type": "virtual",
+      "name": "wg0",
+      "up": true,
+      "addresses": [{"proto": "wireguard", "address": "10.0.24.1", "family": "ipv4", "mask": 24}]
+    },
+    {
+      "mac": "52:54:00:d6:e1:e0",
+      "type": "other",
+      "name": "eth0",
+      "up": true,
+      "statistics": {"tx_bytes": 436966721860, "rx_bytes": 436922649778}
+    },
+    {
+      "bridge_members": ["eth0"],
+      "type": "bridge",
+      "stp": false,
+      "name": "br-lan",
+      "mac": "52:54:00:d6:e1:e0",
+      "up": true,
+      "statistics": {"tx_bytes": 436966717000, "rx_bytes": 429694533880}
+    }
+  ]
+}`
+	var err error
+	app, _ := tests.NewTestApp()
+	event := core.RequestEvent{}
+	event.Request, err = http.NewRequest("POST", "/api/v1/monitoring/device/", strings.NewReader(json))
+	assert.Equal(t, err, nil)
+	event.Request.Header.Set("content-type", "application/json")
+	event.App = app
+	rec := httptest.NewRecorder()
+	event.Response = rec
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	clientcollection := setupClientsCollection(t, app)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	porttaggingcollection := setupPortTaggingCollection(t, app, vlancollection)
+	ethernetcollection := setupEthernetCollection(t, app, devicecollection, porttaggingcollection)
+	interfacescollection := setupInterfacesCollection(t, app)
+	setupBridgesCollection(t, app, devicecollection, interfacescollection, ethernetcollection)
+
+	d := core.NewRecord(devicecollection)
+	d.Set("name", "Wireguard-Server")
+	d.Set("health_status", "healthy")
+	err = app.Save(d)
+	assert.Equal(t, nil, err)
+
+	response, _ := handleMonitoring(&event, app, d, clientcollection)
+	assert.Equal(t, nil, response)
+
+	// eth0 is registered as a port, wg0 is not
+	ethernets, err := app.FindAllRecords("ethernet")
+	assert.Equal(t, nil, err)
+	assert.Equal(t, 1, len(ethernets))
+	assert.Equal(t, "eth0", ethernets[0].GetString("name"))
+	assert.Equal(t, d.Id, ethernets[0].GetString("device"))
+	// The agent reports no speed for an interface it could not classify
+	assert.Equal(t, "", ethernets[0].GetString("speed"))
+
+	// ... and br-lan lists it as a member
+	bridges, err := app.FindAllRecords("bridges")
+	assert.Equal(t, nil, err)
+	assert.Equal(t, 1, len(bridges))
+	assert.Equal(t, "br-lan", bridges[0].GetString("name"))
+	assert.Equal(t, []string{ethernets[0].Id}, bridges[0].GetStringSlice("ethernet"))
+	assert.Equal(t, []string{}, bridges[0].GetStringSlice("wifi"))
+}
+
 // Verify an empty monitoring request is correctly ignored
 func TestUpdateMonitoringEmptyBody(t *testing.T) {
 	var err error

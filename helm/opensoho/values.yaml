@@ -60,6 +60,11 @@ ingress:
   #    hosts:
   #      - opensoho.local
 
+httproute:
+  enabled: false
+  hostname: opensoho.local
+  parentRefs: []
+
 resources:
   limits:
     cpu: 500m

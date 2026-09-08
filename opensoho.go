@@ -2273,26 +2273,29 @@ func handleBridgeMonitoring(app core.App, iface Interface, device *core.Record, 
 
 		if eth_err != nil && !errors.Is(eth_err, sql.ErrNoRows) {
 			err = eth_err
-			fmt.Println("Ethernet:", eth_err, membername)
+			app.Logger().Error("Failed to look up bridge member in the ethernet collection",
+				"device", device.Id, "bridge", iface.Name, "member", membername, "error", eth_err)
 		}
 		if wifi_err != nil && !errors.Is(wifi_err, sql.ErrNoRows) {
 			err = wifi_err
-			fmt.Println("Wifi", wifi_err, membername)
+			app.Logger().Error("Failed to look up bridge member in the interfaces collection",
+				"device", device.Id, "bridge", iface.Name, "member", membername, "error", wifi_err)
 		}
 		if eth_record != nil && wifi_record != nil {
 			err = fmt.Errorf("Ambigious bridge member %s", membername)
-			fmt.Println(err)
+			app.Logger().Error("Ambigious bridge member, it is both an ethernet port and a wireless interface",
+				"device", device.Id, "bridge", iface.Name, "member", membername)
 		}
 		if wifi_record == nil && eth_record == nil {
-			err_ignored := fmt.Errorf("Unknown bridge member %s", membername)
-			fmt.Println(err_ignored)
+			// Not an error: the member is simply not (yet) known to us, for
+			// example a wireless interface whose SSID is unmanaged.
+			app.Logger().Warn("Unknown bridge member, it is not registered as an ethernet port or a wireless interface",
+				"device", device.Id, "bridge", iface.Name, "member", membername)
 		}
 		if wifi_record != nil {
-			fmt.Println("ADDING WIFI", wifi_record)
 			wifilist = append(wifilist, wifi_record.Id)
 		}
 		if eth_record != nil {
-			fmt.Println("ADDING ETH", eth_record)
 			ethernetlist = append(ethernetlist, eth_record.Id)
 		}
 	}
@@ -2301,11 +2304,11 @@ func handleBridgeMonitoring(app core.App, iface Interface, device *core.Record, 
 		ethernetlist = []string{}
 		wifilist = []string{}
 	}
-	fmt.Println("SAVING")
 	record.Set("ethernet", ethernetlist)
 	record.Set("wifi", wifilist)
-	x := app.Save(record)
-	fmt.Println("SAVED", x)
+	if saveErr := app.Save(record); saveErr != nil {
+		app.Logger().Error("Failed to store bridge", "device", device.Id, "bridge", iface.Name, "error", saveErr)
+	}
 	return err
 }
 
@@ -2318,7 +2321,9 @@ func handleEthernetMonitoring(app core.App, iface Interface, device *core.Record
 		record.Set("tx_bytes", iface.Statistics.TxBytes)
 		record.Set("rx_bytes", iface.Statistics.RxBytes)
 	}
-	app.Save(record)
+	if err := app.Save(record); err != nil {
+		app.Logger().Error("Failed to store ethernet port", "device", device.Id, "port", iface.Name, "error", err)
+	}
 }
 
 func updateInterface(app core.App, iface Interface, deviceId string, interfaceCollection *core.Collection) error {

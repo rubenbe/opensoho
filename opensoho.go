@@ -193,7 +193,14 @@ func frequencyToBand(frequency int) string {
 // frequencyToUciBand maps a frequency to the value UCI expects for the
 // wifi-device "band" option (e.g. 2412 -> "2g"). Returns "" for unknown bands.
 func frequencyToUciBand(frequency int) string {
-	switch frequencyToBand(frequency) {
+	return bandToUciBand(frequencyToBand(frequency))
+}
+
+// bandToUciBand maps the band vocabulary frequencyplan/htmodes use to the value
+// UCI expects for the wifi-device "band" option (e.g. "5" -> "5g"). Returns ""
+// for unknown bands.
+func bandToUciBand(band string) string {
+	switch band {
 	case "2.4":
 		return "2g"
 	case "5":
@@ -1191,6 +1198,11 @@ func generateRadioConfig(app core.App, radio *core.Record, country_code string) 
 			app.Logger().Error("Radio frequency does not map to a channel/band; emitting auto",
 				"device", radio.GetString("device"), "radio", radio.GetInt("radio"), "frequency", frequency)
 		}
+	} else if band := bandToUciBand(radio.GetString("band")); len(band) > 0 {
+		// Auto frequency still lets the user pin the band; emit it so the
+		// driver only scans that band (e.g. option band '5g' with channel
+		// 'auto'). An empty or unknown band leaves the option out.
+		band_txt = fmt.Sprintf("        option band '%[1]s'\n", band)
 	}
 	htmode_txt := ""
 	if htmode := radio.GetString("htmode"); len(htmode) > 0 {

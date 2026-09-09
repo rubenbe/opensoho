@@ -14,6 +14,7 @@ func newRadioRecord() *core.Record {
 	collection.Fields.Add(&core.TextField{Name: "device"})
 	collection.Fields.Add(&core.NumberField{Name: "frequency"})
 	collection.Fields.Add(&core.TextField{Name: "htmode"})
+	collection.Fields.Add(&core.TextField{Name: "band"})
 	collection.Fields.Add(&core.BoolField{Name: "auto_frequency"})
 	collection.Fields.Add(&core.BoolField{Name: "enabled"})
 	collection.Fields.Add(&core.NumberField{Name: "tx_power"})

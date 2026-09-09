@@ -13,7 +13,7 @@ var (
 )
 
 var radioConfigFields = []string{
-	"radio", "device", "frequency", "htmode",
+	"radio", "device", "frequency", "htmode", "band",
 	"auto_frequency", "enabled", "tx_power", "tx_power_mode",
 }
 

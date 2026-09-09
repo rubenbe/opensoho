@@ -4827,8 +4827,8 @@ config wifi-device 'radio3'
 }
 
 // TestGenerateRadioConfigBand checks that a specific (non-auto) frequency emits
-// the matching UCI "band" option for every band, while an auto frequency omits
-// it entirely.
+// the matching UCI "band" option for every band, while an auto frequency falls
+// back to the band field (and omits the option when that is unset).
 func TestGenerateRadioConfigBand(t *testing.T) {
 	app, _ := tests.NewTestApp()
 	radiocollection := core.NewBaseCollection("radios")
@@ -4838,11 +4838,12 @@ func TestGenerateRadioConfigBand(t *testing.T) {
 		frequency int
 		channel   string
 		band      string
+		uciband   string
 	}{
-		{2412, "1", "2g"},
-		{5180, "36", "5g"},
-		{5955, "1", "6g"},
-		{58320, "1", "60g"},
+		{2412, "1", "2.4", "2g"},
+		{5180, "36", "5", "5g"},
+		{5955, "1", "6", "6g"},
+		{58320, "1", "60", "60g"},
 	}
 
 	for _, b := range bands {
@@ -4856,10 +4857,27 @@ func TestGenerateRadioConfigBand(t *testing.T) {
 config wifi-device 'radio0'
         option channel '%s'
         option band '%s'
-`, b.channel, b.band), generateRadioConfig(app, record, ""))
+`, b.channel, b.uciband), generateRadioConfig(app, record, ""))
 
-		// auto_frequency uses channel 'auto' and omits the band option.
+		// auto_frequency uses channel 'auto' and, with no band selected,
+		// omits the band option.
 		record.Set("auto_frequency", true)
+		assert.Equal(t, `
+config wifi-device 'radio0'
+        option channel 'auto'
+`, generateRadioConfig(app, record, ""))
+
+		// A band selected alongside auto_frequency pins the band while the
+		// channel stays 'auto'.
+		record.Set("band", b.band)
+		assert.Equal(t, fmt.Sprintf(`
+config wifi-device 'radio0'
+        option channel 'auto'
+        option band '%s'
+`, b.uciband), generateRadioConfig(app, record, ""))
+
+		// An unknown band is ignored rather than emitted verbatim.
+		record.Set("band", "7")
 		assert.Equal(t, `
 config wifi-device 'radio0'
         option channel 'auto'

@@ -1232,7 +1232,6 @@ export default class CommonHelper {
         }
 	case "radios":
             switch (fieldname.toLowerCase()){
-            case "band":
             case "interface":
             case "mac_address":
             case "radio":

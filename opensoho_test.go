@@ -1308,6 +1308,91 @@ func TestValidateRadio(t *testing.T) {
 	// And the mode the message named does pass.
 	r.Set("htmode", "VHT20")
 	assert.Nil(t, validateRadio(app, r))
+
+	// The band has to be one the radio advertised; 6 GHz was never reported.
+	r.Set("band", "6")
+	err = validateRadio(app, r)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "This radio does not support the 6 GHz band")
+
+	// An advertised band passes, and so does leaving it empty.
+	r.Set("band", "5")
+	assert.Nil(t, validateRadio(app, r))
+	r.Set("band", "")
+	assert.Nil(t, validateRadio(app, r))
+
+	// radio 1 advertised nothing, so any band is allowed there.
+	r.Set("radio", 1)
+	r.Set("band", "6")
+	assert.Nil(t, validateRadio(app, r))
+}
+
+func TestValidateRadioBand(t *testing.T) {
+	app, err := tests.NewTestApp()
+	assert.Nil(t, err)
+	defer app.Cleanup()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	freqcollection := setupRadioFrequenciesCollection(t, app, devicecollection)
+
+	device := core.NewRecord(devicecollection)
+	device.Set("health_status", "healthy")
+	assert.Nil(t, app.Save(device))
+
+	// radio 0 advertised 2.4 GHz only; nothing reported for radio 1.
+	for channel, freq := range map[int]int{1: 2412, 6: 2437} {
+		f := core.NewRecord(freqcollection)
+		f.Set("device", device.Id)
+		f.Set("radio", 0)
+		f.Set("channel", channel)
+		f.Set("frequency", freq)
+		assert.Nil(t, app.Save(f))
+	}
+
+	// The advertised band passes.
+	assert.Nil(t, validateRadioBand(app, device.Id, 0, "2.4"))
+
+	// A band the radio never advertised is rejected, naming what it does support.
+	err = validateRadioBand(app, device.Id, 0, "5")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "This radio does not support the 5 GHz band")
+	assert.Contains(t, err.Error(), "supported bands: 2.4 GHz")
+
+	// An empty band is auto and always allowed.
+	assert.Nil(t, validateRadioBand(app, device.Id, 0, ""))
+
+	// radio 1 reported no frequencies: any band is allowed (lenient).
+	assert.Nil(t, validateRadioBand(app, device.Id, 1, "5"))
+	assert.Nil(t, validateRadioBand(app, device.Id, 1, "6"))
+
+	// A dual-band radio accepts either of its bands, and the message lists both.
+	for channel, freq := range map[int]int{36: 5180, 52: 5260} {
+		f := core.NewRecord(freqcollection)
+		f.Set("device", device.Id)
+		f.Set("radio", 0)
+		f.Set("channel", channel)
+		f.Set("frequency", freq)
+		assert.Nil(t, app.Save(f))
+	}
+	assert.Nil(t, validateRadioBand(app, device.Id, 0, "2.4"))
+	assert.Nil(t, validateRadioBand(app, device.Id, 0, "5"))
+	err = validateRadioBand(app, device.Id, 0, "6")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "supported bands: 2.4, 5 GHz")
+
+	// Frequencies that map to no known band leave the radio unconstrained.
+	other := core.NewRecord(devicecollection)
+	other.Set("health_status", "healthy")
+	assert.Nil(t, app.Save(other))
+	f := core.NewRecord(freqcollection)
+	f.Set("device", other.Id)
+	f.Set("radio", 0)
+	f.Set("channel", 1)
+	f.Set("frequency", 1234)
+	assert.Nil(t, app.Save(f))
+	assert.Nil(t, validateRadioBand(app, other.Id, 0, "6"))
 }
 
 func TestValidateRadioHtModeFlags(t *testing.T) {
@@ -5026,6 +5111,12 @@ func setupRadioCollection(t *testing.T, app core.App, devicecollection *core.Col
 			"6915", "6935", "6955", "6975", "6995", "7015", "7035", "7055",
 			"7075", "7095", "7115", "58320", "60480", "62640", "64800", "66960",
 		},
+	})
+	radiocollection.Fields.Add(&core.SelectField{
+		Name:      "band",
+		Required:  false,
+		MaxSelect: 1,
+		Values:    []string{"2.4", "5", "6"},
 	})
 	radiocollection.Fields.Add(&core.TextField{
 		Name:     "htmode",

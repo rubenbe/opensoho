@@ -400,6 +400,37 @@ func validateRadioFrequency(app core.App, device string, radio int, frequency in
 	return validation.NewError("validation_invalid_value", "Frequency is not supported by this radio")
 }
 
+// validateRadioBand checks the user-set band against the bands the device
+// actually advertised in the radio_frequencies collection. If the device hasn't
+// reported a freqlist for this radio yet (no rows), validation is skipped so the
+// radio can still be configured.
+func validateRadioBand(app core.App, device string, radio int, band string) error {
+	// Empty band is always allowed (auto)
+	if band == "" {
+		return nil
+	}
+
+	rows, err := app.FindAllRecords("radio_frequencies",
+		dbx.HashExp{"device": device, "radio": radio})
+	if err != nil {
+		return validation.NewError("validation_invalid_value", "Failed to look up supported frequencies")
+	}
+	frequencies := make([]int, 0, len(rows))
+	for _, r := range rows {
+		frequencies = append(frequencies, r.GetInt("frequency"))
+	}
+	bands := bandsForFrequencies(frequencies)
+	if len(bands) == 0 {
+		return nil
+	}
+	if slices.Contains(bands, band) {
+		return nil
+	}
+	return validation.NewError("validation_invalid_value", fmt.Sprintf(
+		"This radio does not support the %s GHz band; supported bands: %s GHz",
+		band, strings.Join(bands, ", ")))
+}
+
 // lookupTxPowerDbm returns the highest advertised dBm whose mW value equals mw,
 // for the given device+radio. found is false when the device has no matching
 // radio_tx_powers row (or none at all).
@@ -533,6 +564,10 @@ func validateRadio(app core.App, record *core.Record) error {
 	if err := validateRadioTxPower(app, record.GetString("device"), record.GetInt("radio"),
 		record.GetString("tx_power_mode"), record.GetInt("tx_power")); err != nil {
 		errs["tx_power"] = err
+	}
+	if err := validateRadioBand(app, record.GetString("device"), record.GetInt("radio"),
+		record.GetString("band")); err != nil {
+		errs["band"] = err
 	}
 	if len(errs) > 0 {
 		return errs
@@ -727,9 +762,19 @@ func radiosFromOpenSoho(app core.App, device *core.Record, data OpenSohoData) ma
 // its advertised frequency list. The result is sorted for deterministic output
 // and excludes the "unknown" sentinel from frequencyToBand.
 func radioBands(radio OpenSohoRadio) []string {
-	seen := map[string]struct{}{}
+	frequencies := make([]int, 0, len(radio.FreqList.Results))
 	for _, freq := range radio.FreqList.Results {
-		band := frequencyToBand(freq.MHz)
+		frequencies = append(frequencies, freq.MHz)
+	}
+	return bandsForFrequencies(frequencies)
+}
+
+// bandsForFrequencies collapses frequencies into the distinct bands they fall
+// in, sorted. Frequencies outside the known bands are dropped.
+func bandsForFrequencies(frequencies []int) []string {
+	seen := map[string]struct{}{}
+	for _, mhz := range frequencies {
+		band := frequencyToBand(mhz)
 		if band == "unknown" {
 			continue
 		}

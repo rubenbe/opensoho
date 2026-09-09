@@ -127,13 +127,32 @@ func copyEmbedDirToDisk(embedFS fs.FS, targetDir string) error {
 	})
 }
 
+// radioInterfaceRegexp matches the netdev names netifd derives from a wifi
+// device, e.g. "phy0-ap0", "wl1-ap2" and - on drivers that expose several
+// radios on a single wiphy, like MediaTek MT7996 - "phy0.2-ap0".
+var radioInterfaceRegexp = regexp.MustCompile(`^(?:phy|wl)(\d+)(?:\.(\d+))?-`)
+
+// extractRadioNumber derives the radio index from a wireless interface name.
+//
+// For the classic one-wiphy-per-radio naming the phy index is the radio index
+// ("phy1-ap0" -> 1). Multi-radio wiphys append the radio index to the phy
+// index ("phy0.2-ap0" -> 2), which only lines up with the UCI wifi-device
+// numbering as long as there is a single wiphy: with a second wiphy in play
+// ("phy1.2-ap0") the radios of phy0 come first, and how many there are cannot
+// be told from the interface name, so those are reported as an error rather
+// than guessed at.
 func extractRadioNumber(s string) (int, error) {
-	re := regexp.MustCompile(`^(?:phy|wl)(\d+)-`)
-	match := re.FindStringSubmatch(s)
-	if len(match) < 2 {
+	match := radioInterfaceRegexp.FindStringSubmatch(s)
+	if len(match) < 3 {
 		return 0, fmt.Errorf("radio number not found in string: %s", s)
 	}
-	return strconv.Atoi(match[1])
+	if match[2] == "" {
+		return strconv.Atoi(match[1])
+	}
+	if match[1] != "0" {
+		return 0, fmt.Errorf("radio number is ambiguous in string: %s", s)
+	}
+	return strconv.Atoi(match[2])
 }
 
 // parseRadioName extracts the radio index from an OpenSoho dump radio name
@@ -2564,7 +2583,8 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 			}
 			radionum, err := extractRadioNumber(iface.Name)
 			if err != nil {
-				fmt.Printf("Found an unknown phy pattern '%s', please report a github issue\n", iface.Name)
+				app.Logger().Error("Could not determine the radio for a wireless interface, please report a github issue",
+					"device", device.Id, "interface", iface.Name, "error", err)
 			} else {
 				radios[radionum] = Radio{Frequency: iface.Wireless.Frequency, Channel: iface.Wireless.Channel, HTmode: iface.Wireless.HTmode, TxPower: iface.Wireless.TxPower}
 			}

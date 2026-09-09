@@ -4075,7 +4075,20 @@ func TestExtractRadioNumber(t *testing.T) {
 		{"phy2-ap3", 2, false},
 		{"wl0-ap0", 0, false},
 		{"wl1-ap2", 1, false},
+		// Multi-radio wiphy (e.g. MediaTek MT7996): the radio index follows
+		// the phy index.
+		{"phy0.0-ap0", 0, false},
+		{"phy0.1-ap0", 1, false},
+		{"phy0.2-ap0", 2, false},
+		{"phy0.10-ap0", 10, false},
+		// A second wiphy means the radio index no longer matches the number
+		// after the dot, so refuse to guess.
+		{"phy1.0-ap0", 0, true},
+		{"phy1.2-ap0", 0, true},
+		{"wl1.2-ap0", 0, true},
 		{"invalid-string", 0, true}, // error case
+		{"phy0.2", 0, true},         // no interface suffix
+		{"phy0.-ap0", 0, true},
 	}
 
 	for _, tt := range tests {

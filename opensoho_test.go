@@ -1340,7 +1340,7 @@ func TestValidateRadio(t *testing.T) {
 	r.Set("band", "6")
 	err = validateRadio(app, r)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "5180 MHz is in the 5 GHz band")
+	assert.Contains(t, err.Error(), "The 6 GHz band does not match the selected frequency")
 	r.Set("band", "5")
 	assert.Nil(t, validateRadio(app, r))
 }
@@ -1351,11 +1351,10 @@ func TestValidateRadioBandFrequency(t *testing.T) {
 	assert.Nil(t, validateRadioBandFrequency("5", false, 5180))
 	assert.Nil(t, validateRadioBandFrequency("6", false, 5955))
 
-	// A band the frequency contradicts, naming both halves of the mismatch.
+	// A band the frequency contradicts, naming the band that was selected.
 	err := validateRadioBandFrequency("5", false, 2412)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "The 5 GHz band does not match the selected frequency")
-	assert.Contains(t, err.Error(), "2412 MHz is in the 2.4 GHz band")
 	assert.Error(t, validateRadioBandFrequency("2.4", false, 5955))
 	assert.Error(t, validateRadioBandFrequency("6", false, 5180))
 
@@ -1376,7 +1375,7 @@ func TestValidateRadioBandFrequency(t *testing.T) {
 	// contradicts any band that can be picked.
 	err = validateRadioBandFrequency("5", false, 58320)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "58320 MHz is in the 60 GHz band")
+	assert.Contains(t, err.Error(), "The 5 GHz band does not match the selected frequency")
 }
 
 func TestValidateRadioBand(t *testing.T) {

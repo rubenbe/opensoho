@@ -431,6 +431,25 @@ func validateRadioBand(app core.App, device string, radio int, band string) erro
 		band, strings.Join(bands, ", ")))
 }
 
+// validateRadioBandFrequency checks that an explicitly selected band agrees
+// with the band the selected frequency falls in. Either half set to auto - an
+// empty band, or auto_frequency (where the stored frequency is ignored and the
+// config emits channel 'auto') - leaves the pair unconstrained.
+func validateRadioBandFrequency(band string, autoFrequency bool, frequency int) error {
+	if band == "" || autoFrequency || frequency <= 0 {
+		return nil
+	}
+	frequencyBand := frequencyToBand(frequency)
+	// An unmappable frequency is reported against the frequency field by
+	// validateRadioFrequency; don't blame the band for it as well.
+	if frequencyBand == "unknown" || frequencyBand == band {
+		return nil
+	}
+	return validation.NewError("validation_invalid_value", fmt.Sprintf(
+		"The %s GHz band does not match the selected frequency. Select an appropriate frequency or set to \"auto frequency\".",
+		band))
+}
+
 // lookupTxPowerDbm returns the highest advertised dBm whose mW value equals mw,
 // for the given device+radio. found is false when the device has no matching
 // radio_tx_powers row (or none at all).
@@ -565,8 +584,12 @@ func validateRadio(app core.App, record *core.Record) error {
 		record.GetString("tx_power_mode"), record.GetInt("tx_power")); err != nil {
 		errs["tx_power"] = err
 	}
+	band := record.GetString("band")
 	if err := validateRadioBand(app, record.GetString("device"), record.GetInt("radio"),
-		record.GetString("band")); err != nil {
+		band); err != nil {
+		errs["band"] = err
+	} else if err := validateRadioBandFrequency(band,
+		record.GetBool("auto_frequency"), frequency); err != nil {
 		errs["band"] = err
 	}
 	if len(errs) > 0 {

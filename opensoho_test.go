@@ -1321,10 +1321,62 @@ func TestValidateRadio(t *testing.T) {
 	r.Set("band", "")
 	assert.Nil(t, validateRadio(app, r))
 
-	// radio 1 advertised nothing, so any band is allowed there.
+	// A band that contradicts the selected frequency is rejected: the record
+	// still sits on 5180 MHz.
+	r.Set("band", "2.4")
+	err = validateRadio(app, r)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "The 2.4 GHz band does not match the selected frequency")
+
+	// Letting the device pick the channel drops the constraint again.
+	r.Set("auto_frequency", true)
+	assert.Nil(t, validateRadio(app, r))
+	r.Set("auto_frequency", false)
+	r.Set("band", "")
+
+	// radio 1 advertised nothing, so any band is allowed there - as long as it
+	// agrees with the selected frequency (5180 MHz).
 	r.Set("radio", 1)
 	r.Set("band", "6")
+	err = validateRadio(app, r)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "5180 MHz is in the 5 GHz band")
+	r.Set("band", "5")
 	assert.Nil(t, validateRadio(app, r))
+}
+
+func TestValidateRadioBandFrequency(t *testing.T) {
+	// A band matching the frequency it was picked for.
+	assert.Nil(t, validateRadioBandFrequency("2.4", false, 2412))
+	assert.Nil(t, validateRadioBandFrequency("5", false, 5180))
+	assert.Nil(t, validateRadioBandFrequency("6", false, 5955))
+
+	// A band the frequency contradicts, naming both halves of the mismatch.
+	err := validateRadioBandFrequency("5", false, 2412)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "The 5 GHz band does not match the selected frequency")
+	assert.Contains(t, err.Error(), "2412 MHz is in the 2.4 GHz band")
+	assert.Error(t, validateRadioBandFrequency("2.4", false, 5955))
+	assert.Error(t, validateRadioBandFrequency("6", false, 5180))
+
+	// Auto on either half leaves the pair unconstrained: no band selected, or
+	// auto_frequency, where the stored frequency isn't what the radio will use.
+	assert.Nil(t, validateRadioBandFrequency("", false, 2412))
+	assert.Nil(t, validateRadioBandFrequency("5", true, 2412))
+	assert.Nil(t, validateRadioBandFrequency("", true, 2412))
+
+	// No frequency selected yet is auto as well.
+	assert.Nil(t, validateRadioBandFrequency("5", false, 0))
+
+	// A frequency that maps to no band is the frequency field's problem
+	// (validateRadioFrequency rejects it); the band isn't blamed twice.
+	assert.Nil(t, validateRadioBandFrequency("5", false, 1234))
+
+	// 60 GHz has no entry in the band select, but a frequency there still
+	// contradicts any band that can be picked.
+	err = validateRadioBandFrequency("5", false, 58320)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "58320 MHz is in the 60 GHz band")
 }
 
 func TestValidateRadioBand(t *testing.T) {

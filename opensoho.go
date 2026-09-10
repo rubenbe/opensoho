@@ -786,6 +786,13 @@ type OpenSohoData struct {
 }
 
 func radiosFromOpenSoho(app core.App, device *core.Record, data OpenSohoData) map[int]Radio {
+	// A PoE/LLDP dump shares the OpenSoho type but carries no "radios" key, so
+	// it says nothing about the radios. Return nil (not an empty map) so
+	// updateRadios leaves them alone: an empty non-nil map means "this device
+	// has no wifi-devices" and disables every radio it already knows about.
+	if data.Radios == nil {
+		return nil
+	}
 	radios := make(map[int]Radio, len(data.Radios))
 	for _, radio := range data.Radios {
 		idx, err := parseRadioName(radio.Name)

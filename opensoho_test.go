@@ -3181,6 +3181,10 @@ func TestUpdateMonitoringOpenSohoPoeOnly(t *testing.T) {
 	d := core.NewRecord(devicecollection)
 	d.Set("name", "the_device1")
 	d.Set("health_status", "healthy")
+	// The enabled flag is only tracked while the device's config is applied,
+	// so without this the disable branch is skipped and this test passes
+	// without ever reaching the code it guards.
+	d.Set("config_status", records.ConfigStatusApplied)
 	assert.Nil(t, app.Save(d))
 
 	updateRadios(d, app, map[int]Radio{0: {Frequency: 2412, Channel: 1, TxPower: 23}})
@@ -3197,6 +3201,72 @@ func TestUpdateMonitoringOpenSohoPoeOnly(t *testing.T) {
 	r, err := app.FindFirstRecordByData("radios", "radio", "0")
 	assert.Nil(t, err)
 	assert.Equal(t, true, r.GetBool("enabled"))
+}
+
+// The radios dump and the PoE dump land in the same openwisp-monitoring spool
+// and are uploaded in the same cycle, so the server sees them interleaved.
+// Replaying that sequence must leave the enabled flag steady: only the radios
+// dump knows which wifi-devices exist, the PoE dump says nothing about them.
+func TestUpdateMonitoringOpenSohoPoeInterleavedWithRadios(t *testing.T) {
+	const radiosDump = `{"type":"OpenSoho","radios":[
+		{"name":"radio0","disabled":"0","info":{"channel":1,"frequency":2412,"txpower":20}},
+		{"name":"radio1","disabled":"0","info":{"channel":36,"frequency":5180,"txpower":23}}
+	]}`
+	const poeDump = `{"type":"OpenSoho","poe":{"budget":65,"consumption":4.1,` +
+		`"ports":{"lan1":{"priority":2,"mode":"auto","status":"delivering","consumption":4.1}}}}`
+
+	app, err := tests.NewTestApp()
+	assert.Nil(t, err)
+	defer app.Cleanup()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	clientcollection := setupClientsCollection(t, app)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	setupRadioCollection(t, app, devicecollection)
+
+	d := core.NewRecord(devicecollection)
+	d.Set("name", "the_device1")
+	d.Set("health_status", "healthy")
+	d.Set("config_status", records.ConfigStatusApplied)
+	assert.Nil(t, app.Save(d))
+
+	// Mirrors the monitoring endpoint: parse the payload, then feed the radios
+	// it yielded to updateRadios.
+	post := func(body string) {
+		t.Helper()
+		event := core.RequestEvent{}
+		event.Request, err = http.NewRequest("POST", "/api/v1/monitoring/device/", strings.NewReader(body))
+		assert.Nil(t, err)
+		event.Request.Header.Set("content-type", "application/json")
+		event.App = app
+		event.Response = httptest.NewRecorder()
+
+		response, radios := handleMonitoring(&event, app, d, clientcollection)
+		assert.Nil(t, response)
+		updateRadios(d, app, radios)
+	}
+
+	assertBothEnabled := func(step string) {
+		t.Helper()
+		radiocount, err := app.CountRecords("radios")
+		assert.Nil(t, err)
+		assert.Equal(t, int64(2), radiocount, step)
+		for _, num := range []string{"0", "1"} {
+			r, err := app.FindFirstRecordByData("radios", "radio", num)
+			assert.Nil(t, err)
+			assert.Equal(t, true, r.GetBool("enabled"), step+": radio"+num)
+		}
+	}
+
+	post(radiosDump)
+	assertBothEnabled("after the first radios dump")
+
+	post(poeDump)
+	assertBothEnabled("after a PoE dump carrying no radios")
+
+	post(radiosDump)
+	assertBothEnabled("after the next radios dump")
 }
 
 func TestUciBool(t *testing.T) {

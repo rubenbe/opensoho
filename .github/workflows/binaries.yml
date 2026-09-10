@@ -1,0 +1,58 @@
+name: Manual Binaries
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch, tag or SHA to build (defaults to the branch selected above)'
+        required: false
+        default: ''
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.ref }}
+          fetch-depth: 0 # goreleaser needs full history + tags for the snapshot version
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+
+      - name: Build binaries
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: latest
+          args: build --snapshot --clean
+
+      # goreleaser writes to .builds, a hidden dir that upload-artifact skips by
+      # default, so copy the binaries out under names that say what they are.
+      - name: Collect binaries
+        run: |
+          mkdir -p artifacts
+          found=0
+          for bin in .builds/*/opensoho; do
+            [ -f "$bin" ] || continue
+            target=$(basename "$(dirname "$bin")")
+            target=${target#build_noncgo_}
+            cp "$bin" "artifacts/opensoho-${target}"
+            found=$((found + 1))
+          done
+          if [ "$found" -eq 0 ]; then
+            echo "No binaries found under .builds/" >&2
+            exit 1
+          fi
+          echo "Staged $found binaries:"
+          ls -l artifacts/
+
+      - name: Name the artifact
+        run: echo "SLUG=$(echo "${{ github.event.inputs.ref || github.ref_name }}" | tr '/' '-')" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: opensoho-${{ env.SLUG }}-${{ github.sha }}
+          path: artifacts/
+          if-no-files-found: error

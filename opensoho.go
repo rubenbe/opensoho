@@ -792,14 +792,13 @@ type MonitoringData struct {
 // Shape: {"type":"OpenSoho","radios":[{"name":"radio0",...},...]} where each
 // entry mirrors a UCI wifi-device augmented with iwinfo info / freqlist.
 
-// IwinfoInfo holds the subset of `ubus call iwinfo info` we care about.
+// IwinfoInfo holds the subset of `ubus call iwinfo info` we care about: the
+// radio's runtime state. Everything else iwinfo reports there is wiphy-wide,
+// so htmodes now comes from the per-band nl80211 caps instead.
 type IwinfoInfo struct {
-	Channel   int      `json:"channel"`
-	Frequency int      `json:"frequency"`
-	TxPower   int      `json:"txpower"`
-	Country   string   `json:"country"`
-	HwModes   []string `json:"hwmodes"`
-	HtModes   []string `json:"htmodes"`
+	Channel   int `json:"channel"`
+	Frequency int `json:"frequency"`
+	TxPower   int `json:"txpower"`
 }
 
 // IwinfoFreq is a single entry of `ubus call iwinfo freqlist`.
@@ -816,15 +815,44 @@ type IwinfoTxPower struct {
 	Mw  int `json:"mw"`
 }
 
+// RadioCaps holds a radio's nl80211 capability fields keyed by UCI band name:
+// one entry for a section that names its band, every band the phy has when it
+// doesn't. The empty key is a dump predating this shape, read against whatever
+// band the section declares.
+type RadioCaps map[string]*htmodes.Capabilities
+
+const legacyCapsBand = ""
+
+// UnmarshalJSON also accepts the single unkeyed blob older dumps send, so a
+// device still running the previous script keeps parsing.
+func (c *RadioCaps) UnmarshalJSON(data []byte) error {
+	if string(data) == "null" {
+		return nil
+	}
+	byBand := map[string]*htmodes.Capabilities{}
+	if err := json.Unmarshal(data, &byBand); err == nil {
+		*c = byBand
+		return nil
+	}
+	// Every legacy field is a number or an array, never an object, so the
+	// decode above can only succeed on the band-keyed shape.
+	var single htmodes.Capabilities
+	if err := json.Unmarshal(data, &single); err != nil {
+		return err
+	}
+	*c = RadioCaps{legacyCapsBand: &single}
+	return nil
+}
+
 // OpenSohoRadio is one wifi-device entry of the OpenSoho payload.
 type OpenSohoRadio struct {
-	Name       string                `json:"name"`
-	Phy        string                `json:"phy"`
-	Band       string                `json:"band"`
-	RadioIndex string                `json:"radio_index"`
-	Disabled   string                `json:"disabled"`
-	Info       IwinfoInfo            `json:"info"`
-	Caps       *htmodes.Capabilities `json:"caps"`
+	Name       string     `json:"name"`
+	Phy        string     `json:"phy"`
+	Band       string     `json:"band"`
+	RadioIndex string     `json:"radio_index"`
+	Disabled   string     `json:"disabled"`
+	Info       IwinfoInfo `json:"info"`
+	Caps       RadioCaps  `json:"caps"`
 	FreqList   struct {
 		Results []IwinfoFreq `json:"results"`
 	} `json:"freqlist"`
@@ -903,20 +931,48 @@ func bandsForFrequencies(frequencies []int) []string {
 	return bands
 }
 
-// radioHtModes returns the HT/VHT/HE/EHT modes advertised for one radio,
-// decoded per-band from the raw nl80211 capability fields in radio.Caps.
-// Info.HtModes is iwinfo's whole-wiphy union - wrong on shared-wiphy hardware
-// (issue #59) - and is only used as a fallback so a radio without a resolvable
-// band/caps still gets a value instead of none.
+// radioHtModes returns the modes advertised for one radio, from the nl80211
+// caps: the named band alone, or the union across every band the phy carries.
+// iwinfo's own htmodes are never consulted - that list is the whole-wiphy
+// union, wrong on shared-wiphy hardware (issue #59).
 func radioHtModes(radio OpenSohoRadio) []string {
+	if len(radio.Caps) == 0 {
+		return nil
+	}
 	band := uciBandToBand(radio.Band)
-	if radio.Caps == nil || band == "" {
-		return radio.Info.HtModes
+
+	// A dump predating the band-keyed shape sends one blob; read it against
+	// the band the section declares.
+	if legacy, ok := radio.Caps[legacyCapsBand]; ok {
+		if band == "" {
+			return nil
+		}
+		return legacy.Modes(band)
 	}
-	if modes := radio.Caps.Modes(band); len(modes) > 0 {
-		return modes
+
+	if caps, ok := radio.Caps[radio.Band]; ok && band != "" {
+		return caps.Modes(band)
 	}
-	return radio.Info.HtModes
+
+	seen := map[string]struct{}{}
+	for uciband, caps := range radio.Caps {
+		b := uciBandToBand(uciband)
+		if b == "" {
+			continue
+		}
+		for _, m := range caps.Modes(b) {
+			seen[m] = struct{}{}
+		}
+	}
+	if len(seen) == 0 {
+		return nil
+	}
+	modes := make([]string, 0, len(seen))
+	for m := range seen {
+		modes = append(modes, m)
+	}
+	sort.Strings(modes)
+	return modes
 }
 
 // handleOpenSohoMonitoring is the entry point for parsed OpenSoho radio dumps.

@@ -2651,6 +2651,31 @@ func isWiredPort(iface Interface, bridgeMembers map[string]bool) bool {
 	return false
 }
 
+// pruneEthernetPorts drops the device's ethernet rows that this payload no
+// longer reports as wired ports - a renamed port, or a VLAN interface recorded
+// before those were filtered out. A payload with no ports at all says nothing,
+// so it prunes nothing.
+func pruneEthernetPorts(app core.App, device *core.Record, seen map[string]bool) {
+	if len(seen) == 0 {
+		return
+	}
+	records, err := app.FindAllRecords("ethernet", dbx.HashExp{"device": device.Id})
+	if err != nil {
+		app.Logger().Error("Failed to list ethernet ports", "device", device.Id, "error", err)
+		return
+	}
+	for _, record := range records {
+		name := record.GetString("name")
+		if seen[name] {
+			continue
+		}
+		if err := app.Delete(record); err != nil {
+			app.Logger().Error("Failed to delete stale ethernet port",
+				"device", device.Id, "port", name, "error", err)
+		}
+	}
+}
+
 func handleEthernetMonitoring(app core.App, iface Interface, device *core.Record, ethernetcollection *core.Collection) {
 	record := findFirstOrNewByFilter(app, ethernetcollection, "device = {:device} && name = {:name}", dbx.Params{"device": device.Id}, dbx.Params{"name": iface.Name})
 	record.Set("name", iface.Name)
@@ -2767,6 +2792,7 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 	bridgescollection, _ := app.FindCollectionByNameOrId("bridges")
 
 	bridgeMembers := bridgeMemberNames(payload.Interfaces)
+	wiredPorts := map[string]bool{}
 
 	for _, iface := range payload.Interfaces {
 		if iface.Type == "wireless" && iface.Wireless != nil {
@@ -2813,6 +2839,7 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 		}
 		if isWiredPort(iface, bridgeMembers) {
 			handleEthernetMonitoring(app, iface, device, ethernetcollection)
+			wiredPorts[iface.Name] = true
 		}
 	}
 
@@ -2822,6 +2849,10 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 			handleBridgeMonitoring(app, iface, device, bridgescollection, interfacecollection, ethernetcollection)
 		}
 	}
+
+	// After the bridges, so their member lists are rebuilt before the rows they
+	// referenced go away.
+	pruneEthernetPorts(app, device, wiredPorts)
 
 	storeDHCPLeases(app, payload.DHCPLeases, types.NowDateTime())
 

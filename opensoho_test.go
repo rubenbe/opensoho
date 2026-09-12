@@ -2887,6 +2887,105 @@ func TestUpdateMonitoring(t *testing.T) {
 	assert.Equal(t, Radio{Frequency: 2462, Channel: 11, HTmode: "HT20", TxPower: 22}, radio)
 }
 
+// TestPruneEthernetPorts covers the rows left behind when a port is renamed or
+// stops counting as one - the VLAN interfaces recorded before they were
+// filtered out.
+func TestPruneEthernetPorts(t *testing.T) {
+	app, _ := tests.NewTestApp()
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	porttaggingcollection := setupPortTaggingCollection(t, app, vlancollection)
+	ethernetcollection := setupEthernetCollection(t, app, devicecollection, porttaggingcollection)
+
+	device := core.NewRecord(devicecollection)
+	device.Set("name", "predator")
+	device.Set("health_status", "healthy")
+	assert.Nil(t, app.Save(device))
+
+	other := core.NewRecord(devicecollection)
+	other.Set("name", "elsewhere")
+	other.Set("health_status", "healthy")
+	assert.Nil(t, app.Save(other))
+
+	add := func(d *core.Record, name string) {
+		r := core.NewRecord(ethernetcollection)
+		r.Set("device", d.Id)
+		r.Set("name", name)
+		assert.Nil(t, app.Save(r))
+	}
+	for _, n := range []string{"lan1", "lan2", "phy1-ap0-vl100"} {
+		add(device, n)
+	}
+	add(other, "lan1")
+
+	names := func(d *core.Record) []string {
+		recs, err := app.FindAllRecords("ethernet", dbx.HashExp{"device": d.Id})
+		assert.Nil(t, err)
+		out := []string{}
+		for _, r := range recs {
+			out = append(out, r.GetString("name"))
+		}
+		return out
+	}
+
+	// An empty payload says nothing, so nothing goes.
+	pruneEthernetPorts(app, device, map[string]bool{})
+	assert.ElementsMatch(t, []string{"lan1", "lan2", "phy1-ap0-vl100"}, names(device))
+
+	pruneEthernetPorts(app, device, map[string]bool{"lan1": true, "lan2": true})
+	assert.ElementsMatch(t, []string{"lan1", "lan2"}, names(device))
+	// Another device's ports are untouched.
+	assert.ElementsMatch(t, []string{"lan1"}, names(other))
+}
+
+// A bridge may still reference a port being pruned. The relation does not
+// cascade, so the bridge must survive with the id dropped from its list.
+func TestPruneEthernetPortsReferencedByBridge(t *testing.T) {
+	app, _ := tests.NewTestApp()
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	porttaggingcollection := setupPortTaggingCollection(t, app, vlancollection)
+	ethernetcollection := setupEthernetCollection(t, app, devicecollection, porttaggingcollection)
+	interfacescollection := setupInterfacesCollection(t, app)
+	bridgescollection := setupBridgesCollection(t, app, devicecollection, interfacescollection, ethernetcollection)
+
+	device := core.NewRecord(devicecollection)
+	device.Set("name", "predator")
+	device.Set("health_status", "healthy")
+	assert.Nil(t, app.Save(device))
+
+	keep := core.NewRecord(ethernetcollection)
+	keep.Set("device", device.Id)
+	keep.Set("name", "lan1")
+	assert.Nil(t, app.Save(keep))
+
+	stale := core.NewRecord(ethernetcollection)
+	stale.Set("device", device.Id)
+	stale.Set("name", "phy1-ap0-vl100")
+	assert.Nil(t, app.Save(stale))
+
+	bridge := core.NewRecord(bridgescollection)
+	bridge.Set("device", device.Id)
+	bridge.Set("name", "br-lan")
+	bridge.Set("ethernet", []string{keep.Id, stale.Id})
+	assert.Nil(t, app.Save(bridge))
+
+	pruneEthernetPorts(app, device, map[string]bool{"lan1": true})
+
+	records, err := app.FindAllRecords("ethernet", dbx.HashExp{"device": device.Id})
+	assert.Nil(t, err)
+	if assert.Equal(t, 1, len(records)) {
+		assert.Equal(t, "lan1", records[0].GetString("name"))
+	}
+	bridges, err := app.FindAllRecords("bridges", dbx.HashExp{"device": device.Id})
+	assert.Nil(t, err)
+	if assert.Equal(t, 1, len(bridges)) {
+		assert.Equal(t, []string{keep.Id}, bridges[0].GetStringSlice("ethernet"))
+	}
+}
+
 // TestHandleBridgeMonitoringSkipsVlanMembers uses predator's real br-lan, which
 // lists the per-SSID VLAN interfaces alongside the wireless ones they sit on.
 // They must not end up in the bridge's ethernet list.

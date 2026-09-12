@@ -55,11 +55,9 @@ for (let p in nl) {
 			bands[idx] = band;
 }
 
-// Raw per-band capability fields for one radio, the input to the htmodes Go
-// package. wiphy[phy] is sparse and indexed by nl80211 band enum, so an
-// object type() check is needed - a phy without that band has a null there.
-function radio_caps(phy, uciband) {
-	let b = wiphy[phy]?.[BAND_IDX[uciband]];
+// Raw capability fields for one nl80211 band, the input to the htmodes Go
+// package. wiphy[phy] is sparse, so a null means the phy lacks that band.
+function band_caps(b) {
 	if (type(b) != 'object')
 		return null;
 
@@ -80,6 +78,22 @@ function radio_caps(phy, uciband) {
 	return length(caps) ? caps : null;
 }
 
+// Capabilities keyed by UCI band name: the named band, or every band the phy
+// has when none is named - a switchable radio can use them all. Per band either
+// way, so iwinfo's whole-wiphy htmodes list is never needed - issue #59.
+function radio_caps(phy, uciband) {
+	let bands = wiphy[phy] ?? [];
+	let out = {};
+	for (let uci, idx in BAND_IDX) {
+		if (uciband != '' && uci != uciband)
+			continue;
+		let caps = band_caps(bands[idx]);
+		if (caps)
+			out[uci] = caps;
+	}
+	return length(out) ? out : null;
+}
+
 // Cut the freqlist down to one band. Only applied when radio_index is set
 // (confirmed single-wiphy multi-radio, e.g. MT7996) - a plain switchable
 // single radio (band pinned, no "radio" option) keeps its full freqlist.
@@ -92,31 +106,62 @@ function scope_freqlist(freqs, uciband, ridx) {
 	return { results: filter(freqs?.results ?? [], f => f.band == ghz) };
 }
 
-let radios = [];
-let sig = '';
-
+// Count sections per phy: radios sharing a wiphy (MT7996 puts radio0/1/2 on
+// phy0) is what makes the phy fallback below dangerous - issue #59.
+let sections = [];
+let phy_users = {};
 for (let cfg, s in wireless) {
 	if (s['.type'] != 'wifi-device')
 		continue;
-
-	let band = s.band ?? '';
-	let ridx = s.radio ?? '';
 
 	// Resolve the phy via iwinfo's own resolver.
 	let phy = ubus.call('iwinfo', 'phyname', { section: cfg })?.phyname;
 	if (!phy)
 		continue;
 
+	push(sections, { cfg: cfg, section: s, phy: phy });
+	phy_users[phy] = (phy_users[phy] ?? 0) + 1;
+}
+
+let radios = [];
+let sig = '';
+
+for (let entry in sections) {
+	let cfg = entry.cfg;
+	let phy = entry.phy;
+
+	let band = entry.section.band ?? '';
+	let ridx = entry.section.radio ?? '';
+
 	// Prefer the real per-radio interface over the phy; falls back to the
 	// phy when the radio has no interface up yet.
 	let ifname = radio_ifname(cfg);
 	let iwinfo_dev = ifname ?? phy;
 
+	// With no interface of its own on a shared wiphy, iwinfo answers for
+	// whichever radio *is* up. caps and freqlist are per band, so only the
+	// runtime values lie.
+	let shared = !ifname && phy_users[phy] > 1;
+
+	// Ask even when the answer is another radio's: these calls are
+	// order-sensitive (see freqlist), so dropping one shifts the reported
+	// flags. Strip the runtime fields instead; the rest is wiphy-wide.
 	let info = ubus.call('iwinfo', 'info', { device: iwinfo_dev }) ?? {};
+	if (shared) {
+		let stable = {};
+		for (let k, v in info)
+			if (k != 'channel' && k != 'frequency' && k != 'txpower')
+				stable[k] = v;
+		info = stable;
+	}
 	let caps = radio_caps(phy, band);
+	// Order-sensitive and load-bearing: iwinfo's flags shift with whichever
+	// iwinfo calls preceded this one, and they decide which channel widths
+	// validate. Don't reorder or drop the calls above without re-checking.
 	let freqs = scope_freqlist(ubus.call('iwinfo', 'freqlist', { device: iwinfo_dev }), band, ridx);
-	let txpowers = ubus.call('iwinfo', 'txpowerlist', { device: iwinfo_dev }) ?? {};
-	let disabled = s.disabled ?? '0';
+	// Omitted, not emptied: an empty list clears the stored table.
+	let txpowers = shared ? null : (ubus.call('iwinfo', 'txpowerlist', { device: iwinfo_dev }) ?? {});
+	let disabled = entry.section.disabled ?? '0';
 
 	push(radios, {
 		name: cfg,
@@ -134,10 +179,10 @@ for (let cfg, s in wireless) {
 	// Signature: only the stable capability fields, so runtime values
 	// (info.channel/txpower, results[].active, ...) don't trigger a rewrite.
 	sig += sprintf('|%s|%s|%s|%s', cfg, band, ridx, disabled);
-	sig += sprintf('|%s|%J|%J|%J', info.country ?? '', info.hwmodes ?? [], info.htmodes ?? [], caps);
+	sig += sprintf('|%J', caps);
 	for (let f in freqs.results ?? [])
 		sig += sprintf('|%d|%d|%d|%J', f.channel, f.mhz, f.restricted ? 1 : 0, f.flags ?? []);
-	for (let p in txpowers.results ?? [])
+	for (let p in txpowers?.results ?? [])
 		sig += sprintf('|%d|%d', p.dbm, p.mw);
 }
 

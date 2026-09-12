@@ -3775,10 +3775,10 @@ func TestHandleOpenSohoMonitoring(t *testing.T) {
 		{Channel: 1, MHz: 2412},
 		{Channel: 36, MHz: 5180, Flags: []string{"no_ir", "no_160mhz"}},
 	}
-	radio0.TxPowerList.Results = []IwinfoTxPower{
+	radio0.TxPowerList = &IwinfoTxPowerList{Results: []IwinfoTxPower{
 		{Dbm: 0, Mw: 1},
 		{Dbm: 23, Mw: 199},
-	}
+	}}
 	radio0.Caps = RadioCaps{"5g": {HTCapa: 6255, VHTCapa: 1}}
 	handleOpenSohoMonitoring(app, d, OpenSohoData{Type: "OpenSoho", Radios: []OpenSohoRadio{radio0}}, false)
 
@@ -3826,10 +3826,10 @@ func TestHandleOpenSohoMonitoring(t *testing.T) {
 	}
 	// Tx powers reconcile the same way: dbm 23 stays (row reused, mw refreshed),
 	// dbm 0 is dropped and dbm 20 is added.
-	radio0.TxPowerList.Results = []IwinfoTxPower{
+	radio0.TxPowerList = &IwinfoTxPowerList{Results: []IwinfoTxPower{
 		{Dbm: 23, Mw: 200},
 		{Dbm: 20, Mw: 100},
-	}
+	}}
 	// A firmware upgrade adds HE support: the single row is updated in place.
 	radio0.Caps = RadioCaps{"5g": {HTCapa: 6255, VHTCapa: 1, HECapPHY: []byte{0x02}}}
 	handleOpenSohoMonitoring(app, d, OpenSohoData{Type: "OpenSoho", Radios: []OpenSohoRadio{radio0}}, false)
@@ -5184,6 +5184,55 @@ config wifi-device 'radio1'
         option band '5g'
         option htmode 'EHT80'
 `, generateRadioConfig(app, radio, ""))
+}
+
+// TestHandleOpenSohoMonitoringAbsentTxPowerList checks an omitted
+// "txpowerlist" leaves the stored table alone while an empty one clears it.
+// The dump omits it for a radio only a shared phy could answer for (issue
+// #59); reading that as "no power levels" would wipe a working table.
+func TestHandleOpenSohoMonitoringAbsentTxPowerList(t *testing.T) {
+	app, err := tests.NewTestApp()
+	assert.Nil(t, err)
+	defer app.Cleanup()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	setupRadioFrequenciesCollection(t, app, devicecollection)
+	setupRadioTxPowersCollection(t, app, devicecollection)
+	setupRadioHtModesCollection(t, app, devicecollection)
+
+	d := core.NewRecord(devicecollection)
+	d.Set("health_status", "healthy")
+	assert.Nil(t, app.Save(d))
+
+	var radio0 OpenSohoRadio
+	radio0.Name = "radio0"
+	radio0.TxPowerList = &IwinfoTxPowerList{Results: []IwinfoTxPower{
+		{Dbm: 20, Mw: 100},
+		{Dbm: 23, Mw: 199},
+	}}
+	handleOpenSohoMonitoring(app, d, OpenSohoData{Type: "OpenSoho", Radios: []OpenSohoRadio{radio0}}, false)
+
+	recs, err := app.FindAllRecords("radio_tx_powers", dbx.HashExp{"device": d.Id, "radio": 0})
+	assert.Nil(t, err)
+	assert.Equal(t, 2, len(recs))
+
+	// No txpowerlist at all: the stored table survives untouched.
+	radio0.TxPowerList = nil
+	handleOpenSohoMonitoring(app, d, OpenSohoData{Type: "OpenSoho", Radios: []OpenSohoRadio{radio0}}, false)
+
+	recs, err = app.FindAllRecords("radio_tx_powers", dbx.HashExp{"device": d.Id, "radio": 0})
+	assert.Nil(t, err)
+	assert.Equal(t, 2, len(recs))
+
+	// An explicitly empty txpowerlist still means "no levels" and clears it.
+	radio0.TxPowerList = &IwinfoTxPowerList{}
+	handleOpenSohoMonitoring(app, d, OpenSohoData{Type: "OpenSoho", Radios: []OpenSohoRadio{radio0}}, false)
+
+	recs, err = app.FindAllRecords("radio_tx_powers", dbx.HashExp{"device": d.Id, "radio": 0})
+	assert.Nil(t, err)
+	assert.Equal(t, 0, len(recs))
 }
 
 func TestGenerateRadioConfigTxPowerMilliWatt(t *testing.T) {

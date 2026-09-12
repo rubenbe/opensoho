@@ -844,6 +844,11 @@ func (c *RadioCaps) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// IwinfoTxPowerList is the reply of `ubus call iwinfo txpowerlist`.
+type IwinfoTxPowerList struct {
+	Results []IwinfoTxPower `json:"results"`
+}
+
 // OpenSohoRadio is one wifi-device entry of the OpenSoho payload.
 type OpenSohoRadio struct {
 	Name       string     `json:"name"`
@@ -856,9 +861,10 @@ type OpenSohoRadio struct {
 	FreqList   struct {
 		Results []IwinfoFreq `json:"results"`
 	} `json:"freqlist"`
-	TxPowerList struct {
-		Results []IwinfoTxPower `json:"results"`
-	} `json:"txpowerlist"`
+	// A pointer so an absent "txpowerlist" - which the dump omits rather than
+	// report another radio's table - leaves the stored table alone, where an
+	// empty one clears it.
+	TxPowerList *IwinfoTxPowerList `json:"txpowerlist"`
 }
 
 // OpenSohoData is the decoded OpenSoho payload. The radios dump
@@ -1010,10 +1016,12 @@ func handleOpenSohoMonitoring(app core.App, device *core.Record, data OpenSohoDa
 			continue
 		}
 
-		if err := syncRadioTxPowers(app, txColl, device, idx, radio.TxPowerList.Results); err != nil {
-			app.Logger().Error("Failed to sync radio tx powers",
-				"device", device.GetString("id"), "radio", radio.Name, "error", err)
-			continue
+		if radio.TxPowerList != nil {
+			if err := syncRadioTxPowers(app, txColl, device, idx, radio.TxPowerList.Results); err != nil {
+				app.Logger().Error("Failed to sync radio tx powers",
+					"device", device.GetString("id"), "radio", radio.Name, "error", err)
+				continue
+			}
 		}
 
 		if err := syncRadioHtModes(app, htColl, device, idx, radioHtModes(radio)); err != nil {

@@ -4967,6 +4967,203 @@ config wifi-device 'radio0'
 	}
 }
 
+// TestGenerateRadioConfigDerivedBandAndHtMode covers a radio nobody pinned
+// anything on, so band and htmode come from what the device advertised. This
+// is the ASUS BT8's radio2 (issue #59): discovered with no interface up, so it
+// landed in the DB without a frequency and got neither band nor htmode.
+func TestGenerateRadioConfigDerivedBandAndHtMode(t *testing.T) {
+	// The BT8 reports the same modes on every radio; the band decides which
+	// are usable and the width cap decides which one wins.
+	bt8Modes := []string{
+		"HT20", "HT40", "VHT20", "VHT40", "VHT80", "VHT160",
+		"HE20", "HE40", "HE80", "HE160",
+		"EHT20", "EHT40", "EHT80", "EHT160", "EHT320",
+	}
+
+	cases := []struct {
+		name        string
+		frequencies []int
+		modes       []string
+		expected    string
+	}{
+		{
+			// EHT320 is advertised and unblocked, but 80 MHz still wins.
+			name:        "6GHz",
+			frequencies: []int{5955, 5975, 5995},
+			modes:       bt8Modes,
+			expected: `
+config wifi-device 'radio2'
+        option channel 'auto'
+        option band '6g'
+        option htmode 'EHT80'
+`,
+		},
+		{
+			name:        "5GHz",
+			frequencies: []int{5180, 5200, 5220},
+			modes:       bt8Modes,
+			expected: `
+config wifi-device 'radio2'
+        option channel 'auto'
+        option band '5g'
+        option htmode 'EHT80'
+`,
+		},
+		{
+			// Caps at 20 MHz, as OpenWRT does for itself on this hardware.
+			name:        "2.4GHz",
+			frequencies: []int{2412, 2437, 2462},
+			modes:       bt8Modes,
+			expected: `
+config wifi-device 'radio2'
+        option channel 'auto'
+        option band '2g'
+        option htmode 'EHT20'
+`,
+		},
+		{
+			// A Wifi 5 radio gets VHT80, not EHT80.
+			name:        "wifi5",
+			frequencies: []int{5180, 5200},
+			modes:       []string{"HT20", "HT40", "VHT20", "VHT40", "VHT80"},
+			expected: `
+config wifi-device 'radio2'
+        option channel 'auto'
+        option band '5g'
+        option htmode 'VHT80'
+`,
+		},
+		{
+			// Frequencies reported but no modes: htmode stays out rather
+			// than being guessed from the band.
+			name:        "no ht modes reported",
+			frequencies: []int{5180, 5200},
+			modes:       nil,
+			expected: `
+config wifi-device 'radio2'
+        option channel 'auto'
+        option band '5g'
+`,
+		},
+		{
+			// Band-switchable: picking one would be a guess, so neither
+			// band nor htmode is emitted.
+			name:        "multiple bands advertised",
+			frequencies: []int{2412, 5180},
+			modes:       bt8Modes,
+			expected: `
+config wifi-device 'radio2'
+        option channel 'auto'
+`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			app, err := tests.NewTestApp()
+			assert.Nil(t, err)
+			defer app.Cleanup()
+
+			vlancollection := setupVlanCollection(t, app)
+			wificollection := setupWifiCollection(t, app, vlancollection)
+			devicecollection := setupDeviceCollection(t, app, wificollection)
+			radiocollection := setupRadioCollection(t, app, devicecollection)
+			freqcollection := setupRadioFrequenciesCollection(t, app, devicecollection)
+			htcollection := setupRadioHtModesCollection(t, app, devicecollection)
+
+			device := core.NewRecord(devicecollection)
+			device.Set("health_status", "healthy")
+			assert.Nil(t, app.Save(device))
+
+			for _, freq := range tc.frequencies {
+				f := core.NewRecord(freqcollection)
+				f.Set("device", device.Id)
+				f.Set("radio", 2)
+				f.Set("channel", 1)
+				f.Set("frequency", freq)
+				assert.Nil(t, app.Save(f))
+			}
+			if tc.modes != nil {
+				h := core.NewRecord(htcollection)
+				h.Set("device", device.Id)
+				h.Set("radio", 2)
+				h.Set("ht_modes", tc.modes)
+				assert.Nil(t, app.Save(h))
+			}
+
+			// As updateRadios creates a radio discovered with no interface
+			// up: no frequency, no band, no htmode.
+			radio := core.NewRecord(radiocollection)
+			radio.Set("device", device.Id)
+			radio.Set("radio", 2)
+			radio.Set("enabled", true)
+			radio.Set("tx_power_mode", "auto")
+			assert.Nil(t, app.Save(radio))
+
+			assert.Equal(t, tc.expected, generateRadioConfig(app, radio, ""))
+		})
+	}
+}
+
+// TestGenerateRadioConfigExplicitBeatsDerived checks the user's pick always
+// wins over what the device advertised.
+func TestGenerateRadioConfigExplicitBeatsDerived(t *testing.T) {
+	app, err := tests.NewTestApp()
+	assert.Nil(t, err)
+	defer app.Cleanup()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	radiocollection := setupRadioCollection(t, app, devicecollection)
+	freqcollection := setupRadioFrequenciesCollection(t, app, devicecollection)
+	htcollection := setupRadioHtModesCollection(t, app, devicecollection)
+
+	device := core.NewRecord(devicecollection)
+	device.Set("health_status", "healthy")
+	assert.Nil(t, app.Save(device))
+
+	for _, freq := range []int{5180, 5200} {
+		f := core.NewRecord(freqcollection)
+		f.Set("device", device.Id)
+		f.Set("radio", 1)
+		f.Set("channel", 36)
+		f.Set("frequency", freq)
+		assert.Nil(t, app.Save(f))
+	}
+	h := core.NewRecord(htcollection)
+	h.Set("device", device.Id)
+	h.Set("radio", 1)
+	h.Set("ht_modes", []string{"HT20", "HT40", "VHT20", "VHT40", "VHT80", "EHT20", "EHT40", "EHT80"})
+	assert.Nil(t, app.Save(h))
+
+	radio := core.NewRecord(radiocollection)
+	radio.Set("device", device.Id)
+	radio.Set("radio", 1)
+	radio.Set("tx_power_mode", "auto")
+	radio.Set("htmode", "HT20")
+	assert.Nil(t, app.Save(radio))
+
+	// An explicit htmode is verbatim; the band still comes from the freqlist.
+	assert.Equal(t, `
+config wifi-device 'radio1'
+        option channel 'auto'
+        option band '5g'
+        option htmode 'HT20'
+`, generateRadioConfig(app, radio, ""))
+
+	// A pinned frequency outranks the advertised band.
+	radio.Set("frequency", 5180)
+	radio.Set("htmode", "")
+	assert.Nil(t, app.Save(radio))
+	assert.Equal(t, `
+config wifi-device 'radio1'
+        option channel '36'
+        option band '5g'
+        option htmode 'EHT80'
+`, generateRadioConfig(app, radio, ""))
+}
+
 func TestGenerateRadioConfigTxPowerMilliWatt(t *testing.T) {
 	app, _ := tests.NewTestApp()
 

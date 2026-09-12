@@ -326,6 +326,56 @@ func highestHtMode(modes []string) string {
 	return best
 }
 
+// advertisedHtModes returns the modes the device reported for this radio, or
+// nil when it reported none - unlike supportedHtModes, which substitutes the
+// band's full list.
+func advertisedHtModes(app core.App, device string, radio int) []string {
+	rows, err := app.FindAllRecords("radio_ht_modes",
+		dbx.HashExp{"device": device, "radio": radio})
+	if err != nil || len(rows) == 0 {
+		return nil
+	}
+	// The collection is unique on (device, radio), so there is at most one row.
+	return rows[0].GetStringSlice("ht_modes")
+}
+
+// defaultHtModeWidth is the widest channel OpenSoho picks on its own, matching
+// what OpenWrt's `wifi config` settles on. Wider stays an explicit choice.
+func defaultHtModeWidth(band string) int {
+	if band == "2.4" {
+		return 20
+	}
+	return 80
+}
+
+// defaultHtMode returns the htmode for a radio that has none: the highest
+// generation it advertises, capped at defaultHtModeWidth. Empty when the band
+// is unknown or nothing was reported - guessing would hand EHT to hardware
+// that can't do it.
+func defaultHtMode(app core.App, device string, radio int, band string) string {
+	bandModes, ok := htModesForBand(band)
+	if !ok {
+		return ""
+	}
+	advertised := advertisedHtModes(app, device, radio)
+	if len(advertised) == 0 {
+		return ""
+	}
+
+	maxWidth := defaultHtModeWidth(band)
+	modes := make([]string, 0, len(bandModes))
+	for _, m := range bandModes {
+		if !slices.Contains(advertised, m) {
+			continue
+		}
+		if width, ok := frequencyplan.HtmodeWidth(m); !ok || width > maxWidth {
+			continue
+		}
+		modes = append(modes, m)
+	}
+	return highestHtMode(modes)
+}
+
 // Returns the list of modes, whether it is spported and/or an error
 // If no rows are found, allow the config.
 func supportedHtModes(app core.App, device string, radio int, band string) ([]string, bool, error) {
@@ -426,6 +476,21 @@ func validateRadioFrequency(app core.App, device string, radio int, frequency in
 	return validation.NewError("validation_invalid_value", "Frequency is not supported by this radio")
 }
 
+// advertisedBands returns the distinct bands the frequencies in
+// radio_frequencies fall in, empty when the radio reported no freqlist yet.
+func advertisedBands(app core.App, device string, radio int) ([]string, error) {
+	rows, err := app.FindAllRecords("radio_frequencies",
+		dbx.HashExp{"device": device, "radio": radio})
+	if err != nil {
+		return nil, err
+	}
+	frequencies := make([]int, 0, len(rows))
+	for _, r := range rows {
+		frequencies = append(frequencies, r.GetInt("frequency"))
+	}
+	return bandsForFrequencies(frequencies), nil
+}
+
 // validateRadioBand checks the user-set band against the bands the device
 // actually advertised in the radio_frequencies collection. If the device hasn't
 // reported a freqlist for this radio yet (no rows), validation is skipped so the
@@ -436,16 +501,10 @@ func validateRadioBand(app core.App, device string, radio int, band string) erro
 		return nil
 	}
 
-	rows, err := app.FindAllRecords("radio_frequencies",
-		dbx.HashExp{"device": device, "radio": radio})
+	bands, err := advertisedBands(app, device, radio)
 	if err != nil {
 		return validation.NewError("validation_invalid_value", "Failed to look up supported frequencies")
 	}
-	frequencies := make([]int, 0, len(rows))
-	for _, r := range rows {
-		frequencies = append(frequencies, r.GetInt("frequency"))
-	}
-	bands := bandsForFrequencies(frequencies)
 	if len(bands) == 0 {
 		return nil
 	}
@@ -1201,37 +1260,58 @@ config led 'led_%s'
 `, strings.ToLower(name), name, led.GetString("led_name"), led.GetString("trigger"))
 }
 
+// resolveRadioBand returns the band to configure a radio on, or "" when
+// undeterminable. In order of authority: the pinned frequency's band, the
+// user's band, the one band the device advertised. That last gives an untouched
+// radio a band at all. A radio advertising several stays unpinned.
+func resolveRadioBand(app core.App, radio *core.Record) string {
+	if radio.GetBool("auto_frequency") != true {
+		if band := frequencyToBand(radio.GetInt("frequency")); band != "unknown" {
+			return band
+		}
+	}
+	if band := radio.GetString("band"); len(band) > 0 {
+		return band
+	}
+	bands, err := advertisedBands(app, radio.GetString("device"), radio.GetInt("radio"))
+	if err != nil || len(bands) != 1 {
+		return ""
+	}
+	return bands[0]
+}
+
 func generateRadioConfig(app core.App, radio *core.Record, country_code string) string {
 
 	frequency_txt := "        option channel 'auto'\n"
-	band_txt := ""
 	if radio.GetBool("auto_frequency") != true {
 		frequency := radio.GetInt("frequency")
 		channel, channelOk := frequencyToChannel(frequency)
 		if channelOk {
 			frequency_txt = fmt.Sprintf("        option channel '%d'\n", channel)
 		}
-		// A specific frequency pins the band; emit it so the driver picks
-		// the right radio band (e.g. option band '2g').
-		band := frequencyToUciBand(frequency)
-		if len(band) > 0 {
-			band_txt = fmt.Sprintf("        option band '%[1]s'\n", band)
-		}
-		if frequency > 0 && (!channelOk || len(band) == 0) {
+		if frequency > 0 && (!channelOk || frequencyToUciBand(frequency) == "") {
 			// frequencyplan couldn't map this frequency; falling through to
 			// 'auto' would silently move the radio off what the UI shows, so
 			// log it instead of letting it pass unnoticed.
 			app.Logger().Error("Radio frequency does not map to a channel/band; emitting auto",
 				"device", radio.GetString("device"), "radio", radio.GetInt("radio"), "frequency", frequency)
 		}
-	} else if band := bandToUciBand(radio.GetString("band")); len(band) > 0 {
-		// Auto frequency still lets the user pin the band; emit it so the
-		// driver only scans that band (e.g. option band '5g' with channel
-		// 'auto'). An empty or unknown band leaves the option out.
-		band_txt = fmt.Sprintf("        option band '%[1]s'\n", band)
+	}
+
+	band := resolveRadioBand(app, radio)
+	band_txt := ""
+	if uciband := bandToUciBand(band); len(uciband) > 0 {
+		band_txt = fmt.Sprintf("        option band '%[1]s'\n", uciband)
+	}
+
+	htmode := radio.GetString("htmode")
+	if htmode == "" {
+		// "Auto" is spelled by leaving the option out, which lands the radio on
+		// the driver's narrowest default; fill in what it advertised instead.
+		htmode = defaultHtMode(app, radio.GetString("device"), radio.GetInt("radio"), band)
 	}
 	htmode_txt := ""
-	if htmode := radio.GetString("htmode"); len(htmode) > 0 {
+	if len(htmode) > 0 {
 		htmode_txt = fmt.Sprintf("        option htmode '%[1]s'\n", htmode)
 	}
 

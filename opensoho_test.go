@@ -5235,6 +5235,85 @@ func TestHandleOpenSohoMonitoringAbsentTxPowerList(t *testing.T) {
 	assert.Equal(t, 0, len(recs))
 }
 
+// TestUpdateRadiosAdoptsReportedBand covers a band-switchable radio: its
+// freqlist spans 2.4 and 5 GHz, so the advertised frequencies can't say which
+// band it is on and only the device's own UCI "band" can. Seen on
+// openwrt-garage's radio2.
+func TestUpdateRadiosAdoptsReportedBand(t *testing.T) {
+	app, err := tests.NewTestApp()
+	assert.Nil(t, err)
+	defer app.Cleanup()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	setupRadioCollection(t, app, devicecollection)
+	freqcollection := setupRadioFrequenciesCollection(t, app, devicecollection)
+	htcollection := setupRadioHtModesCollection(t, app, devicecollection)
+
+	device := core.NewRecord(devicecollection)
+	device.Set("health_status", "healthy")
+	assert.Nil(t, app.Save(device))
+
+	for _, freq := range []int{2412, 2437, 5180, 5200, 5745} {
+		f := core.NewRecord(freqcollection)
+		f.Set("device", device.Id)
+		f.Set("radio", 0)
+		f.Set("channel", 1)
+		f.Set("frequency", freq)
+		assert.Nil(t, app.Save(f))
+	}
+	h := core.NewRecord(htcollection)
+	h.Set("device", device.Id)
+	h.Set("radio", 0)
+	h.Set("ht_modes", []string{"HT20", "HT40", "VHT20", "VHT40", "VHT80"})
+	assert.Nil(t, app.Save(h))
+
+	// Discovered while idle, so no frequency - only the reported band says
+	// which half of the freqlist applies.
+	updateRadios(device, app, map[int]Radio{0: {Band: "5"}})
+
+	radios, err := getRadiosForDevice(device, app)
+	assert.Nil(t, err)
+	if !assert.Equal(t, 1, len(radios)) {
+		return
+	}
+	assert.Equal(t, "5", radios[0].GetString("band"))
+	assert.Equal(t, `
+config wifi-device 'radio0'
+        option channel 'auto'
+        option band '5g'
+        option htmode 'VHT80'
+`, generateRadioConfig(app, radios[0], ""))
+
+	// A band the user picked is never overwritten by what the device reports.
+	radios[0].Set("band", "2.4")
+	assert.Nil(t, app.Save(radios[0]))
+	updateRadios(device, app, map[int]Radio{0: {Band: "5"}})
+	radios, err = getRadiosForDevice(device, app)
+	assert.Nil(t, err)
+	assert.Equal(t, "2.4", radios[0].GetString("band"))
+
+	// An empty one is filled in, so a radio stored before the band was
+	// carried over heals on the next report rather than staying bandless.
+	radios[0].Set("band", "")
+	assert.Nil(t, app.Save(radios[0]))
+	updateRadios(device, app, map[int]Radio{0: {Band: "5"}})
+	radios, err = getRadiosForDevice(device, app)
+	assert.Nil(t, err)
+	assert.Equal(t, "5", radios[0].GetString("band"))
+
+	// 60 GHz isn't one of the schema's values; skip it rather than fail the
+	// save and lose the radio entirely.
+	radios[0].Set("band", "")
+	assert.Nil(t, app.Save(radios[0]))
+	updateRadios(device, app, map[int]Radio{0: {Band: "60"}})
+	radios, err = getRadiosForDevice(device, app)
+	assert.Nil(t, err)
+	assert.Equal(t, 1, len(radios))
+	assert.Equal(t, "", radios[0].GetString("band"))
+}
+
 func TestGenerateRadioConfigTxPowerMilliWatt(t *testing.T) {
 	app, _ := tests.NewTestApp()
 

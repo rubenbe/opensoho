@@ -703,6 +703,10 @@ type Radio struct {
 	Channel   int    `json:"channel"`
 	HTmode    string `json:"htmode"`
 	TxPower   int    `json:"tx_power"`
+	// Band is the wifi-device's UCI "band" option, empty when the dump
+	// reported none. A switchable radio's freqlist spans several bands, so
+	// only this says which one it is on.
+	Band string `json:"band"`
 	// Disabled mirrors the UCI wifi-device "disabled" option. Only the OpenSoho
 	// dump knows about it; radios derived from the interface list are on air by
 	// definition and leave it false.
@@ -901,6 +905,7 @@ func radiosFromOpenSoho(app core.App, device *core.Record, data OpenSohoData) ma
 			Frequency: radio.Info.Frequency,
 			Channel:   radio.Info.Channel,
 			TxPower:   radio.Info.TxPower,
+			Band:      uciBandToBand(radio.Band),
 			Disabled:  uciBool(radio.Disabled),
 		}
 	}
@@ -1212,6 +1217,19 @@ func knownFlags(flags, allowed []string) []string {
 	return kept
 }
 
+// returns band only if the collection's band field accepts it.
+// to ensure we don't block savingin because someone has a 60 GHz device.
+func acceptedBand(coll *core.Collection, band string) string {
+	if band == "" {
+		return ""
+	}
+	if field, ok := coll.Fields.GetByName("band").(*core.SelectField); ok &&
+		!slices.Contains(field.Values, band) {
+		return ""
+	}
+	return band
+}
+
 type WifiRecord struct {
 	Record *core.Record
 }
@@ -1245,6 +1263,14 @@ func updateRadios(device *core.Record, app core.App, newradios map[int]Radio) {
 			if deviceConfigApplied && oldradio.GetBool("enabled") == false {
 				oldradio.Set("enabled", true)
 				dirty = true
+			}
+			// Fill an empty band from the device's own, never overwriting a
+			// band the user picked.
+			if oldradio.GetString("band") == "" {
+				if band := acceptedBand(oldradio.Collection(), newradio.Band); band != "" {
+					oldradio.Set("band", band)
+					dirty = true
+				}
 			}
 			// tx_power_mode is a required field; rows created before it existed
 			// hold an empty value that fails validation on save. Normalise the
@@ -1299,6 +1325,9 @@ func updateRadios(device *core.Record, app core.App, newradios map[int]Radio) {
 		if radio.Frequency > 0 {
 			// Only store frequencies form enabled radios
 			record.Set("frequency", radio.Frequency)
+		}
+		if band := acceptedBand(radiocollection, radio.Band); band != "" {
+			record.Set("band", band)
 		}
 		record.Set("enabled", !radio.Disabled)
 		// New radios default to auto power; store the reported value (in dBm) so

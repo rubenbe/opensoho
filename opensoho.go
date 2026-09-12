@@ -132,6 +132,15 @@ func copyEmbedDirToDisk(embedFS fs.FS, targetDir string) error {
 // radios on a single wiphy, like MediaTek MT7996 - "phy0.2-ap0".
 var radioInterfaceRegexp = regexp.MustCompile(`^(?:phy|wl)(\d+)(?:\.(\d+))?-`)
 
+// vlanInterfaceRegexp matches the VLAN interfaces OpenSOHO builds on top of a
+// wireless one, e.g. "phy1-ap0-vl100".
+var vlanInterfaceRegexp = regexp.MustCompile(`-vl\d+$`)
+
+// isVlanInterface reports whether a name is one of our own VLAN interfaces.
+func isVlanInterface(name string) bool {
+	return vlanInterfaceRegexp.MatchString(name)
+}
+
 // extractRadioNumber derives the radio index from a wireless interface name.
 //
 // For the classic one-wiphy-per-radio naming the phy index is the radio index
@@ -2562,6 +2571,10 @@ func handleBridgeMonitoring(app core.App, iface Interface, device *core.Record, 
 	ethernetlist := []string{}
 	wifilist := []string{}
 	for _, membername := range iface.BridgeMembers {
+		if isVlanInterface(membername) {
+			// Ours, and riding on an interface the bridge already lists.
+			continue
+		}
 		eth_record, eth_err := app.FindFirstRecordByFilter(ethernetcollection, "device = {:device} && name = {:name}", dbx.Params{"device": device.Id}, dbx.Params{"name": membername})
 		wifi_record, wifi_err := app.FindFirstRecordByFilter(interfacescollection, "device = {:device} && interface = {:name}", dbx.Params{"device": device.Id}, dbx.Params{"name": membername})
 
@@ -2631,7 +2644,9 @@ func isWiredPort(iface Interface, bridgeMembers map[string]bool) bool {
 	case "ethernet":
 		return true
 	case "other":
-		return bridgeMembers[iface.Name]
+		// Our own VLAN interfaces are bridge members too, but they are not
+		// ports.
+		return !isVlanInterface(iface.Name) && bridgeMembers[iface.Name]
 	}
 	return false
 }

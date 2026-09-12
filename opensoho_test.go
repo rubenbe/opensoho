@@ -2887,6 +2887,53 @@ func TestUpdateMonitoring(t *testing.T) {
 	assert.Equal(t, Radio{Frequency: 2462, Channel: 11, HTmode: "HT20", TxPower: 22}, radio)
 }
 
+// TestHandleBridgeMonitoringSkipsVlanMembers uses predator's real br-lan, which
+// lists the per-SSID VLAN interfaces alongside the wireless ones they sit on.
+// They must not end up in the bridge's ethernet list.
+func TestHandleBridgeMonitoringSkipsVlanMembers(t *testing.T) {
+	app, _ := tests.NewTestApp()
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	porttaggingcollection := setupPortTaggingCollection(t, app, vlancollection)
+	ethernetcollection := setupEthernetCollection(t, app, devicecollection, porttaggingcollection)
+	interfacescollection := setupInterfacesCollection(t, app)
+	bridgescollection := setupBridgesCollection(t, app, devicecollection, interfacescollection, ethernetcollection)
+
+	d := core.NewRecord(devicecollection)
+	d.Id = "devicewithvlans"
+	d.Set("name", "predator")
+	d.Set("health_status", "healthy")
+	assert.Nil(t, app.Save(d))
+
+	eth := core.NewRecord(ethernetcollection)
+	eth.Set("device", d.Id)
+	eth.Set("name", "lan1")
+	assert.Nil(t, app.Save(eth))
+
+	// A VLAN interface that was recorded as a port before it was filtered out
+	// must not be picked up either.
+	stale := core.NewRecord(ethernetcollection)
+	stale.Set("device", d.Id)
+	stale.Set("name", "phy1-ap0-vl100")
+	assert.Nil(t, app.Save(stale))
+
+	iface := Interface{
+		Name: "br-lan",
+		BridgeMembers: []string{
+			"lan1", "phy0-ap0", "phy1-ap0",
+			"phy1-ap0-vl100", "phy2-ap0-vl100",
+		},
+	}
+	assert.Nil(t, handleBridgeMonitoring(app, iface, d, bridgescollection, interfacescollection, ethernetcollection))
+
+	records, err := app.FindAllRecords("bridges")
+	assert.Nil(t, err)
+	if assert.Equal(t, 1, len(records)) {
+		assert.Equal(t, []string{eth.Id}, records[0].GetStringSlice("ethernet"))
+	}
+}
+
 func TestIsWiredPort(t *testing.T) {
 	// Modelled on a real dump: netjson-monitoring labels eth0 "other" because
 	// the virtio driver exposes no ethtool link modes, while wg0 is recognised
@@ -2898,19 +2945,23 @@ func TestIsWiredPort(t *testing.T) {
 		{Name: "lan1", Type: "ethernet"},
 		{Name: "wan", Type: "ethernet"},
 		{Name: "phy0-ap0", Type: "wireless"},
-		{Name: "br-lan", Type: "bridge", BridgeMembers: []string{"eth0", "lan1", "phy0-ap0"}},
+		// Our own VLAN interfaces: "other" and bridged, like eth0, but ports
+		// they are not.
+		{Name: "phy0-ap0-vl100", Type: "other"},
+		{Name: "br-lan", Type: "bridge", BridgeMembers: []string{"eth0", "lan1", "phy0-ap0", "phy0-ap0-vl100"}},
 	}
 	members := bridgeMemberNames(payload)
-	assert.Equal(t, map[string]bool{"eth0": true, "lan1": true, "phy0-ap0": true}, members)
+	assert.Equal(t, map[string]bool{"eth0": true, "lan1": true, "phy0-ap0": true, "phy0-ap0-vl100": true}, members)
 
 	expected := map[string]bool{
-		"wg0":      false,
-		"eth0":     true, // unclassified, but a bridge member: a real port
-		"gre4-tun": false,
-		"lan1":     true,
-		"wan":      true, // classified, bridged or not
-		"phy0-ap0": false,
-		"br-lan":   false,
+		"wg0":            false,
+		"eth0":           true, // unclassified, but a bridge member: a real port
+		"gre4-tun":       false,
+		"lan1":           true,
+		"wan":            true, // classified, bridged or not
+		"phy0-ap0":       false,
+		"phy0-ap0-vl100": false,
+		"br-lan":         false,
 	}
 	for _, iface := range payload {
 		assert.Equal(t, expected[iface.Name], isWiredPort(iface, members), iface.Name)

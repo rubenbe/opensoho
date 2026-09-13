@@ -2854,7 +2854,8 @@ func TestUpdateMonitoring(t *testing.T) {
 	event.Response = rec
 
 	// Verify the response
-	response, radios := handleMonitoring(&event, app, d, clientcollection)
+	response, report := handleMonitoring(&event, app, d, clientcollection)
+	radios := report.radios
 	//var apiresponse *router.ApiError
 	assert.Equal(t, response, nil)
 	assert.NotNil(t, radios)
@@ -3179,7 +3180,8 @@ func TestUpdateMonitoringEmptyBody(t *testing.T) {
 	event.Response = rec
 
 	// Verify the valid, but empty response
-	response, radios := handleMonitoring(&event, app, d, clientcollection)
+	response, report := handleMonitoring(&event, app, d, clientcollection)
+	radios := report.radios
 	assert.Equal(t, response, nil)
 	// No radio information was carried by this request; updateRadios must not
 	// treat that as "every radio is down".
@@ -3276,7 +3278,8 @@ func TestUpdateMonitoringOpenSoho(t *testing.T) {
 	event.Response = rec
 
 	// The endpoint accepts the payload with an empty 200 response.
-	response, radios := handleMonitoring(&event, app, d, clientcollection)
+	response, report := handleMonitoring(&event, app, d, clientcollection)
+	radios := report.radios
 	assert.Equal(t, nil, response)
 	httpResponse := rec.Result()
 	defer httpResponse.Body.Close()
@@ -3291,7 +3294,7 @@ func TestUpdateMonitoringOpenSoho(t *testing.T) {
 	assert.Equal(t, false, radios[0].Disabled)
 	assert.Equal(t, true, radios[1].Disabled)
 
-	updateRadios(d, app, radios)
+	updateRadios(d, app, radios, true, true)
 	{
 		r, err := app.FindFirstRecordByData("radios", "radio", "0")
 		assert.Equal(t, nil, err)
@@ -3337,13 +3340,14 @@ func TestUpdateMonitoringOpenSohoPoeOnly(t *testing.T) {
 	d.Set("config_status", records.ConfigStatusApplied)
 	assert.Nil(t, app.Save(d))
 
-	updateRadios(d, app, map[int]Radio{0: {Frequency: 2412, Channel: 1, TxPower: 23}})
+	updateRadios(d, app, map[int]Radio{0: {Frequency: 2412, Channel: 1, TxPower: 23}}, true, true)
 
-	response, radios := handleMonitoring(&event, app, d, clientcollection)
+	response, report := handleMonitoring(&event, app, d, clientcollection)
+	radios := report.radios
 	assert.Nil(t, response)
 	assert.Equal(t, 0, len(radios))
 
-	updateRadios(d, app, radios)
+	updateRadios(d, app, radios, true, true)
 	radiocount, err := app.CountRecords("radios")
 	assert.Nil(t, err)
 	assert.Equal(t, int64(1), radiocount)
@@ -3392,9 +3396,10 @@ func TestUpdateMonitoringOpenSohoPoeInterleavedWithRadios(t *testing.T) {
 		event.App = app
 		event.Response = httptest.NewRecorder()
 
-		response, radios := handleMonitoring(&event, app, d, clientcollection)
+		response, report := handleMonitoring(&event, app, d, clientcollection)
+		radios := report.radios
 		assert.Nil(t, response)
-		updateRadios(d, app, radios)
+		updateRadios(d, app, radios, true, true)
 	}
 
 	assertBothEnabled := func(step string) {
@@ -3530,8 +3535,9 @@ func TestUpdateRadiosOnOpenSOHOData(t *testing.T) {
 	event.Response = rec
 
 	// Exactly the call-site pair from opensoho.go's monitoring endpoint.
-	_, radios := handleMonitoring(&event, app, d, clientcollection)
-	updateRadios(d, app, radios)
+	_, report := handleMonitoring(&event, app, d, clientcollection)
+	radios := report.radios
+	updateRadios(d, app, radios, true, true)
 
 	for _, radionum := range []int{0, 1} {
 		r, err := app.FindFirstRecordByData("radios", "radio", radionum)
@@ -4397,6 +4403,93 @@ func TestFrequencyToUciBand(t *testing.T) {
 	}
 }
 
+// setupRadioFlagsApp builds a device whose config is applied, plus the radio
+// collections, for the current/complete tests below.
+func setupRadioFlagsApp(t *testing.T) (core.App, *core.Record, *core.Collection, *core.Collection) {
+	app, _ := tests.NewTestApp()
+	devicecollection := core.NewBaseCollection("devices")
+	devicecollection.Fields.Add(&core.SelectField{
+		Name:      "config_status",
+		MaxSelect: 1,
+		Values: []string{
+			records.ConfigStatusApplied,
+			records.ConfigStatusModified,
+			records.ConfigStatusError,
+			records.ConfigStatusDeactivating,
+			records.ConfigStatusDeactivated,
+		},
+	})
+	assert.Nil(t, app.Save(devicecollection))
+	radiocollection := setupRadioCollection(t, app, devicecollection)
+	freqcollection := setupRadioFrequenciesCollection(t, app, devicecollection)
+
+	d := core.NewRecord(devicecollection)
+	d.Set("config_status", records.ConfigStatusApplied)
+	assert.Nil(t, app.Save(d))
+	return app, d, radiocollection, freqcollection
+}
+
+// A spool file the agent replayed describes a past moment. It may not disable a
+// radio, invent one, or rewrite what the radio is doing now.
+func TestUpdateRadiosIgnoresStaleReport(t *testing.T) {
+	app, d, _, _ := setupRadioFlagsApp(t)
+
+	live := map[int]Radio{
+		0: {Frequency: 2412, Channel: 1, TxPower: 20},
+		1: {Frequency: 5180, Channel: 36, TxPower: 23},
+	}
+	updateRadios(d, app, live, true, true)
+
+	radio1, err := app.FindFirstRecordByData("radios", "radio", "1")
+	assert.Nil(t, err)
+	assert.True(t, radio1.GetBool("enabled"))
+
+	// A stale report that has lost radio1 and claims a radio2 that never was.
+	stale := map[int]Radio{
+		0: {Frequency: 2417, Channel: 2, TxPower: 11},
+		2: {Frequency: 5955, Channel: 1, TxPower: 23},
+	}
+	updateRadios(d, app, stale, false, true)
+
+	radio1, err = app.FindFirstRecordByData("radios", "radio", "1")
+	assert.Nil(t, err)
+	assert.True(t, radio1.GetBool("enabled"), "a replayed report must not disable a radio")
+
+	radio0, err := app.FindFirstRecordByData("radios", "radio", "0")
+	assert.Nil(t, err)
+	assert.Equal(t, 20, radio0.GetInt("tx_power"), "a replayed report must not rewrite tx power")
+
+	count, err := app.CountRecords("radios")
+	assert.Nil(t, err)
+	assert.Equal(t, int64(2), count, "a replayed report must not create a radio")
+}
+
+// The interface list only shows radios with an AP up, so a radio missing there
+// is not a radio gone. Only the OpenSoho dump enumerates every wifi-device.
+func TestUpdateRadiosIncompleteReportKeepsRadio(t *testing.T) {
+	app, d, _, _ := setupRadioFlagsApp(t)
+
+	full := map[int]Radio{
+		0: {Frequency: 2412, Channel: 1, TxPower: 20},
+		2: {Frequency: 5955, Channel: 1, TxPower: 23},
+	}
+	updateRadios(d, app, full, true, true)
+
+	// radio2's AP is down, so the interface-derived report has only radio0.
+	updateRadios(d, app, map[int]Radio{0: {Frequency: 2412, Channel: 1, TxPower: 20}}, true, false)
+
+	radio2, err := app.FindFirstRecordByData("radios", "radio", "2")
+	assert.Nil(t, err)
+	assert.True(t, radio2.GetBool("enabled"), "an incomplete report must not disable a radio")
+
+	// The dump says the same thing, and that one counts.
+	updateRadios(d, app, map[int]Radio{0: {Frequency: 2412, Channel: 1, TxPower: 20}}, true, true)
+
+	radio2, err = app.FindFirstRecordByData("radios", "radio", "2")
+	assert.Nil(t, err)
+	assert.False(t, radio2.GetBool("enabled"))
+}
+
 func TestUpdateRadios(t *testing.T) {
 	radios := make(map[int]Radio)
 	radios[0] = Radio{Frequency: 2412, Channel: 1, HTmode: "HT20", TxPower: 23}
@@ -4427,7 +4520,7 @@ func TestUpdateRadios(t *testing.T) {
 	d.Set("config_status", records.ConfigStatusApplied)
 	app.Save(d)
 
-	updateRadios(d, app, radios)
+	updateRadios(d, app, radios, true, true)
 	radiocount, err := app.CountRecords("radios")
 	assert.Equal(t, err, nil)
 	assert.Equal(t, int64(2), radiocount, "Both radios should have been added")
@@ -4451,7 +4544,7 @@ func TestUpdateRadios(t *testing.T) {
 	radios[0] = Radio{Frequency: 2417, Channel: 1, HTmode: "HT20", TxPower: 23}
 	radios[1] = Radio{Frequency: 5180, Channel: 40, HTmode: "HT40", TxPower: 19}
 	radios[2] = Radio{Frequency: 5955, Channel: 100, HTmode: "HT40", TxPower: 19}
-	updateRadios(d, app, radios)
+	updateRadios(d, app, radios, true, true)
 	radiocount, err = app.CountRecords("radios")
 	assert.Equal(t, err, nil)
 	assert.Equal(t, int64(3), radiocount, "Only the new radio should be added")
@@ -4482,7 +4575,7 @@ func TestUpdateRadios(t *testing.T) {
 	radios2[2] = Radio{Frequency: 5955, Channel: 100, HTmode: "HT40", TxPower: 19}
 	fmt.Println("---------------")
 	// If a radio is not in the list, it is disabled. Mark it so in the DB
-	updateRadios(d, app, radios2)
+	updateRadios(d, app, radios2, true, true)
 	radiocount, err = app.CountRecords("radios")
 	assert.Equal(t, err, nil)
 	assert.Equal(t, int64(3), radiocount, "Disabled radio should not be removed")
@@ -4513,7 +4606,7 @@ func TestUpdateRadios(t *testing.T) {
 	radios2[0] = Radio{Frequency: 2417, Channel: 1, HTmode: "HT20", TxPower: 23}
 	radios2[1] = Radio{Frequency: 5180, Channel: 40, HTmode: "HT40", TxPower: 19}
 	radios2[2] = Radio{Frequency: 5955, Channel: 100, HTmode: "HT40", TxPower: 19}
-	updateRadios(d, app, radios2)
+	updateRadios(d, app, radios2, true, true)
 	{
 		r, err := app.FindFirstRecordByData("radios", "radio", "0")
 		assert.Equal(t, err, nil)
@@ -4564,7 +4657,7 @@ func TestUpdateRadiosKeepsEnabledWhileConfigNotApplied(t *testing.T) {
 	updateRadios(d, app, map[int]Radio{
 		0: {Frequency: 2412, Channel: 1, TxPower: 23},
 		1: {Frequency: 5200, Channel: 40, TxPower: 19},
-	})
+	}, true, true)
 
 	// The user just changed the config, wait until it is applied again
 	d.Set("config_status", records.ConfigStatusModified)
@@ -4573,7 +4666,7 @@ func TestUpdateRadiosKeepsEnabledWhileConfigNotApplied(t *testing.T) {
 	updateRadios(d, app, map[int]Radio{
 		0: {Frequency: 2412, Channel: 1, TxPower: 25},
 		2: {Frequency: 5955, Channel: 100, TxPower: 19},
-	})
+	}, true, true)
 	{
 		r, err := app.FindFirstRecordByData("radios", "radio", "1")
 		assert.Equal(t, nil, err)
@@ -4604,7 +4697,7 @@ func TestUpdateRadiosKeepsEnabledWhileConfigNotApplied(t *testing.T) {
 		0: {Frequency: 2412, Channel: 1, TxPower: 25},
 		1: {Frequency: 5200, Channel: 40, TxPower: 19},
 		2: {Frequency: 5955, Channel: 100, TxPower: 19},
-	})
+	}, true, true)
 	{
 		r, err := app.FindFirstRecordByData("radios", "radio", "0")
 		assert.Equal(t, nil, err)
@@ -4617,7 +4710,7 @@ func TestUpdateRadiosKeepsEnabledWhileConfigNotApplied(t *testing.T) {
 	updateRadios(d, app, map[int]Radio{
 		0: {Frequency: 2412, Channel: 1, TxPower: 25},
 		2: {Frequency: 5955, Channel: 100, TxPower: 19},
-	})
+	}, true, true)
 	{
 		r, err := app.FindFirstRecordByData("radios", "radio", "0")
 		assert.Equal(t, nil, err)
@@ -4635,7 +4728,7 @@ func TestUpdateRadiosKeepsEnabledWhileConfigNotApplied(t *testing.T) {
 	}
 }
 
-// updateRadios() is the internal path monitoring reports come through
+// updateRadios(, true, true) is the internal path monitoring reports come through
 // (app.Save, no RecordRequestEvent); only the OnRecordUpdateRequest("radios")
 // hook is wired to flip a device to "modified". This guards against that
 // wiring accidentally widening to cover the internal saves too, which would
@@ -4665,8 +4758,8 @@ func TestUpdateRadiosDoesNotMarkDeviceModified(t *testing.T) {
 
 	// Create radio 0, then report it again with a changed tx_power: a
 	// config-affecting field, but reported via the monitoring path.
-	updateRadios(d, app, map[int]Radio{0: {Frequency: 2412, Channel: 1, TxPower: 19}})
-	updateRadios(d, app, map[int]Radio{0: {Frequency: 2412, Channel: 1, TxPower: 23}})
+	updateRadios(d, app, map[int]Radio{0: {Frequency: 2412, Channel: 1, TxPower: 19}}, true, true)
+	updateRadios(d, app, map[int]Radio{0: {Frequency: 2412, Channel: 1, TxPower: 23}}, true, true)
 
 	record, err := app.FindRecordById("devices", d.Id)
 	assert.Nil(t, err)
@@ -4684,7 +4777,7 @@ func TestUpdateRadiosTxPower(t *testing.T) {
 	assert.Equal(t, nil, app.Save(d))
 
 	// A new radio records the reported dBm and defaults to auto mode.
-	updateRadios(d, app, map[int]Radio{0: {Frequency: 2412, Channel: 1, TxPower: 23}})
+	updateRadios(d, app, map[int]Radio{0: {Frequency: 2412, Channel: 1, TxPower: 23}}, true, true)
 	{
 		r, err := app.FindFirstRecordByData("radios", "radio", "0")
 		assert.Equal(t, nil, err)
@@ -4702,7 +4795,7 @@ func TestUpdateRadiosTxPower(t *testing.T) {
 			Bind(dbx.Params{"id": r.Id}).Execute()
 		assert.Equal(t, nil, err)
 	}
-	updateRadios(d, app, map[int]Radio{0: {Frequency: 2412, Channel: 1, TxPower: 23}})
+	updateRadios(d, app, map[int]Radio{0: {Frequency: 2412, Channel: 1, TxPower: 23}}, true, true)
 	{
 		r, err := app.FindFirstRecordByData("radios", "radio", "0")
 		assert.Equal(t, nil, err)
@@ -4711,7 +4804,7 @@ func TestUpdateRadiosTxPower(t *testing.T) {
 	}
 
 	// A later report in auto mode updates tx_power to the new value.
-	updateRadios(d, app, map[int]Radio{0: {Frequency: 2412, Channel: 1, TxPower: 20}})
+	updateRadios(d, app, map[int]Radio{0: {Frequency: 2412, Channel: 1, TxPower: 20}}, true, true)
 	{
 		r, err := app.FindFirstRecordByData("radios", "radio", "0")
 		assert.Equal(t, nil, err)
@@ -4726,7 +4819,7 @@ func TestUpdateRadiosTxPower(t *testing.T) {
 		r.Set("tx_power", 14)
 		assert.Equal(t, nil, app.Save(r))
 	}
-	updateRadios(d, app, map[int]Radio{0: {Frequency: 2412, Channel: 1, TxPower: 30}})
+	updateRadios(d, app, map[int]Radio{0: {Frequency: 2412, Channel: 1, TxPower: 30}}, true, true)
 	{
 		r, err := app.FindFirstRecordByData("radios", "radio", "0")
 		assert.Equal(t, nil, err)
@@ -4742,7 +4835,7 @@ func TestUpdateRadiosTxPower(t *testing.T) {
 		r.Set("tx_power", 18)
 		assert.Equal(t, nil, app.Save(r))
 	}
-	updateRadios(d, app, map[int]Radio{0: {Frequency: 2412, Channel: 1, TxPower: 0}})
+	updateRadios(d, app, map[int]Radio{0: {Frequency: 2412, Channel: 1, TxPower: 0}}, true, true)
 	{
 		r, err := app.FindFirstRecordByData("radios", "radio", "0")
 		assert.Equal(t, nil, err)
@@ -4764,7 +4857,7 @@ func TestUpdateRadiosWithoutFrequency(t *testing.T) {
 	d := core.NewRecord(devicecollection)
 	assert.Nil(t, app.Save(d))
 
-	updateRadios(d, app, map[int]Radio{0: {Frequency: 0, Channel: 0, TxPower: 0}})
+	updateRadios(d, app, map[int]Radio{0: {Frequency: 0, Channel: 0, TxPower: 0}}, true, true)
 
 	radiocount, err := app.CountRecords("radios")
 	assert.Nil(t, err)
@@ -4788,13 +4881,13 @@ func TestUpdateRadiosNilIsNop(t *testing.T) {
 	d := core.NewRecord(devicecollection)
 	assert.Nil(t, app.Save(d))
 
-	updateRadios(d, app, map[int]Radio{0: {Frequency: 2412, Channel: 1, TxPower: 20}})
+	updateRadios(d, app, map[int]Radio{0: {Frequency: 2412, Channel: 1, TxPower: 20}}, true, true)
 	radiocount, err := app.CountRecords("radios")
 	assert.Nil(t, err)
 	assert.Equal(t, int64(1), radiocount)
 
 	// Should not change anything
-	updateRadios(d, app, nil)
+	updateRadios(d, app, nil, true, true)
 
 	radiocount, err = app.CountRecords("radios")
 	assert.Nil(t, err)
@@ -5421,7 +5514,7 @@ func TestUpdateRadiosAdoptsReportedBand(t *testing.T) {
 
 	// Discovered while idle, so no frequency - only the reported band says
 	// which half of the freqlist applies.
-	updateRadios(device, app, map[int]Radio{0: {Band: "5"}})
+	updateRadios(device, app, map[int]Radio{0: {Band: "5"}}, true, true)
 
 	radios, err := getRadiosForDevice(device, app)
 	assert.Nil(t, err)
@@ -5439,7 +5532,7 @@ config wifi-device 'radio0'
 	// A band the user picked is never overwritten by what the device reports.
 	radios[0].Set("band", "2.4")
 	assert.Nil(t, app.Save(radios[0]))
-	updateRadios(device, app, map[int]Radio{0: {Band: "5"}})
+	updateRadios(device, app, map[int]Radio{0: {Band: "5"}}, true, true)
 	radios, err = getRadiosForDevice(device, app)
 	assert.Nil(t, err)
 	assert.Equal(t, "2.4", radios[0].GetString("band"))
@@ -5448,7 +5541,7 @@ config wifi-device 'radio0'
 	// carried over heals on the next report rather than staying bandless.
 	radios[0].Set("band", "")
 	assert.Nil(t, app.Save(radios[0]))
-	updateRadios(device, app, map[int]Radio{0: {Band: "5"}})
+	updateRadios(device, app, map[int]Radio{0: {Band: "5"}}, true, true)
 	radios, err = getRadiosForDevice(device, app)
 	assert.Nil(t, err)
 	assert.Equal(t, "5", radios[0].GetString("band"))
@@ -5457,7 +5550,7 @@ config wifi-device 'radio0'
 	// save and lose the radio entirely.
 	radios[0].Set("band", "")
 	assert.Nil(t, app.Save(radios[0]))
-	updateRadios(device, app, map[int]Radio{0: {Band: "60"}})
+	updateRadios(device, app, map[int]Radio{0: {Band: "60"}}, true, true)
 	radios, err = getRadiosForDevice(device, app)
 	assert.Nil(t, err)
 	assert.Equal(t, 1, len(radios))
@@ -5655,7 +5748,7 @@ func TestGenerateRadioConfigs(t *testing.T) {
 	d := core.NewRecord(devicecollection)
 	app.Save(d)
 
-	updateRadios(d, app, radios)
+	updateRadios(d, app, radios, true, true)
 	radiocount, err := app.CountRecords("radios")
 	assert.Equal(t, err, nil)
 	assert.Equal(t, int64(2), radiocount, "Both radios should have been added")

@@ -1243,7 +1243,22 @@ type WifiRecord struct {
 	Record *core.Record
 }
 
-func updateRadios(device *core.Record, app core.App, newradios map[int]Radio) {
+// radioReport is what one monitoring payload says about a device's radios.
+type radioReport struct {
+	radios map[int]Radio
+	// current is false for a spool file the agent replayed.
+	current bool
+	// complete is true only for the OpenSoho dump, which lists every UCI
+	// wifi-device rather than only the radios with an AP up.
+	complete bool
+}
+
+// updateRadios reconciles a device's radio rows with one monitoring payload.
+// current is false for a spool file the agent replayed: it describes a past
+// moment, so it may not speak for the present. complete is true only for the
+// OpenSoho dump, which lists every UCI wifi-device; the interface list only
+// shows radios with an AP up, so a radio missing there is not a radio gone.
+func updateRadios(device *core.Record, app core.App, newradios map[int]Radio, current bool, complete bool) {
 	// Nil means no radio data was sent, so return immediately
 	// Empty means no radios present, so continue
 	if newradios == nil {
@@ -1269,7 +1284,7 @@ func updateRadios(device *core.Record, app core.App, newradios map[int]Radio) {
 			// Old radio exists within the updated list (newradios)
 			fmt.Println("EXISTS", newradio, oldradio)
 			dirty := false
-			if deviceConfigApplied && oldradio.GetBool("enabled") == false {
+			if current && deviceConfigApplied && oldradio.GetBool("enabled") == false {
 				oldradio.Set("enabled", true)
 				dirty = true
 			}
@@ -1294,7 +1309,7 @@ func updateRadios(device *core.Record, app core.App, newradios map[int]Radio) {
 			// power; record the value it reports so tx_power reflects what the
 			// radio is actually transmitting at. Never overwrite a value the user
 			// pinned in dBm/mW mode.
-			if mode == "auto" && newradio.TxPower > 0 &&
+			if current && mode == "auto" && newradio.TxPower > 0 &&
 				oldradio.GetInt("tx_power") != newradio.TxPower {
 				oldradio.Set("tx_power", newradio.TxPower)
 				dirty = true
@@ -1308,7 +1323,7 @@ func updateRadios(device *core.Record, app core.App, newradios map[int]Radio) {
 		} else {
 			fmt.Println("Not in list:", oldradio)
 			// Old radio does not exist within the updated list
-			if deviceConfigApplied && oldradio.GetBool("enabled") == true {
+			if current && complete && deviceConfigApplied && oldradio.GetBool("enabled") == true {
 				oldradio.Set("enabled", false)
 				err := app.Save(oldradio)
 				if err != nil {
@@ -1318,7 +1333,8 @@ func updateRadios(device *core.Record, app core.App, newradios map[int]Radio) {
 		}
 	}
 
-	if len(newradios) == 0 {
+	if len(newradios) == 0 || !current {
+		// A replayed snapshot says what was there then, not what is there now.
 		return
 	}
 	radiocollection, err := app.FindCollectionByNameOrId("radios")
@@ -2763,52 +2779,57 @@ func updateInterface(app core.App, iface Interface, deviceId string, interfaceCo
 	return nil
 }
 
-func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, collection *core.Collection) (error, map[int]Radio) {
+func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, collection *core.Collection) (error, radioReport) {
 	e.Response.Header().Set("X-Openwisp-Controller", "true")
 	time := e.Request.URL.Query().Get("time")
 	// The openwisp agent marks the up-to-date info with current=true
 	// Only live data is published to Home Assistant does not support backfill over MQTT
 	current := e.Request.URL.Query().Get("current") == "true"
 	var radios map[int]Radio
+	report := radioReport{current: current}
 	var payload MonitoringData
 	if e.Request.Header.Get("Content-Length") == "0" {
 		app.Logger().Info("Ignored empty monitoring request 1", "userIP", e.RealIP())
-		return e.Blob(200, "text/plain", []byte("")), radios
+		return e.Blob(200, "text/plain", []byte("")), report
 	}
 	// Both DeviceMonitoring and OpenSoho payloads arrive at this endpoint, so
 	// read the body once and dispatch on the "type" discriminator.
 	body, err := io.ReadAll(e.Request.Body)
 	if err != nil {
 		fmt.Println(err)
-		return e.BadRequestError("Failed to read body", err), radios
+		return e.BadRequestError("Failed to read body", err), report
 	}
 	var envelope struct {
 		Type string `json:"type"`
 	}
 	if err := json.Unmarshal(body, &envelope); err != nil {
 		fmt.Println(err)
-		return e.BadRequestError("Failed to parse json", err), radios
+		return e.BadRequestError("Failed to parse json", err), report
 	}
 	if envelope.Type == "OpenSoho" {
 		// Radio dump produced by scripts/dump-radios.uc.
 		var osd OpenSohoData
 		if err := json.Unmarshal(body, &osd); err != nil {
 			fmt.Println(err)
-			return e.BadRequestError("Failed to parse OpenSoho json", err), radios
+			return e.BadRequestError("Failed to parse OpenSoho json", err), report
 		}
 		handleOpenSohoMonitoring(app, device, osd, current)
-		return e.Blob(200, "text/plain", []byte("")), radiosFromOpenSoho(app, device, osd)
+		// The dump enumerates every UCI wifi-device, so absence means gone.
+		report.radios = radiosFromOpenSoho(app, device, osd)
+		report.complete = true
+		return e.Blob(200, "text/plain", []byte("")), report
 	}
 	if envelope.Type != "DeviceMonitoring" {
 		errormsg := fmt.Sprintf(`Invalid type '%s' in JSON`, envelope.Type)
 		fmt.Println(errormsg)
-		return e.BadRequestError(errormsg, ""), radios
+		return e.BadRequestError(errormsg, ""), report
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
 		fmt.Println(err)
-		return e.BadRequestError("Failed to parse json", err), radios
+		return e.BadRequestError("Failed to parse json", err), report
 	}
 	radios = make(map[int]Radio)
+	report.radios = radios
 	interfacecollection, _ := app.FindCollectionByNameOrId("interfaces")
 	wificollection, _ := app.FindCollectionByNameOrId("wifi_ssids")
 
@@ -2856,7 +2877,7 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 					cliententry.Set("device", device.GetString("id"))
 					err = app.Save(cliententry)
 					if err != nil {
-						return e.InternalServerError("Could not store entry", err), radios
+						return e.InternalServerError("Could not store entry", err), report
 					}
 				}
 			}
@@ -2882,7 +2903,7 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 
 	//current := e.Request.URL.Query().Get("current")
 	fmt.Println(payload.Type, "@", time)
-	return e.Blob(200, "text/plain", []byte("")), radios
+	return e.Blob(200, "text/plain", []byte("")), report
 }
 
 func storeDHCPLeases(app core.App, leaseslist []DHCPLease, expirytime types.DateTime) {
@@ -3162,8 +3183,8 @@ func bindAppHooks(app core.App, shared_secret string, enableNewDevices bool) {
 				return e.InternalServerError("Could not find collection", err)
 			}
 
-			err, radios := handleMonitoring(e, app, device, collection)
-			updateRadios(device, app, radios)
+			err, report := handleMonitoring(e, app, device, collection)
+			updateRadios(device, app, report.radios, report.current, report.complete)
 			return err
 		})
 

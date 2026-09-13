@@ -1253,6 +1253,17 @@ type radioReport struct {
 	complete bool
 }
 
+// bandSupported reports whether the radio's advertised frequencies cover band.
+// A radio that has advertised nothing counts as supporting anything, so a band
+// is never overwritten on a guess.
+func bandSupported(app core.App, device string, radio int, band string) bool {
+	bands, err := advertisedBands(app, device, radio)
+	if err != nil || len(bands) == 0 {
+		return true
+	}
+	return slices.Contains(bands, band)
+}
+
 // updateRadios reconciles a device's radio rows with one monitoring payload.
 // current is false for a spool file the agent replayed: it describes a past
 // moment, so it may not speak for the present. complete is true only for the
@@ -1288,11 +1299,15 @@ func updateRadios(device *core.Record, app core.App, newradios map[int]Radio, cu
 				oldradio.Set("enabled", true)
 				dirty = true
 			}
-			// Fill an empty band from the device's own, never overwriting a
-			// band the user picked.
-			if oldradio.GetString("band") == "" {
-				if band := acceptedBand(oldradio.Collection(), newradio.Band); band != "" {
-					oldradio.Set("band", band)
+			// Take the device's band when we have none, or when the one we
+			// have is not a band this radio advertises - a wrong band would
+			// otherwise stick forever. A band the radio supports is left alone,
+			// so a user's pick stands.
+			if reported := acceptedBand(oldradio.Collection(), newradio.Band); reported != "" {
+				stored := oldradio.GetString("band")
+				if stored != reported &&
+					(stored == "" || !bandSupported(app, oldradio.GetString("device"), oldradionum, stored)) {
+					oldradio.Set("band", reported)
 					dirty = true
 				}
 			}

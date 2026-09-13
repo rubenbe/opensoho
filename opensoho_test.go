@@ -4490,6 +4490,85 @@ func TestUpdateRadiosIncompleteReportKeepsRadio(t *testing.T) {
 	assert.False(t, radio2.GetBool("enabled"))
 }
 
+// A band the radio does not advertise would otherwise stick forever: the BT8's
+// 6 GHz radio came out stored as 2.4, which capped its htmode at EHT20.
+func TestUpdateRadiosCorrectsContradictedBand(t *testing.T) {
+	app, d, radiocollection, freqcollection := setupRadioFlagsApp(t)
+	htcollection := setupRadioHtModesCollection(t, app, d.Collection())
+
+	// radio2 advertises 6 GHz only.
+	for _, freq := range []int{5955, 5975, 5995} {
+		f := core.NewRecord(freqcollection)
+		f.Set("device", d.Id)
+		f.Set("radio", 2)
+		f.Set("channel", 1)
+		f.Set("frequency", freq)
+		assert.Nil(t, app.Save(f))
+	}
+	h := core.NewRecord(htcollection)
+	h.Set("device", d.Id)
+	h.Set("radio", 2)
+	h.Set("ht_modes", []string{"HE20", "HE40", "HE80", "EHT20", "EHT40", "EHT80"})
+	assert.Nil(t, app.Save(h))
+
+	radio := core.NewRecord(radiocollection)
+	radio.Set("device", d.Id)
+	radio.Set("radio", 2)
+	radio.Set("band", "2.4")
+	radio.Set("auto_frequency", true)
+	radio.Set("enabled", true)
+	radio.Set("tx_power_mode", "auto")
+	assert.Nil(t, app.Save(radio))
+
+	assert.Equal(t, `
+config wifi-device 'radio2'
+        option channel 'auto'
+        option band '2g'
+        option htmode 'EHT20'
+`, generateRadioConfig(app, radio, ""), "the reported symptom")
+
+	updateRadios(d, app, map[int]Radio{2: {Band: "6"}}, true, true)
+
+	radio, err := app.FindFirstRecordByData("radios", "radio", "2")
+	assert.Nil(t, err)
+	assert.Equal(t, "6", radio.GetString("band"))
+	assert.Equal(t, `
+config wifi-device 'radio2'
+        option channel 'auto'
+        option band '6g'
+        option htmode 'EHT80'
+`, generateRadioConfig(app, radio, ""))
+}
+
+// A band the radio does advertise is the user's to pick, so it stays.
+func TestUpdateRadiosKeepsSupportedBand(t *testing.T) {
+	app, d, radiocollection, freqcollection := setupRadioFlagsApp(t)
+
+	// A switchable radio advertising both bands, pinned by the user to 2.4.
+	for _, freq := range []int{2412, 2437, 5180} {
+		f := core.NewRecord(freqcollection)
+		f.Set("device", d.Id)
+		f.Set("radio", 0)
+		f.Set("channel", 1)
+		f.Set("frequency", freq)
+		assert.Nil(t, app.Save(f))
+	}
+	radio := core.NewRecord(radiocollection)
+	radio.Set("device", d.Id)
+	radio.Set("radio", 0)
+	radio.Set("band", "2.4")
+	radio.Set("auto_frequency", true)
+	radio.Set("enabled", true)
+	radio.Set("tx_power_mode", "auto")
+	assert.Nil(t, app.Save(radio))
+
+	updateRadios(d, app, map[int]Radio{0: {Band: "5"}}, true, true)
+
+	radio, err := app.FindFirstRecordByData("radios", "radio", "0")
+	assert.Nil(t, err)
+	assert.Equal(t, "2.4", radio.GetString("band"))
+}
+
 func TestUpdateRadios(t *testing.T) {
 	radios := make(map[int]Radio)
 	radios[0] = Radio{Frequency: 2412, Channel: 1, HTmode: "HT20", TxPower: 23}

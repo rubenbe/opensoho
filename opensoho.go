@@ -1367,12 +1367,7 @@ config led 'led_%s'
 // user's band, the one band the device advertised. That last gives an untouched
 // radio a band at all. A radio advertising several stays unpinned.
 func resolveRadioBand(app core.App, radio *core.Record) string {
-	if radio.GetBool("auto_frequency") != true {
-		if band := frequencyToBand(radio.GetInt("frequency")); band != "unknown" {
-			return band
-		}
-	}
-	if band := radio.GetString("band"); len(band) > 0 {
+	if band := records.NewRadio(radio).Band(); len(band) > 0 {
 		return band
 	}
 	bands, err := advertisedBands(app, radio.GetString("device"), radio.GetInt("radio"))
@@ -1712,6 +1707,32 @@ func isWifiEnabledOnBand(wifi WifiRecord, band string, device *core.Record, app 
 	return false
 }
 
+// radioBandCandidates returns the bands a radio can serve an SSID on: the one
+// it is on when that is settled, else every band it advertises. Unlike
+// resolveRadioBand this need not pick just one - an SSID only asks whether the
+// radio has the band, and a switchable radio has them all.
+func radioBandCandidates(app core.App, radio *core.Record) []string {
+	if band := records.NewRadio(radio).Band(); len(band) > 0 {
+		return []string{band}
+	}
+	bands, err := advertisedBands(app, radio.GetString("device"), radio.GetInt("radio"))
+	if err != nil {
+		return nil
+	}
+	return bands
+}
+
+// isWifiEnabledOnAnyBand reports whether the SSID is wanted on any of the bands
+// the radio can serve.
+func isWifiEnabledOnAnyBand(wifi WifiRecord, bands []string, device *core.Record, app core.App) bool {
+	for _, band := range bands {
+		if isWifiEnabledOnBand(wifi, band, device, app) {
+			return true
+		}
+	}
+	return false
+}
+
 func generateWifiConfigs(wifis []WifiRecord, numradios uint, app core.App, device *core.Record) (string, bool) {
 	radios, _ := getRadiosForDevice(device, app)
 	output := ""
@@ -1727,13 +1748,16 @@ func generateWifiConfigs(wifis []WifiRecord, numradios uint, app core.App, devic
 					break
 				}
 			}
+			// No detailed radio data yet: emit on every radio.
 			var radioProxy *records.Radio
 			if radio != nil {
+				if !radio.GetBool("enabled") {
+					continue
+				}
 				radioProxy = records.NewRadio(radio)
-			}
-			// It is possible that there is no detailed radio data (yet)
-			if radioProxy != nil && !isWifiEnabledOnBand(wifi, radioProxy.Band(), device, app) {
-				continue
+				if !isWifiEnabledOnAnyBand(wifi, radioBandCandidates(app, radio), device, app) {
+					continue
+				}
 			}
 			config_output, has_vlan_config := generateWifiConfig(wifi, i, j, app, device, radioProxy)
 			output += config_output

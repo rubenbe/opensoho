@@ -32,10 +32,15 @@ func (r *Radio) DeviceId() string {
 	return r.GetString("device")
 }
 
-// Band returns the Wi-Fi band ("2.4", "5", "6", "60", or "unknown") the
-// radio's configured frequency falls into.
+// Band returns the band the radio operates on: the one its pinned frequency
+// falls in, else the band the user picked or the device reported.
 func (r *Radio) Band() string {
-	return frequencyplan.FrequencyToBand(r.GetInt("frequency"))
+	if !r.GetBool("auto_frequency") {
+		if band := frequencyplan.FrequencyToBand(r.GetInt("frequency")); band != "unknown" {
+			return band
+		}
+	}
+	return r.GetString("band")
 }
 
 // IsBand2Ghz reports whether the radio's configured frequency is in the

@@ -7056,6 +7056,17 @@ func TestGenerateWifiConfigEncryptionOn6GHz(t *testing.T) {
 	radioProxy := records.NewRadio(radio)
 	assert.True(t, radioProxy.IsBand6GHz())
 
+	// A 6 GHz radio discovered while idle has no frequency, only the band the
+	// device reported - it must still get the SAE override.
+	idle := core.NewRecord(radiocollection)
+	idle.Set("device", d.Id)
+	idle.Set("radio", 5)
+	idle.Set("band", "6")
+	idle.Set("auto_frequency", true)
+	idle.Set("tx_power_mode", "auto")
+	assert.Nil(t, app.Save(idle))
+	assert.True(t, records.NewRadio(idle).IsBand6GHz())
+
 	scenarios := []struct {
 		encryption string
 		expected   string
@@ -8077,6 +8088,180 @@ func setupWifiApsCollection(t *testing.T, app core.App, devicecollection *core.C
 	err := app.Save(col)
 	assert.Equal(t, nil, err)
 	return col
+}
+
+// TestGenerateWifiConfigsRadioMapping covers which radios an SSID lands on. The
+// band used to come from the stored frequency alone, so a radio discovered
+// while idle - no frequency, band adopted from the device - got no wifi-iface.
+func TestGenerateWifiConfigsRadioMapping(t *testing.T) {
+	type radioSpec struct {
+		index      int
+		frequency  int
+		band       string
+		autoFreq   bool
+		enabled    bool
+		freqlist   []int
+		noRadioRow bool
+	}
+
+	cases := []struct {
+		name    string
+		radios  []radioSpec
+		apBands []string
+		want    []int // radio indices that must carry the SSID
+	}{
+		{
+			// The reported bug: idle at discovery, so no frequency, but the
+			// device's own band was adopted.
+			name:    "band only",
+			radios:  []radioSpec{{index: 0, band: "6", autoFreq: true, enabled: true}},
+			apBands: []string{"6"},
+			want:    []int{0},
+		},
+		{
+			name:    "pinned frequency still maps",
+			radios:  []radioSpec{{index: 0, frequency: 5180, enabled: true}},
+			apBands: []string{"5"},
+			want:    []int{0},
+		},
+		{
+			// Neither frequency nor band, but the freqlist is unambiguous.
+			name:    "single advertised band",
+			radios:  []radioSpec{{index: 0, autoFreq: true, enabled: true, freqlist: []int{5180, 5200}}},
+			apBands: []string{"5"},
+			want:    []int{0},
+		},
+		{
+			// openwrt-garage: radio0 and radio2 are both 5 GHz.
+			name: "two radios on one band",
+			radios: []radioSpec{
+				{index: 0, band: "5", autoFreq: true, enabled: true},
+				{index: 1, band: "2.4", autoFreq: true, enabled: true},
+				{index: 2, band: "5", autoFreq: true, enabled: true},
+			},
+			apBands: []string{"5"},
+			want:    []int{0, 2},
+		},
+		{
+			name: "disabled radio is skipped",
+			radios: []radioSpec{
+				{index: 0, band: "5", autoFreq: true, enabled: false},
+				{index: 1, band: "5", autoFreq: true, enabled: true},
+			},
+			apBands: []string{"5"},
+			want:    []int{1},
+		},
+		{
+			// No row at all: nothing is known, so the SSID is emitted anyway.
+			name:    "no radio row",
+			radios:  []radioSpec{{index: 0, noRadioRow: true}},
+			apBands: []string{"6"},
+			want:    []int{0},
+		},
+		{
+			// A switchable radio that is not pinned to a band has both, so an
+			// SSID wanting either one lands on it.
+			name:    "multiple advertised bands",
+			radios:  []radioSpec{{index: 0, autoFreq: true, enabled: true, freqlist: []int{2412, 5180}}},
+			apBands: []string{"5"},
+			want:    []int{0},
+		},
+		{
+			// ... but not one wanting a band it does not have.
+			name:    "advertised bands do not include the wanted one",
+			radios:  []radioSpec{{index: 0, autoFreq: true, enabled: true, freqlist: []int{2412, 5180}}},
+			apBands: []string{"6"},
+			want:    nil,
+		},
+		{
+			// A pinned band wins over what the freqlist advertises.
+			name:    "pinned band beats advertised",
+			radios:  []radioSpec{{index: 0, band: "2.4", autoFreq: true, enabled: true, freqlist: []int{2412, 5180}}},
+			apBands: []string{"5"},
+			want:    nil,
+		},
+		{
+			// A row that exists but resolves to no band carries nothing.
+			name:    "unresolvable band",
+			radios:  []radioSpec{{index: 0, autoFreq: true, enabled: true}},
+			apBands: []string{"5"},
+			want:    nil,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			app, err := tests.NewTestApp()
+			assert.Nil(t, err)
+			defer app.Cleanup()
+
+			vlancollection := setupVlanCollection(t, app)
+			wificollection := setupWifiCollection(t, app, vlancollection)
+			devicecollection := setupDeviceCollection(t, app, wificollection)
+			radiocollection := setupRadioCollection(t, app, devicecollection)
+			freqcollection := setupRadioFrequenciesCollection(t, app, devicecollection)
+			wifiapscollection := setupWifiApsCollection(t, app, devicecollection, wificollection)
+
+			device := core.NewRecord(devicecollection)
+			device.Set("name", "test_device")
+			device.Set("health_status", "healthy")
+			assert.Nil(t, app.Save(device))
+
+			w := core.NewRecord(wificollection)
+			w.Set("ssid", "test_ssid")
+			w.Set("key", "test_key")
+			w.Set("encryption", "psk2")
+			w.Set("ieee80211r", true)
+			w.Set("enabled", true)
+			assert.Nil(t, app.Save(w))
+
+			ap := core.NewRecord(wifiapscollection)
+			ap.Set("device", device.Id)
+			ap.Set("wifi", w.Id)
+			ap.Set("band", tc.apBands)
+			assert.Nil(t, app.Save(ap))
+
+			for _, r := range tc.radios {
+				for _, freq := range r.freqlist {
+					f := core.NewRecord(freqcollection)
+					f.Set("device", device.Id)
+					f.Set("radio", r.index)
+					f.Set("channel", 1)
+					f.Set("frequency", freq)
+					assert.Nil(t, app.Save(f))
+				}
+				if r.noRadioRow {
+					continue
+				}
+				rec := core.NewRecord(radiocollection)
+				rec.Set("device", device.Id)
+				rec.Set("radio", r.index)
+				rec.Set("tx_power_mode", "auto")
+				rec.Set("enabled", r.enabled)
+				rec.Set("auto_frequency", r.autoFreq)
+				if r.frequency > 0 {
+					rec.Set("frequency", r.frequency)
+				}
+				if r.band != "" {
+					rec.Set("band", r.band)
+				}
+				assert.Nil(t, app.Save(rec))
+			}
+
+			out, _ := generateWifiConfigs([]WifiRecord{{Record: w}}, uint(len(tc.radios)), app, device)
+
+			for _, r := range tc.radios {
+				want := false
+				for _, idx := range tc.want {
+					if idx == r.index {
+						want = true
+					}
+				}
+				got := strings.Contains(out, fmt.Sprintf("option device 'radio%d'\n", r.index))
+				assert.Equal(t, want, got, "radio%d", r.index)
+			}
+		})
+	}
 }
 
 func TestIsWifiEnabledOnBand(t *testing.T) {

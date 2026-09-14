@@ -1024,10 +1024,17 @@ func handleOpenSohoMonitoring(app core.App, device *core.Record, data OpenSohoDa
 			continue
 		}
 
-		if err := syncRadioFrequencies(app, coll, device, idx, radio.FreqList.Results); err != nil {
-			app.Logger().Error("Failed to sync radio frequencies",
-				"device", device.GetString("id"), "radio", radio.Name, "error", err)
-			continue
+		// An empty freqlist means the frequencies could not be seen, not that
+		// the radio has none: an idle radio sits on the world regulatory
+		// domain, which has no 6 GHz rules at all, so a 6 GHz radio reports
+		// nothing until it comes up. Wiping the rows would destroy the only
+		// evidence of which band the radio is on.
+		if len(radio.FreqList.Results) > 0 {
+			if err := syncRadioFrequencies(app, coll, device, idx, radio.FreqList.Results); err != nil {
+				app.Logger().Error("Failed to sync radio frequencies",
+					"device", device.GetString("id"), "radio", radio.Name, "error", err)
+				continue
+			}
 		}
 
 		if radio.TxPowerList != nil {

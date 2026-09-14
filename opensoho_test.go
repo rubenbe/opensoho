@@ -4540,6 +4540,45 @@ config wifi-device 'radio2'
 `, generateRadioConfig(app, radio, ""))
 }
 
+// An idle radio sits on the world regulatory domain, which has no 6 GHz rules,
+// so the BT8's 6 GHz radio reports an empty freqlist. That must not wipe the
+// rows it reported when it was up - they are the evidence its band rests on.
+func TestHandleOpenSohoMonitoringKeepsFrequenciesOnEmptyList(t *testing.T) {
+	app, err := tests.NewTestApp()
+	assert.Nil(t, err)
+	defer app.Cleanup()
+
+	devicecollection := core.NewBaseCollection("devices")
+	assert.Nil(t, app.Save(devicecollection))
+	setupRadioFrequenciesCollection(t, app, devicecollection)
+	setupRadioTxPowersCollection(t, app, devicecollection)
+	setupRadioHtModesCollection(t, app, devicecollection)
+
+	d := core.NewRecord(devicecollection)
+	assert.Nil(t, app.Save(d))
+
+	var radio2 OpenSohoRadio
+	radio2.Name = "radio2"
+	radio2.Band = "6g"
+	radio2.FreqList.Results = []IwinfoFreq{
+		{Channel: 1, MHz: 5955},
+		{Channel: 5, MHz: 5975},
+	}
+	handleOpenSohoMonitoring(app, d, OpenSohoData{Type: "OpenSoho", Radios: []OpenSohoRadio{radio2}}, true)
+
+	recs, err := app.FindAllRecords("radio_frequencies", dbx.HashExp{"device": d.Id, "radio": 2})
+	assert.Nil(t, err)
+	assert.Equal(t, 2, len(recs))
+
+	// The radio goes idle and can no longer see its own band.
+	radio2.FreqList.Results = nil
+	handleOpenSohoMonitoring(app, d, OpenSohoData{Type: "OpenSoho", Radios: []OpenSohoRadio{radio2}}, true)
+
+	recs, err = app.FindAllRecords("radio_frequencies", dbx.HashExp{"device": d.Id, "radio": 2})
+	assert.Nil(t, err)
+	assert.Equal(t, 2, len(recs), "an empty freqlist must not wipe the stored frequencies")
+}
+
 // A band the radio does advertise is the user's to pick, so it stays.
 func TestUpdateRadiosKeepsSupportedBand(t *testing.T) {
 	app, d, radiocollection, freqcollection := setupRadioFlagsApp(t)

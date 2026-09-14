@@ -3015,14 +3015,15 @@ func TestHandleBridgeMonitoringSkipsVlanMembers(t *testing.T) {
 	// must not be picked up either.
 	stale := core.NewRecord(ethernetcollection)
 	stale.Set("device", d.Id)
-	stale.Set("name", "phy1-ap0-vl100")
+	stale.Set("name", "phy0.1-ap0-130")
 	assert.Nil(t, app.Save(stale))
 
 	iface := Interface{
 		Name: "br-lan",
 		BridgeMembers: []string{
-			"lan1", "phy0-ap0", "phy1-ap0",
-			"phy1-ap0-vl100", "phy2-ap0-vl100",
+			"lan1", "phy0.0-ap0", "phy0.1-ap0",
+			"phy0.1-ap0-130", "phy0.2-ap0-4094",
+			"phy1-ap0-vl100",
 		},
 	}
 	assert.Nil(t, handleBridgeMonitoring(app, iface, d, bridgescollection, interfacescollection, ethernetcollection))
@@ -3031,6 +3032,38 @@ func TestHandleBridgeMonitoringSkipsVlanMembers(t *testing.T) {
 	assert.Nil(t, err)
 	if assert.Equal(t, 1, len(records)) {
 		assert.Equal(t, []string{eth.Id}, records[0].GetStringSlice("ethernet"))
+	}
+}
+
+// OpenWRT builds the netdev as "<ap-ifname>-<name>" and the kernel caps it at
+// 15. A multi-radio wiphy's AP is "phy0.1-ap0", leaving 4 characters - which is
+// what "vl<id>" overflowed, taking the whole AP down.
+func TestGenerateHostApdVlanMapNameFitsIfnamsiz(t *testing.T) {
+	const maxIfname = 15
+	// The longest AP interface name OpenWRT produces.
+	const apIfname = "phy0.1-ap0"
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+	vlancollection := setupVlanCollection(t, app)
+
+	vlans := []*core.Record{}
+	for _, number := range []int{1, 42, 130, 999, 1000, 4094} {
+		v := core.NewRecord(vlancollection)
+		v.Set("name", "some_network")
+		v.Set("number", number)
+		assert.Nil(t, app.Save(v))
+		vlans = append(vlans, v)
+	}
+
+	for _, line := range strings.Split(generateHostApdVlanMap(vlans), "\n") {
+		name, found := strings.CutPrefix(strings.TrimSpace(line), "option name '")
+		if !found {
+			continue
+		}
+		name = strings.TrimSuffix(name, "'")
+		netdev := apIfname + "-" + name
+		assert.LessOrEqual(t, len(netdev), maxIfname, netdev)
 	}
 }
 
@@ -3046,12 +3079,13 @@ func TestIsWiredPort(t *testing.T) {
 		{Name: "wan", Type: "ethernet"},
 		{Name: "phy0-ap0", Type: "wireless"},
 		// Our own VLAN interfaces: "other" and bridged, like eth0, but ports
-		// they are not.
+		// they are not. Both the current naming and the older longer one.
+		{Name: "phy0.1-ap0-130", Type: "other"},
 		{Name: "phy0-ap0-vl100", Type: "other"},
-		{Name: "br-lan", Type: "bridge", BridgeMembers: []string{"eth0", "lan1", "phy0-ap0", "phy0-ap0-vl100"}},
+		{Name: "br-lan", Type: "bridge", BridgeMembers: []string{"eth0", "lan1", "phy0-ap0", "phy0-ap0-vl100", "phy0.1-ap0-130"}},
 	}
 	members := bridgeMemberNames(payload)
-	assert.Equal(t, map[string]bool{"eth0": true, "lan1": true, "phy0-ap0": true, "phy0-ap0-vl100": true}, members)
+	assert.Equal(t, map[string]bool{"eth0": true, "lan1": true, "phy0-ap0": true, "phy0-ap0-vl100": true, "phy0.1-ap0-130": true}, members)
 
 	expected := map[string]bool{
 		"wg0":            false,
@@ -3061,6 +3095,7 @@ func TestIsWiredPort(t *testing.T) {
 		"wan":            true, // classified, bridged or not
 		"phy0-ap0":       false,
 		"phy0-ap0-vl100": false,
+		"phy0.1-ap0-130": false,
 		"br-lan":         false,
 	}
 	for _, iface := range payload {
@@ -8128,12 +8163,12 @@ func TestGenerateHostApdVlanMap(t *testing.T) {
 
 	expectedconfig := `
 config wifi-vlan 'wifi_vlan_200'
-        option name 'vl200'
+        option name '200'
         option network 'lan'
         option vid '200'
 
 config wifi-vlan 'wifi_vlan_300'
-        option name 'vl300'
+        option name '300'
         option network 'iot'
         option vid '300'
 `

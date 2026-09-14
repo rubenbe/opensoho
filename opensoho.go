@@ -132,9 +132,11 @@ func copyEmbedDirToDisk(embedFS fs.FS, targetDir string) error {
 // radios on a single wiphy, like MediaTek MT7996 - "phy0.2-ap0".
 var radioInterfaceRegexp = regexp.MustCompile(`^(?:phy|wl)(\d+)(?:\.(\d+))?-`)
 
-// vlanInterfaceRegexp matches the VLAN interfaces OpenSOHO builds on top of a
-// wireless one, e.g. "phy1-ap0-vl100".
-var vlanInterfaceRegexp = regexp.MustCompile(`-vl\d+$`)
+// vlanInterfaceRegexp matches the VLAN interfaces OpenWRT builds on a wireless
+// one, "<ifname>-<vlan id>" (e.g. "phy0.1-ap0-130"). The "vl" form is what we
+// emitted before, still matched for devices yet to take the new config. The AP
+// ends in "-ap0" and matches neither.
+var vlanInterfaceRegexp = regexp.MustCompile(`-(?:vl)?\d+$`)
 
 // isVlanInterface reports whether a name is one of our own VLAN interfaces.
 func isVlanInterface(name string) bool {
@@ -4071,9 +4073,13 @@ func generateHostApdVlanMap(vlans []*core.Record) string {
 		if !isValidVlanNumber(vlanNumber) {
 			continue
 		}
+		// The name is the suffix OpenWRT appends to the AP interface, and the
+		// result must fit IFNAMSIZ: "phy0.1-ap0" leaves 4 characters, so
+		// "phy0.1-ap0-4094" is exactly the 15 the kernel allows. Longer fails
+		// to be created and takes the AP down with it.
 		output += fmt.Sprintf(`
 config wifi-vlan 'wifi_vlan_%[1]d'
-        option name 'vl%[1]d'
+        option name '%[1]d'
         option network '%[2]s'
         option vid '%[1]d'
 `, vlanNumber, vlan.GetString("name"))

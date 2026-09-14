@@ -1260,12 +1260,15 @@ type radioReport struct {
 	complete bool
 }
 
-// bandSupported reports whether the radio's advertised frequencies cover band.
-// A radio that has advertised nothing counts as supporting anything, so a band
-// is never overwritten on a guess.
-func bandSupported(app core.App, device string, radio int, band string) bool {
+// bandAdvertised reports whether the radio's advertised frequencies back up
+// this band. A radio that has never advertised any does not, so the band the
+// device reports wins - otherwise a wrong band deadlocks: no SSID reaches the
+// radio, so it never comes up, so it never advertises anything to correct it
+// with. A lookup failure counts as backing, so a database error changes
+// nothing.
+func bandAdvertised(app core.App, device string, radio int, band string) bool {
 	bands, err := advertisedBands(app, device, radio)
-	if err != nil || len(bands) == 0 {
+	if err != nil {
 		return true
 	}
 	return slices.Contains(bands, band)
@@ -1313,7 +1316,7 @@ func updateRadios(device *core.Record, app core.App, newradios map[int]Radio, cu
 			if reported := acceptedBand(oldradio.Collection(), newradio.Band); reported != "" {
 				stored := oldradio.GetString("band")
 				if stored != reported &&
-					(stored == "" || !bandSupported(app, oldradio.GetString("device"), oldradionum, stored)) {
+					!bandAdvertised(app, oldradio.GetString("device"), oldradionum, stored) {
 					oldradio.Set("band", reported)
 					dirty = true
 				}

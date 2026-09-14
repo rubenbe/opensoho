@@ -4579,6 +4579,28 @@ func TestHandleOpenSohoMonitoringKeepsFrequenciesOnEmptyList(t *testing.T) {
 	assert.Equal(t, 2, len(recs), "an empty freqlist must not wipe the stored frequencies")
 }
 
+// A radio that has never advertised a frequency has nothing backing its stored
+// band, so the device's wins. Without this a wrong band deadlocks: no SSID
+// reaches the radio, so it never comes up to advertise anything.
+func TestUpdateRadiosCorrectsBandWithoutFrequencies(t *testing.T) {
+	app, d, radiocollection, _ := setupRadioFlagsApp(t)
+
+	radio := core.NewRecord(radiocollection)
+	radio.Set("device", d.Id)
+	radio.Set("radio", 2)
+	radio.Set("band", "2.4")
+	radio.Set("auto_frequency", true)
+	radio.Set("enabled", true)
+	radio.Set("tx_power_mode", "auto")
+	assert.Nil(t, app.Save(radio))
+
+	updateRadios(d, app, map[int]Radio{2: {Band: "6"}}, true, true)
+
+	radio, err := app.FindFirstRecordByData("radios", "radio", "2")
+	assert.Nil(t, err)
+	assert.Equal(t, "6", radio.GetString("band"))
+}
+
 // A band the radio does advertise is the user's to pick, so it stays.
 func TestUpdateRadiosKeepsSupportedBand(t *testing.T) {
 	app, d, radiocollection, freqcollection := setupRadioFlagsApp(t)

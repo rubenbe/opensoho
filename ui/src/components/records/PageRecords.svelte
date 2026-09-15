@@ -59,6 +59,7 @@
 
     // reset filter and sort on collection change
     $: if (
+        !$isCollectionsLoading &&
         $activeCollection?.id &&
         selectedCollectionIdOrName != $activeCollection.id &&
         selectedCollectionIdOrName != $activeCollection.name

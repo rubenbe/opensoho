@@ -18,6 +18,33 @@ Therefore OpenSOHO Requires you to select at least a 2.4 and a 5 GHz in the Wifi
   * Frequency `auto` works as expected
   * Set `enabled` to `true`
 
+## Encryption
+  6GHz Wifi has stricter security regulations (wpa3 minimum).
+  
+  OpenSOHO will autoupgrade your encryption settings to comply with these 6GHz wifi regulations.
+  e.g. when you choose `psk2+ccmp` as encryption on your SSID, OpenSOHO will auto upgrade this to `sae` on a 6GHz radio.
+  This allows to have a backwards compatible encryption on the classic 2.4 and 5 GHz frequencies.
+  
+  The resulting configuration looks like this:
+  ```
+  ssh root@asusbt8 cat /etc/config/wireless  | grep "encryption\|wifi-iface\|wifi-device\|band\|option device" 
+  config wifi-device 'radio0'
+  	option band '2g'
+  config wifi-device 'radio1'
+  	option band '5g'
+  config wifi-device 'radio2'
+	  option band '6g'
+  config wifi-iface 'wifi_0_radio0'
+	  option device 'radio0'
+	  option encryption 'psk2+ccmp'
+  config wifi-iface 'wifi_0_radio1'
+	  option device 'radio1'
+	  option encryption 'psk2+ccmp'
+  config wifi-iface 'wifi_0_radio2'
+	  option device 'radio2'
+	  option encryption 'sae'
+  ```
+
 ## OpenWRT
 
 Support for 6GHz on OpenWRT is still rolling out. 

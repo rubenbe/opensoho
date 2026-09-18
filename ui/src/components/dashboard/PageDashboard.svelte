@@ -9,6 +9,7 @@
     import ClientSignalQualityChart from "@/components/dashboard/ClientSignalQualityChart.svelte";
     import FrequencyOverview from "@/components/dashboard/FrequencyOverview.svelte";
     import NetworkOverview from "@/components/dashboard/NetworkOverview.svelte";
+    import WifiVersionChart from "@/components/dashboard/WifiVersionChart.svelte";
 
     $pageTitle = "Dashboard";
 
@@ -18,6 +19,7 @@
     let clientSignalQualityChart;
     let frequencyOverview;
     let networkOverview;
+    let wifiVersionChart;
 
     function refreshAll() {
         deviceHealthChart?.load();
@@ -26,6 +28,7 @@
         clientSignalQualityChart?.load();
         frequencyOverview?.load();
         networkOverview?.load();
+        wifiVersionChart?.load();
     }
 
     const refreshInterval = setInterval(refreshAll, 15000);
@@ -56,6 +59,10 @@
         <div class="dashboard-card">
             <h6 class="card-title">Clients per Channel</h6>
             <ClientsPerChannelChart bind:this={clientsPerChannelChart} />
+        </div>
+        <div class="dashboard-card">
+            <h6 class="card-title">AP WiFi Versions</h6>
+            <WifiVersionChart bind:this={wifiVersionChart} />
         </div>
         <div class="dashboard-card">
             <h6 class="card-title">Client Signal Quality</h6>

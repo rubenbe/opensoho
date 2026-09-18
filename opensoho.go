@@ -304,18 +304,38 @@ func htModesForBand(band string) ([]string, bool) {
 	return htmodes, ok
 }
 
+// wifiGenerations is the single source of truth mapping an htmode prefix to
+// its WiFi generation, ordered so the longer EHT/VHT prefixes are checked
+// before the HE/HT prefixes they'd otherwise be mistaken for.
+var wifiGenerations = []struct {
+	prefix string
+	label  string
+	gen    int
+}{
+	{"EHT", "Wifi 7", 7},
+	{"VHT", "Wifi 5", 5},
+	{"HE", "Wifi 6", 6},
+	{"HT", "Wifi 4", 4},
+}
+
 func htModeToWifiGeneration(htmode string) (string, int) {
-	switch {
-	case strings.HasPrefix(htmode, "EHT"):
-		return "Wifi 7", 7
-	case strings.HasPrefix(htmode, "VHT"):
-		return "Wifi 5", 5
-	case strings.HasPrefix(htmode, "HE"):
-		return "Wifi 6", 6
-	case strings.HasPrefix(htmode, "HT"):
-		return "Wifi 4", 4
+	for _, g := range wifiGenerations {
+		if strings.HasPrefix(htmode, g.prefix) {
+			return g.label, g.gen
+		}
 	}
 	return "", 0
+}
+
+// htModeGenerationPrefix returns just the matched prefix (e.g. "HE"), or ""
+// when htmode is empty/unset ("auto") or unrecognized.
+func htModeGenerationPrefix(htmode string) string {
+	for _, g := range wifiGenerations {
+		if strings.HasPrefix(htmode, g.prefix) {
+			return g.prefix
+		}
+	}
+	return ""
 }
 
 func highestHtMode(modes []string) string {
@@ -3453,6 +3473,7 @@ table.table > thead > tr > th > div.col-header-content > span.txt
 			e.Router.GET("/api/v1/devicestatus/{mac_address}", apiGenerateDeviceStatus).Bind(apis.RequireAuth())
 			e.Router.GET("/api/v1/frequency-overview", apiFrequencyOverview).Bind(apis.RequireAuth())
 			e.Router.GET("/api/v1/network-overview", apiNetworkOverview).Bind(apis.RequireAuth())
+			e.Router.GET("/api/v1/wifi-versions", apiWifiVersions).Bind(apis.RequireAuth())
 
 			return e.Next()
 		},
@@ -3865,6 +3886,104 @@ func apiFrequencyOverview(e *core.RequestEvent) error {
 		"devices": devices,
 		"bands":   frequencyplan.BuildOverview(radios, freqs, htModes, deviceNames),
 	})
+}
+
+// apiWifiVersions groups radios by band and WiFi generation (the htmode
+// prefix), for the dashboard's "WiFi Versions" chart. Band and generation are
+// resolved with the same logic used to configure a radio (resolveRadioBand,
+// htModeGenerationPrefix), so a radio with no band or htmode set of its own
+// still lands in the right bucket.
+func apiWifiVersions(e *core.RequestEvent) error {
+	radioRecords, err := e.App.FindAllRecords("radios")
+	if err != nil {
+		return e.InternalServerError("Failed to load radios", err)
+	}
+
+	type bucketKey struct{ band, prefix string }
+	counts := map[bucketKey]int{}
+	htmodesByBucket := map[bucketKey]map[string]bool{}
+
+	for _, r := range radioRecords {
+		band := resolveRadioBand(e.App, r)
+		if band != "2.4" && band != "5" && band != "6" {
+			continue
+		}
+
+		htmode := r.GetString("htmode")
+		key := bucketKey{band, htModeGenerationPrefix(htmode)}
+		counts[key]++
+		if htmodesByBucket[key] == nil {
+			htmodesByBucket[key] = map[string]bool{}
+		}
+		htmodesByBucket[key][htmode] = true
+	}
+
+	bandDefs := []struct{ key, label string }{
+		{"2.4", "2.4 GHz"},
+		{"5", "5 GHz"},
+		{"6", "6 GHz"},
+	}
+	prefixLabels := map[string]string{
+		"EHT": "7 (EHT)",
+		"VHT": "5 (VHT)",
+		"HE":  "6 (HE)",
+		"HT":  "4 (HT)",
+		"":    "Auto",
+	}
+	// Display order, newest generation first.
+	prefixOrder := []string{"EHT", "HE", "VHT", "HT", ""}
+
+	type slice struct {
+		Label  string `json:"label"`
+		Prefix string `json:"prefix"`
+		Count  int    `json:"count"`
+		Filter string `json:"filter"`
+	}
+	type band struct {
+		Key    string  `json:"key"`
+		Label  string  `json:"label"`
+		Slices []slice `json:"slices"`
+	}
+
+	var bands []band
+	for _, bd := range bandDefs {
+		min, max, _ := frequencyplan.BandFrequencyRange(bd.key)
+
+		var slices []slice
+		for _, prefix := range prefixOrder {
+			key := bucketKey{bd.key, prefix}
+			count := counts[key]
+			if count == 0 {
+				continue
+			}
+
+			var htmodeFilter string
+			if prefix == "" {
+				htmodeFilter = `htmode = ""`
+			} else {
+				var parts []string
+				for m := range htmodesByBucket[key] {
+					parts = append(parts, fmt.Sprintf(`htmode = "%s"`, m))
+				}
+				sort.Strings(parts)
+				htmodeFilter = "(" + strings.Join(parts, " || ") + ")"
+			}
+
+			slices = append(slices, slice{
+				Label:  prefixLabels[prefix],
+				Prefix: prefix,
+				Count:  count,
+				Filter: fmt.Sprintf(`(band = "%s" || (band = "" && frequency >= %d && frequency <= %d)) && %s`,
+					bd.key, min, max, htmodeFilter),
+			})
+		}
+
+		if len(slices) > 0 {
+			bands = append(bands, band{Key: bd.key, Label: bd.label, Slices: slices})
+		}
+	}
+
+	return e.JSON(200, map[string]any{"bands": bands})
 }
 
 func apiNetworkOverview(e *core.RequestEvent) error {

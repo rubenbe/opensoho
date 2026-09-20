@@ -1589,7 +1589,7 @@ func uciQuote(value string) string {
 	return strings.ReplaceAll(value, "'", `'\''`)
 }
 
-func generateWifiConfig(wifirecord WifiRecord, wifiid int, radio uint, app core.App, device *core.Record, radioProxy *records.Radio) (string, bool) {
+func generateWifiConfig(wifirecord WifiRecord, wifiid int, radio uint, app core.App, device *core.Record, radioProxy *records.Radio, has6GHzSibling bool) (string, bool) {
 	wifi := wifirecord.Record
 
 	ssid := wifi.GetString("ssid")
@@ -1642,6 +1642,12 @@ func generateWifiConfig(wifirecord WifiRecord, wifiid int, radio uint, app core.
 	}
 	ieee80211vOptions := v80211vOptions.String()
 
+	// Advertise the 6GHz radio/ssid via Reduced Neighbor Reports.
+	rnrOption := ""
+	if has6GHzSibling && radioProxy != nil && !radioProxy.IsBand6GHz() {
+		rnrOption = "        option rnr '1'\n"
+	}
+
 	return fmt.Sprintf(`
 config wifi-iface '%s'
         option device 'radio%d'
@@ -1661,7 +1667,7 @@ config wifi-iface '%s'
 %s        option dtim_period '%d'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
-%s%s`,
+%s%s%s`,
 			ifaceName, radio, vlanName, disabled,
 			uciQuote(ssid), encryption, uciQuote(key),
 			wifi.GetInt("hidden"),
@@ -1672,6 +1678,7 @@ config wifi-iface '%s'
 			vta_flag, vta_tz,
 			ieee80211vOptions,
 			dtim,
+			rnrOption,
 			steeringconfig, clientpskconfig),
 		len(clientpskconfig) > 0
 }
@@ -1801,6 +1808,19 @@ func generateWifiConfigs(wifis []WifiRecord, numradios uint, app core.App, devic
 	output := ""
 	glob_has_vlan_config := false
 	for i, wifi := range wifis {
+		// Does this SSID land on an enabled 6GHz radio at all? If so, the
+		// lower-band interfaces below advertise it via RNR (option 1).
+		has6GHzSibling := false
+		for _, r := range radios {
+			if !r.GetBool("enabled") || !records.NewRadio(r).IsBand6GHz() {
+				continue
+			}
+			if isWifiEnabledOnAnyBand(wifi, radioBandCandidates(app, r), device, app) {
+				has6GHzSibling = true
+				break
+			}
+		}
+
 		for j := range numradios {
 			fmt.Println(wifi)
 
@@ -1822,7 +1842,7 @@ func generateWifiConfigs(wifis []WifiRecord, numradios uint, app core.App, devic
 					continue
 				}
 			}
-			config_output, has_vlan_config := generateWifiConfig(wifi, i, j, app, device, radioProxy)
+			config_output, has_vlan_config := generateWifiConfig(wifi, i, j, app, device, radioProxy, has6GHzSibling)
 			output += config_output
 			glob_has_vlan_config = glob_has_vlan_config || has_vlan_config
 		}

@@ -11,6 +11,8 @@ description: >
 Clients use the "Reduced Neighbor Report" on the lower frequencies to avoid needlessly scanning the 6GHz band.
 Therefore OpenSOHO Requires you to select at least a 2.4 and a 5 GHz in the Wifi APs collection when selecting a 6GHz band.
 
+When an SSID lands on an enabled 6GHz radio, OpenSOHO automatically enables the Reduced Neighbor Report (`option rnr '1'`) on the 2.4/5 GHz radios on the same AP.
+
 ## Recommended settings:
 * Ensure you set a valid `country` in `Settings`. This is a hard requirement, since 6GHz is a regulatory hellhole and your radio wants to know in which country it is before enabling at all.
 * For the radio:
@@ -23,7 +25,7 @@ Therefore OpenSOHO Requires you to select at least a 2.4 and a 5 GHz in the Wifi
   
   OpenSOHO will autoupgrade your encryption settings to comply with these 6GHz wifi regulations.
   e.g. when you choose `psk2+ccmp` as encryption on your SSID, OpenSOHO will auto upgrade this to `sae` on a 6GHz radio.
-  This allows to have a backwards compatible encryption on the classic 2.4 and 5 GHz frequencies.
+  This allows to have a backwards compatible encryption (important for older clients) on the classic 2.4 and 5 GHz frequencies.
   
   The resulting configuration looks like this:
   ```

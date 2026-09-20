@@ -6915,7 +6915,7 @@ func TestGenerateWifiConfig(t *testing.T) {
 	radioProxy := records.NewRadio(radio)
 
 	// Generate a config
-	wificonfig, has_psk := generateWifiConfig(wr, 3, 4, app, d, radioProxy)
+	wificonfig, has_psk := generateWifiConfig(wr, 3, 4, app, d, radioProxy, false)
 	assert.False(t, has_psk)
 	assert.Equal(t, wificonfig, `
 config wifi-iface 'wifi_3_radio4'
@@ -6943,7 +6943,7 @@ config wifi-iface 'wifi_3_radio4'
 	w.Set("isolate_clients", true)
 
 	// Generate a config
-	wificonfig, has_psk = generateWifiConfig(wr, 3, 4, app, d, radioProxy)
+	wificonfig, has_psk = generateWifiConfig(wr, 3, 4, app, d, radioProxy, false)
 	assert.False(t, has_psk)
 	assert.Equal(t, wificonfig, `
 config wifi-iface 'wifi_3_radio4'
@@ -6978,7 +6978,7 @@ config wifi-iface 'wifi_3_radio4'
 	w.Set("encryption", "")
 
 	// Generate a config
-	wificonfig, has_psk = generateWifiConfig(wr, 3, 4, app, d, radioProxy)
+	wificonfig, has_psk = generateWifiConfig(wr, 3, 4, app, d, radioProxy, false)
 	assert.False(t, has_psk)
 	assert.Equal(t, wificonfig, `
 config wifi-iface 'wifi_3_radio4'
@@ -7007,7 +7007,7 @@ config wifi-iface 'wifi_3_radio4'
 	err = app.Save(w)
 
 	// Generate a config
-	wificonfig, has_psk = generateWifiConfig(wr, 3, 4, app, d, radioProxy)
+	wificonfig, has_psk = generateWifiConfig(wr, 3, 4, app, d, radioProxy, false)
 	assert.False(t, has_psk)
 	assert.Equal(t, wificonfig, `
 config wifi-iface 'wifi_3_radio4'
@@ -7042,7 +7042,7 @@ config wifi-iface 'wifi_3_radio4'
 	assert.Equal(t, nil, err)
 	assert.Equal(t, []string{d2.Id}, cs.GetStringSlice("whitelist"))
 	// Generate a config
-	wificonfig, has_psk = generateWifiConfig(wr, 3, 4, app, d, radioProxy)
+	wificonfig, has_psk = generateWifiConfig(wr, 3, 4, app, d, radioProxy, false)
 	assert.False(t, has_psk)
 	assert.Equal(t, wificonfig, `
 config wifi-iface 'wifi_3_radio4'
@@ -7073,7 +7073,7 @@ config wifi-iface 'wifi_3_radio4'
 	// Explicitely set the time advertisement to disabled
 	w.Set("ieee80211v_time_advertisement", "Disabled")
 	// Generate a config
-	wificonfig, has_psk = generateWifiConfig(wr, 3, 4, app, d, radioProxy)
+	wificonfig, has_psk = generateWifiConfig(wr, 3, 4, app, d, radioProxy, false)
 	assert.False(t, has_psk)
 	assert.Equal(t, wificonfig, `
 config wifi-iface 'wifi_3_radio4'
@@ -7109,7 +7109,7 @@ config wifi-iface 'wifi_3_radio4'
 	w.Set("dtim_period", 3)
 
 	// Generate a config
-	wificonfig, has_psk = generateWifiConfig(wr, 3, 4, app, d, radioProxy)
+	wificonfig, has_psk = generateWifiConfig(wr, 3, 4, app, d, radioProxy, false)
 	assert.False(t, has_psk)
 	assert.Equal(t, wificonfig, `
 config wifi-iface 'wifi_3_radio4'
@@ -7147,7 +7147,7 @@ config wifi-iface 'wifi_3_radio4'
 	err = app.Save(psk1)
 	assert.Nil(t, err)
 
-	wificonfig, has_psk = generateWifiConfig(wr, 3, 4, app, d, radioProxy)
+	wificonfig, has_psk = generateWifiConfig(wr, 3, 4, app, d, radioProxy, false)
 	assert.True(t, has_psk)
 
 	assert.Equal(t, `
@@ -7184,7 +7184,7 @@ config wifi-station 'psk_somethingapsk03_0'
 
 	// Verify that a disabled wifi record generates option disabled '1'
 	w.Set("enabled", false)
-	wificonfig, _ = generateWifiConfig(wr, 3, 4, app, d, radioProxy)
+	wificonfig, _ = generateWifiConfig(wr, 3, 4, app, d, radioProxy, false)
 	assert.Equal(t, `
 config wifi-iface 'wifi_3_radio4'
         option device 'radio4'
@@ -7219,7 +7219,7 @@ config wifi-station 'psk_somethingapsk03_0'
 
 	// Re-enable and verify it generates option disabled '0'
 	w.Set("enabled", true)
-	wificonfig, _ = generateWifiConfig(wr, 3, 4, app, d, radioProxy)
+	wificonfig, _ = generateWifiConfig(wr, 3, 4, app, d, radioProxy, false)
 	assert.Equal(t, `
 config wifi-iface 'wifi_3_radio4'
         option device 'radio4'
@@ -7260,7 +7260,7 @@ config wifi-station 'psk_somethingapsk03_0'
 	err = app.Save(psk1)
 	assert.Nil(t, err)
 
-	wificonfig, has_psk = generateWifiConfig(wr, 3, 4, app, d, radioProxy)
+	wificonfig, has_psk = generateWifiConfig(wr, 3, 4, app, d, radioProxy, false)
 	assert.True(t, has_psk)
 	assert.Equal(t, `
 config wifi-iface 'wifi_3_radio4'
@@ -7359,7 +7359,7 @@ func TestGenerateWifiConfigEncryptionOn6GHz(t *testing.T) {
 			assert.Equal(t, nil, err)
 			wr := WifiRecord{Record: w}
 
-			wificonfig, _ := generateWifiConfig(wr, 3, 4, app, d, radioProxy)
+			wificonfig, _ := generateWifiConfig(wr, 3, 4, app, d, radioProxy, false)
 			assert.Contains(t, wificonfig, fmt.Sprintf("option encryption '%s'\n", s.expected))
 		})
 	}
@@ -7427,7 +7427,7 @@ func TestGenerateWifiConfig80211vOptions(t *testing.T) {
 			assert.Equal(t, nil, err)
 			wr := WifiRecord{Record: w}
 
-			wificonfig, _ := generateWifiConfig(wr, 3, 4, app, d, radioProxy)
+			wificonfig, _ := generateWifiConfig(wr, 3, 4, app, d, radioProxy, false)
 
 			if s.wantWnmSleep {
 				assert.Contains(t, wificonfig, "        option wnm_sleep_mode '1'\n")
@@ -8633,6 +8633,107 @@ func TestIsWifiEnabledOnBand(t *testing.T) {
 	// device (the original one) is not in this record, so it cannot see w2/w3 via ap2
 	assert.False(t, isWifiEnabledOnBand(wr2, "2.4", device, app))
 	assert.False(t, isWifiEnabledOnBand(wr3, "2.4", device, app))
+}
+
+// TestGenerateWifiConfigsRnr verifies that lower-band interfaces advertise a
+// co-located 6GHz BSS via Reduced Neighbor Report (option rnr '1'), so 6GHz
+// clients can discover it without an explicit 6GHz scan - see
+// docs/content/en/docs/6_ghz_wifi.md. The 6GHz interface itself must never
+// carry the option, since RNR only makes sense on the bands a client
+// actually scans.
+func TestGenerateWifiConfigsRnr(t *testing.T) {
+	app, err := tests.NewTestApp()
+	assert.Nil(t, err)
+	defer app.Cleanup()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	clientcollection := setupClientsCollection(t, app)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	setupClientSteeringCollection(t, app, clientcollection, devicecollection, wificollection)
+	radiocollection := setupRadioCollection(t, app, devicecollection)
+	wifiapscollection := setupWifiApsCollection(t, app, devicecollection, wificollection)
+
+	device := core.NewRecord(devicecollection)
+	device.Set("name", "test_device")
+	device.Set("health_status", "healthy")
+	assert.Nil(t, app.Save(device))
+
+	w := core.NewRecord(wificollection)
+	w.Set("ssid", "test_ssid")
+	w.Set("key", "test_key")
+	w.Set("encryption", "psk2+ccmp")
+	w.Set("ieee80211r", true)
+	w.Set("enabled", true)
+	assert.Nil(t, app.Save(w))
+	wr := WifiRecord{Record: w}
+
+	ap := core.NewRecord(wifiapscollection)
+	ap.Set("device", device.Id)
+	ap.Set("wifi", w.Id)
+	ap.Set("band", []string{"2.4", "5", "6"})
+	assert.Nil(t, app.Save(ap))
+
+	// radio0 = 2.4GHz, radio1 = 5GHz, radio2 = 6GHz, all enabled.
+	radio0 := core.NewRecord(radiocollection)
+	radio0.Set("device", device.Id)
+	radio0.Set("radio", 0)
+	radio0.Set("frequency", 2412)
+	radio0.Set("tx_power_mode", "auto")
+	radio0.Set("enabled", true)
+	assert.Nil(t, app.Save(radio0))
+
+	radio1 := core.NewRecord(radiocollection)
+	radio1.Set("device", device.Id)
+	radio1.Set("radio", 1)
+	radio1.Set("frequency", 5180)
+	radio1.Set("tx_power_mode", "auto")
+	radio1.Set("enabled", true)
+	assert.Nil(t, app.Save(radio1))
+
+	radio2 := core.NewRecord(radiocollection)
+	radio2.Set("device", device.Id)
+	radio2.Set("radio", 2)
+	radio2.Set("frequency", 6115)
+	radio2.Set("tx_power_mode", "auto")
+	radio2.Set("enabled", true)
+	assert.Nil(t, app.Save(radio2))
+
+	output, _ := generateWifiConfigs([]WifiRecord{wr}, 3, app, device)
+
+	radio0Config := extractWifiIfaceBlock(t, output, "wifi_0_radio0")
+	radio1Config := extractWifiIfaceBlock(t, output, "wifi_0_radio1")
+	radio2Config := extractWifiIfaceBlock(t, output, "wifi_0_radio2")
+
+	assert.Contains(t, radio0Config, "        option rnr '1'\n")
+	assert.Contains(t, radio1Config, "        option rnr '1'\n")
+	assert.NotContains(t, radio2Config, "option rnr")
+
+	// The 6GHz interface must still get the mandatory SAE upgrade.
+	assert.Contains(t, radio2Config, "option encryption 'sae'\n")
+
+	// Disabling the 6GHz radio removes the sibling entirely: no rnr anywhere.
+	radio2.Set("enabled", false)
+	assert.Nil(t, app.Save(radio2))
+
+	output, _ = generateWifiConfigs([]WifiRecord{wr}, 3, app, device)
+	assert.NotContains(t, output, "option rnr")
+}
+
+// extractWifiIfaceBlock returns the "config wifi-iface" block for the given
+// interface name out of a generated multi-interface config, for assertions
+// that must not accidentally match another interface's options.
+func extractWifiIfaceBlock(t *testing.T, output, ifaceName string) string {
+	t.Helper()
+	marker := fmt.Sprintf("config wifi-iface '%s'", ifaceName)
+	start := strings.Index(output, marker)
+	assert.GreaterOrEqual(t, start, 0, "missing %s in output", ifaceName)
+	rest := output[start+len(marker):]
+	end := strings.Index(rest, "\nconfig ")
+	if end == -1 {
+		return rest
+	}
+	return rest[:end]
 }
 
 func TestGenerateWifiConfigsRadioNotInCollection(t *testing.T) {

@@ -8857,3 +8857,38 @@ func TestGenerateKeepListOnlyConfigFiles(t *testing.T) {
 	// keep, so the caller must not add an empty keep.d file to the tar.
 	assert.Empty(t, generateKeepList(files))
 }
+
+func TestBuildSignalQuality(t *testing.T) {
+	clients := []signalClient{
+		{-40, "2.4"}, {-50, "5"}, {-60, "5"}, {-70, "5"}, {-78, "2.4"},
+		{-79, "2.4"}, {-85, "5"}, {-86, "2.4"}, {-90, "60"},
+	}
+	overall, bands := buildSignalQuality(clients)
+
+	counts := func(b signalQualityBand) []int {
+		out := []int{}
+		for _, s := range b.Slices {
+			out = append(out, s.Count)
+		}
+		return out
+	}
+	assert.Equal(t, []int{2, 2, 1, 2, 2}, counts(overall))
+
+	// 6 GHz has no clients, so only 2.4 and 5 GHz are returned.
+	assert.Equal(t, 2, len(bands))
+	assert.Equal(t, "2.4", bands[0].Key)
+	assert.Equal(t, []int{1, 0, 1, 1, 1}, counts(bands[0]))
+	assert.Equal(t, "5", bands[1].Key)
+	assert.Equal(t, []int{1, 2, 0, 1, 0}, counts(bands[1]))
+
+	// The filters must select exactly the clients that were counted in the tier.
+	assert.Equal(t, "signal >= -50", overall.Slices[0].Filter)
+	assert.Equal(t, "signal >= -85 && signal < -78", overall.Slices[3].Filter)
+	assert.Equal(t, "signal < -85", overall.Slices[4].Filter)
+	assert.Equal(t, `signal >= -70 && signal < -50 && band = "5"`, bands[1].Slices[1].Filter)
+
+	// 6 GHz shows up as soon as it has a client.
+	_, bands = buildSignalQuality([]signalClient{{-60, "6"}})
+	assert.Equal(t, 3, len(bands))
+	assert.Equal(t, "6", bands[2].Key)
+}

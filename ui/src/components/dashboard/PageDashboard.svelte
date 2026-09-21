@@ -3,6 +3,8 @@
     import { pageTitle } from "@/stores/app";
     import PageWrapper from "@/components/base/PageWrapper.svelte";
     import RefreshButton from "@/components/base/RefreshButton.svelte";
+    import Field from "@/components/base/Field.svelte";
+    import CardMenu from "@/components/dashboard/CardMenu.svelte";
     import DeviceHealthChart from "@/components/dashboard/DeviceHealthChart.svelte";
     import ClientsPerDeviceChart from "@/components/dashboard/ClientsPerDeviceChart.svelte";
     import ClientsPerChannelChart from "@/components/dashboard/ClientsPerChannelChart.svelte";
@@ -20,6 +22,7 @@
     let frequencyOverview;
     let networkOverview;
     let wifiVersionChart;
+    let signalSplitByBand = false;
 
     function refreshAll() {
         deviceHealthChart?.load();
@@ -65,8 +68,16 @@
             <WifiVersionChart bind:this={wifiVersionChart} />
         </div>
         <div class="dashboard-card">
-            <h6 class="card-title">Client Signal Quality</h6>
-            <ClientSignalQualityChart bind:this={clientSignalQualityChart} />
+            <div class="card-header">
+                <h6 class="card-title">Client Signal Quality</h6>
+                <CardMenu label="Client signal quality options">
+                    <Field class="form-field form-field-sm form-field-toggle m-0 p-5" let:uniqueId>
+                        <input type="checkbox" id={uniqueId} bind:checked={signalSplitByBand} />
+                        <label for={uniqueId}>Split per frequency band</label>
+                    </Field>
+                </CardMenu>
+            </div>
+            <ClientSignalQualityChart bind:this={clientSignalQualityChart} splitByBand={signalSplitByBand} />
         </div>
         <div class="dashboard-card wide">
             <h6 class="card-title">Frequency Overview</h6>
@@ -94,6 +105,16 @@
     }
     .dashboard-card.wide {
         grid-column: 1 / -1;
+    }
+    .card-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--xsSpacing);
+        margin: 0 0 var(--smSpacing);
+    }
+    .card-header .card-title {
+        margin: 0;
     }
     .card-title {
         margin: 0 0 var(--smSpacing);

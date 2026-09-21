@@ -4,44 +4,49 @@
     import ApiClient from "@/utils/ApiClient";
     import { Chart, ArcElement, PieController, Tooltip, Legend } from "chart.js";
     import { push } from "svelte-spa-router";
+    import BandPieCharts from "@/components/dashboard/BandPieCharts.svelte";
 
-    const TIERS = [
-        { label: "Excellent", min: -50,  max: null, color: "#32ad84", filter: `signal >= -50` },
-        { label: "Good",      min: -70,  max: -50,  color: "#59a14f", filter: `signal >= -70 && signal < -50` },
-        { label: "Fair",      min: -78,  max: -70,  color: "#f28e2b", filter: `signal >= -78 && signal < -70` },
-        { label: "Poor",      min: -85,  max: -78,  color: "#e05c30", filter: `signal >= -85 && signal < -79` },
-        { label: "Critical",  min: null, max: -85,  color: "#e34562", filter: `signal < -85` },
-    ];
+    // Purely presentational: the tiering, the per-band split and the record
+    // filters all come from the server (apiClientSignalQuality in opensoho.go).
+    const COLORS = {
+        excellent: "#32ad84",
+        good: "#59a14f",
+        fair: "#f28e2b",
+        poor: "#e05c30",
+        critical: "#e34562",
+    };
 
-    function classify(signal) {
-        if (signal >= -50) return 0;
-        if (signal >= -70) return 1;
-        if (signal >= -78) return 2;
-        if (signal >= -85) return 3;
-        return 4;
-    }
+    export let splitByBand = false;
 
-    let chartCanvas;
-    let chartInst;
+    Chart.register(ArcElement, PieController, Tooltip, Legend);
+
     let isLoading = false;
+    let overall = [];
+    let series = [];
+
+    function toSeries(band) {
+        return {
+            key: band.key,
+            label: band.label,
+            slices: band.slices.map((s) => ({
+                label: s.label,
+                value: s.count,
+                color: COLORS[s.tier],
+                filter: s.filter,
+            })),
+        };
+    }
 
     export async function load() {
         isLoading = true;
         try {
-            const records = await ApiClient.collection("connected_clients").getFullList({
-                fields: "signal",
+            const res = await ApiClient.send("/api/v1/client-signal-quality", {
+                method: "GET",
                 requestKey: "clients_signal_quality",
             });
 
-            const counts = [0, 0, 0, 0, 0];
-            for (const r of records) {
-                counts[classify(r.signal)]++;
-            }
-
-            if (chartInst) {
-                chartInst.data.datasets[0].data = counts;
-                chartInst.update();
-            }
+            overall = toSeries(res.overall).slices;
+            series = (res.bands || []).map(toSeries);
         } catch (err) {
             if (!err?.isAbort) {
                 ApiClient.error(err);
@@ -51,17 +56,24 @@
         }
     }
 
-    onMount(() => {
-        Chart.register(ArcElement, PieController, Tooltip, Legend);
+    function openClients(filter) {
+        push(`/collections?collection=connected_clients&filter=${encodeURIComponent(filter)}`);
+    }
 
-        chartInst = new Chart(chartCanvas, {
+    function onBandSelect(e) {
+        openClients(e.detail.slice.filter);
+    }
+
+    function pie(canvas, slices) {
+        let current = slices;
+        const chart = new Chart(canvas, {
             type: "pie",
             data: {
-                labels: TIERS.map((t) => t.label),
+                labels: slices.map((sl) => sl.label),
                 datasets: [
                     {
-                        data: [0, 0, 0, 0, 0],
-                        backgroundColor: TIERS.map((t) => t.color),
+                        data: slices.map((sl) => sl.value),
+                        backgroundColor: slices.map((sl) => sl.color),
                         borderWidth: 0,
                     },
                 ],
@@ -71,8 +83,7 @@
                 maintainAspectRatio: false,
                 onClick: (_, elements) => {
                     if (!elements.length) return;
-                    const filter = TIERS[elements[0].index].filter;
-                    push(`/collections?collection=connected_clients&filter=${encodeURIComponent(filter)}`);
+                    openClients(current[elements[0].index].filter);
                 },
                 plugins: {
                     legend: {
@@ -88,18 +99,35 @@
             },
         });
 
-        load();
+        return {
+            update(next) {
+                current = next;
+                chart.data.labels = next.map((sl) => sl.label);
+                chart.data.datasets[0].data = next.map((sl) => sl.value);
+                chart.data.datasets[0].backgroundColor = next.map((sl) => sl.color);
+                chart.update();
+            },
+            destroy() {
+                chart.destroy();
+            },
+        };
+    }
 
-        return () => chartInst?.destroy();
+    onMount(() => {
+        load();
     });
 </script>
 
-<div class="chart-wrapper" class:loading={isLoading}>
-    {#if isLoading}
-        <div class="chart-loader loader" transition:scale={{ duration: 150 }} />
-    {/if}
-    <canvas bind:this={chartCanvas} class="chart-canvas" />
-</div>
+{#if splitByBand}
+    <BandPieCharts {series} {isLoading} on:select={onBandSelect} />
+{:else}
+    <div class="chart-wrapper" class:loading={isLoading}>
+        {#if isLoading}
+            <div class="chart-loader loader" transition:scale={{ duration: 150 }} />
+        {/if}
+        <canvas use:pie={overall} class="chart-canvas" />
+    </div>
+{/if}
 
 <style>
     .chart-wrapper {

@@ -3494,6 +3494,7 @@ table.table > thead > tr > th > div.col-header-content > span.txt
 			e.Router.GET("/api/v1/frequency-overview", apiFrequencyOverview).Bind(apis.RequireAuth())
 			e.Router.GET("/api/v1/network-overview", apiNetworkOverview).Bind(apis.RequireAuth())
 			e.Router.GET("/api/v1/wifi-versions", apiWifiVersions).Bind(apis.RequireAuth())
+			e.Router.GET("/api/v1/client-signal-quality", apiClientSignalQuality).Bind(apis.RequireAuth())
 
 			return e.Next()
 		},
@@ -4004,6 +4005,133 @@ func apiWifiVersions(e *core.RequestEvent) error {
 	}
 
 	return e.JSON(200, map[string]any{"bands": bands})
+}
+
+// signalTierNames are the client signal quality tiers, best first.
+var signalTierNames = []string{"Excellent", "Good", "Fair", "Poor", "Critical"}
+
+// signalTierFloors holds the lowest signal (dBm, inclusive) of every tier but the
+// last, which is open-ended. It is the single source of truth for both the tier a
+// client is counted in and the record filter that lists that tier's clients.
+var signalTierFloors = []float64{-50, -70, -78, -85}
+
+func signalTierIndex(signal float64) int {
+	for i, floor := range signalTierFloors {
+		if signal >= floor {
+			return i
+		}
+	}
+	return len(signalTierFloors)
+}
+
+// signalTierFilter returns the connected_clients filter matching exactly the
+// clients signalTierIndex puts in tier i.
+func signalTierFilter(i int) string {
+	switch {
+	case i == 0:
+		return fmt.Sprintf("signal >= %g", signalTierFloors[0])
+	case i >= len(signalTierFloors):
+		return fmt.Sprintf("signal < %g", signalTierFloors[len(signalTierFloors)-1])
+	default:
+		return fmt.Sprintf("signal >= %g && signal < %g", signalTierFloors[i], signalTierFloors[i-1])
+	}
+}
+
+type signalClient struct {
+	Signal float64
+	Band   string
+}
+
+type signalQualitySlice struct {
+	Label  string `json:"label"`
+	Tier   string `json:"tier"`
+	Count  int    `json:"count"`
+	Filter string `json:"filter"`
+}
+
+type signalQualityBand struct {
+	Key    string               `json:"key"`
+	Label  string               `json:"label"`
+	Slices []signalQualitySlice `json:"slices"`
+}
+
+// buildSignalQuality counts clients per signal tier, both overall and per
+// frequency band. Every tier is always listed (with a zero count if empty) so the
+// tiers keep a stable order; 2.4 and 5 GHz are always returned and 6 GHz only when
+// it has clients. Clients on any other band only count towards the overall total.
+func buildSignalQuality(clients []signalClient) (signalQualityBand, []signalQualityBand) {
+	bandDefs := []struct{ key, label string }{
+		{"2.4", "2.4 GHz"},
+		{"5", "5 GHz"},
+		{"6", "6 GHz"},
+	}
+
+	overall := make([]int, len(signalTierNames))
+	perBand := map[string][]int{}
+	for _, bd := range bandDefs {
+		perBand[bd.key] = make([]int, len(signalTierNames))
+	}
+	for _, c := range clients {
+		tier := signalTierIndex(c.Signal)
+		overall[tier]++
+		if counts, ok := perBand[c.Band]; ok {
+			counts[tier]++
+		}
+	}
+
+	slices := func(counts []int, extraFilter string) []signalQualitySlice {
+		out := make([]signalQualitySlice, 0, len(counts))
+		for i, count := range counts {
+			filter := signalTierFilter(i)
+			if extraFilter != "" {
+				filter += " && " + extraFilter
+			}
+			out = append(out, signalQualitySlice{
+				Label:  signalTierNames[i],
+				Tier:   strings.ToLower(signalTierNames[i]),
+				Count:  count,
+				Filter: filter,
+			})
+		}
+		return out
+	}
+
+	bands := []signalQualityBand{}
+	for _, bd := range bandDefs {
+		counts := perBand[bd.key]
+		total := 0
+		for _, n := range counts {
+			total += n
+		}
+		if bd.key == "6" && total == 0 {
+			continue
+		}
+		bands = append(bands, signalQualityBand{
+			Key:    bd.key,
+			Label:  bd.label,
+			Slices: slices(counts, fmt.Sprintf(`band = "%s"`, bd.key)),
+		})
+	}
+
+	return signalQualityBand{Key: "all", Label: "All", Slices: slices(overall, "")}, bands
+}
+
+// apiClientSignalQuality counts the connected clients per signal quality tier,
+// overall and per frequency band, for the dashboard's "Client Signal Quality"
+// card. Each slice carries the filter that lists its clients.
+func apiClientSignalQuality(e *core.RequestEvent) error {
+	records, err := e.App.FindAllRecords("connected_clients")
+	if err != nil {
+		return e.InternalServerError("Failed to load connected clients", err)
+	}
+
+	clients := make([]signalClient, 0, len(records))
+	for _, r := range records {
+		clients = append(clients, signalClient{Signal: r.GetFloat("signal"), Band: r.GetString("band")})
+	}
+
+	overall, bands := buildSignalQuality(clients)
+	return e.JSON(200, map[string]any{"overall": overall, "bands": bands})
 }
 
 func apiNetworkOverview(e *core.RequestEvent) error {

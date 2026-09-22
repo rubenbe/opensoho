@@ -8892,3 +8892,35 @@ func TestBuildSignalQuality(t *testing.T) {
 	assert.Equal(t, 3, len(bands))
 	assert.Equal(t, "6", bands[2].Key)
 }
+
+func TestBuildSignalQualityBins(t *testing.T) {
+	clients := []signalClient{
+		{-40, "2.4"}, {-50, "5"}, {-60, "5"}, {-70, "5"}, {-78, "2.4"},
+		{-79, "2.4"}, {-85, "5"}, {-86, "2.4"}, {-90, "60"},
+	}
+	overall, bands := buildSignalQuality(clients)
+
+	binCounts := func(b signalQualityBand) []int {
+		out := []int{}
+		for _, bin := range b.Bins {
+			out = append(out, bin.Count)
+		}
+		return out
+	}
+	assert.Equal(t, 12, len(overall.Bins))
+	assert.Equal(t, []int{2, 1, 2, 0, 1, 0, 1, 0, 1, 0, 1, 0}, binCounts(overall))
+	assert.Equal(t, []int{1, 0, 2, 0, 0, 0, 0, 0, 0, 0, 1, 0}, binCounts(bands[0])) // 2.4
+	assert.Equal(t, []int{0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0}, binCounts(bands[1])) // 5
+
+	// The end bins are open-ended so every client is reachable, and the filters
+	// select exactly the clients that were counted in that bin.
+	assert.Equal(t, "signal < -85", overall.Bins[0].Filter)
+	assert.Equal(t, "signal >= -85 && signal < -80", overall.Bins[1].Filter)
+	assert.Equal(t, "signal >= -35", overall.Bins[11].Filter)
+	assert.Equal(t, `signal >= -85 && signal < -80 && band = "5"`, bands[1].Bins[1].Filter)
+
+	// A client far outside the fixed scale clamps into the nearest end bin.
+	outOfRange, _ := buildSignalQuality([]signalClient{{-150, "2.4"}, {-10, "2.4"}})
+	assert.Equal(t, 1, outOfRange.Bins[0].Count)
+	assert.Equal(t, 1, outOfRange.Bins[11].Count)
+}

@@ -23,18 +23,26 @@
     let networkOverview;
     let wifiVersionChart;
 
-    // Remember the "Client Signal Quality" per-band view across page loads.
-    const SIGNAL_SPLIT_STORAGE_KEY = "dashboard_signal_split_by_band";
-    let signalSplitByBand = false;
-    try {
-        signalSplitByBand = window.localStorage?.getItem(SIGNAL_SPLIT_STORAGE_KEY) === "1";
-    } catch (_) {}
-
-    function saveSignalSplitByBand(value) {
+    // Remember dashboard card view preferences (e.g. the "Client Signal Quality"
+    // menu options) across page loads.
+    function loadPref(key) {
         try {
-            window.localStorage?.setItem(SIGNAL_SPLIT_STORAGE_KEY, value ? "1" : "0");
+            return window.localStorage?.getItem(key) === "1";
+        } catch (_) {
+            return false;
+        }
+    }
+
+    function savePref(key, value) {
+        try {
+            window.localStorage?.setItem(key, value ? "1" : "0");
         } catch (_) {}
     }
+
+    const SIGNAL_SPLIT_STORAGE_KEY = "dashboard_signal_split_by_band";
+    const SIGNAL_LINEAR_STORAGE_KEY = "dashboard_signal_linear_scale";
+    let signalSplitByBand = loadPref(SIGNAL_SPLIT_STORAGE_KEY);
+    let signalLinearScale = loadPref(SIGNAL_LINEAR_STORAGE_KEY);
 
     function refreshAll() {
         deviceHealthChart?.load();
@@ -87,14 +95,27 @@
                         <input
                             type="checkbox"
                             id={uniqueId}
+                            bind:checked={signalLinearScale}
+                            on:change={(e) => savePref(SIGNAL_LINEAR_STORAGE_KEY, e.currentTarget.checked)}
+                        />
+                        <label for={uniqueId}>Linear signal scale</label>
+                    </Field>
+                    <Field class="form-field form-field-sm form-field-toggle m-0 p-5" let:uniqueId>
+                        <input
+                            type="checkbox"
+                            id={uniqueId}
                             bind:checked={signalSplitByBand}
-                            on:change={(e) => saveSignalSplitByBand(e.currentTarget.checked)}
+                            on:change={(e) => savePref(SIGNAL_SPLIT_STORAGE_KEY, e.currentTarget.checked)}
                         />
                         <label for={uniqueId}>Split per frequency band</label>
                     </Field>
                 </CardMenu>
             </div>
-            <ClientSignalQualityChart bind:this={clientSignalQualityChart} splitByBand={signalSplitByBand} />
+            <ClientSignalQualityChart
+                bind:this={clientSignalQualityChart}
+                splitByBand={signalSplitByBand}
+                linearScale={signalLinearScale}
+            />
         </div>
         <div class="dashboard-card wide">
             <h6 class="card-title">Frequency Overview</h6>

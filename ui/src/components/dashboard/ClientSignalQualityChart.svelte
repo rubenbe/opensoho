@@ -5,6 +5,7 @@
     import { Chart, ArcElement, PieController, Tooltip, Legend } from "chart.js";
     import { push } from "svelte-spa-router";
     import BandPieCharts from "@/components/dashboard/BandPieCharts.svelte";
+    import SignalScaleBars from "@/components/dashboard/SignalScaleBars.svelte";
 
     // Purely presentational: the tiering, the per-band split and the record
     // filters all come from the server (apiClientSignalQuality in opensoho.go).
@@ -17,12 +18,16 @@
     };
 
     export let splitByBand = false;
+    export let linearScale = false;
 
     Chart.register(ArcElement, PieController, Tooltip, Legend);
 
     let isLoading = false;
     let overall = [];
     let series = [];
+    let overallBins = [];
+    let binSeries = [];
+    let signalScale = { min: -90, max: -30 };
 
     function toSeries(band) {
         return {
@@ -34,6 +39,7 @@
                 color: COLORS[s.tier],
                 filter: s.filter,
             })),
+            bins: band.bins || [],
         };
     }
 
@@ -45,8 +51,14 @@
                 requestKey: "clients_signal_quality",
             });
 
-            overall = toSeries(res.overall).slices;
+            const overallSeries = toSeries(res.overall);
+            overall = overallSeries.slices;
+            overallBins = overallSeries.bins;
             series = (res.bands || []).map(toSeries);
+            binSeries = [{ key: "all", label: "All", bins: overallBins }];
+            if (res.scale) {
+                signalScale = res.scale;
+            }
         } catch (err) {
             if (!err?.isAbort) {
                 ApiClient.error(err);
@@ -62,6 +74,10 @@
 
     function onBandSelect(e) {
         openClients(e.detail.slice.filter);
+    }
+
+    function onBinSelect(e) {
+        openClients(e.detail.bin.filter);
     }
 
     function pie(canvas, slices) {
@@ -118,7 +134,11 @@
     });
 </script>
 
-{#if splitByBand}
+{#if linearScale && splitByBand}
+    <SignalScaleBars {series} {isLoading} scale={signalScale} showLabels on:select={onBinSelect} />
+{:else if linearScale}
+    <SignalScaleBars series={binSeries} {isLoading} scale={signalScale} on:select={onBinSelect} />
+{:else if splitByBand}
     <BandPieCharts {series} {isLoading} on:select={onBandSelect} />
 {:else}
     <div class="chart-wrapper" class:loading={isLoading}>

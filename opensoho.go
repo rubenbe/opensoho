@@ -4037,6 +4037,62 @@ func signalTierFilter(i int) string {
 	}
 }
 
+// The dashboard's linear signal scale spans a fixed range so bars stay comparable
+// between bands and across refreshes; clients outside it clamp into the end bins.
+const (
+	signalScaleMin = -90.0
+	signalScaleMax = -30.0
+	signalBinSize  = 5.0
+)
+
+func signalBinCount() int {
+	return int((signalScaleMax - signalScaleMin) / signalBinSize)
+}
+
+// signalBinIndex is the bin-counting counterpart of signalTierIndex: it clamps
+// signal into [0, signalBinCount()-1] so every client lands in a bin even when its
+// signal falls outside the fixed scale.
+func signalBinIndex(signal float64) int {
+	n := signalBinCount()
+	idx := int((signal - signalScaleMin) / signalBinSize)
+	if idx < 0 {
+		idx = 0
+	}
+	if idx >= n {
+		idx = n - 1
+	}
+	return idx
+}
+
+// signalBinFilter returns the connected_clients filter matching exactly the
+// clients signalBinIndex puts in bin i of n; like signalTierFilter, the two end
+// bins are open-ended so every client stays reachable from the UI.
+func signalBinFilter(i, n int) string {
+	lo := signalScaleMin + float64(i)*signalBinSize
+	hi := lo + signalBinSize
+	switch {
+	case i == 0:
+		return fmt.Sprintf("signal < %g", hi)
+	case i >= n-1:
+		return fmt.Sprintf("signal >= %g", lo)
+	default:
+		return fmt.Sprintf("signal >= %g && signal < %g", lo, hi)
+	}
+}
+
+func signalBinLabel(i, n int) string {
+	lo := signalScaleMin + float64(i)*signalBinSize
+	hi := lo + signalBinSize
+	switch {
+	case i == 0:
+		return fmt.Sprintf("below %g dBm", hi)
+	case i >= n-1:
+		return fmt.Sprintf("%g dBm and above", lo)
+	default:
+		return fmt.Sprintf("%g to %g dBm", lo, hi)
+	}
+}
+
 type signalClient struct {
 	Signal float64
 	Band   string
@@ -4049,16 +4105,32 @@ type signalQualitySlice struct {
 	Filter string `json:"filter"`
 }
 
+type signalQualityBin struct {
+	Min    float64 `json:"min"`
+	Max    float64 `json:"max"`
+	Label  string  `json:"label"`
+	Count  int     `json:"count"`
+	Filter string  `json:"filter"`
+}
+
 type signalQualityBand struct {
 	Key    string               `json:"key"`
 	Label  string               `json:"label"`
 	Slices []signalQualitySlice `json:"slices"`
+	Bins   []signalQualityBin   `json:"bins"`
 }
 
-// buildSignalQuality counts clients per signal tier, both overall and per
-// frequency band. Every tier is always listed (with a zero count if empty) so the
-// tiers keep a stable order; 2.4 and 5 GHz are always returned and 6 GHz only when
-// it has clients. Clients on any other band only count towards the overall total.
+type signalQualityScale struct {
+	Min     float64 `json:"min"`
+	Max     float64 `json:"max"`
+	BinSize float64 `json:"binSize"`
+}
+
+// buildSignalQuality counts clients per signal tier and per signal-scale bin, both
+// overall and per frequency band. Every tier and bin is always listed (with a zero
+// count if empty) so they keep a stable order; 2.4 and 5 GHz are always returned
+// and 6 GHz only when it has clients. Clients on any other band only count
+// towards the overall totals.
 func buildSignalQuality(clients []signalClient) (signalQualityBand, []signalQualityBand) {
 	bandDefs := []struct{ key, label string }{
 		{"2.4", "2.4 GHz"},
@@ -4066,16 +4138,23 @@ func buildSignalQuality(clients []signalClient) (signalQualityBand, []signalQual
 		{"6", "6 GHz"},
 	}
 
-	overall := make([]int, len(signalTierNames))
-	perBand := map[string][]int{}
+	nbins := signalBinCount()
+	overallTiers := make([]int, len(signalTierNames))
+	overallBins := make([]int, nbins)
+	perBandTiers := map[string][]int{}
+	perBandBins := map[string][]int{}
 	for _, bd := range bandDefs {
-		perBand[bd.key] = make([]int, len(signalTierNames))
+		perBandTiers[bd.key] = make([]int, len(signalTierNames))
+		perBandBins[bd.key] = make([]int, nbins)
 	}
 	for _, c := range clients {
 		tier := signalTierIndex(c.Signal)
-		overall[tier]++
-		if counts, ok := perBand[c.Band]; ok {
+		bin := signalBinIndex(c.Signal)
+		overallTiers[tier]++
+		overallBins[bin]++
+		if counts, ok := perBandTiers[c.Band]; ok {
 			counts[tier]++
+			perBandBins[c.Band][bin]++
 		}
 	}
 
@@ -4096,29 +4175,59 @@ func buildSignalQuality(clients []signalClient) (signalQualityBand, []signalQual
 		return out
 	}
 
+	bins := func(counts []int, extraFilter string) []signalQualityBin {
+		n := len(counts)
+		out := make([]signalQualityBin, 0, n)
+		for i, count := range counts {
+			lo := signalScaleMin + float64(i)*signalBinSize
+			hi := lo + signalBinSize
+			filter := signalBinFilter(i, n)
+			if extraFilter != "" {
+				filter += " && " + extraFilter
+			}
+			out = append(out, signalQualityBin{
+				Min:    lo,
+				Max:    hi,
+				Label:  signalBinLabel(i, n),
+				Count:  count,
+				Filter: filter,
+			})
+		}
+		return out
+	}
+
 	bands := []signalQualityBand{}
 	for _, bd := range bandDefs {
-		counts := perBand[bd.key]
+		tierCounts := perBandTiers[bd.key]
 		total := 0
-		for _, n := range counts {
+		for _, n := range tierCounts {
 			total += n
 		}
 		if bd.key == "6" && total == 0 {
 			continue
 		}
+		bandFilter := fmt.Sprintf(`band = "%s"`, bd.key)
 		bands = append(bands, signalQualityBand{
 			Key:    bd.key,
 			Label:  bd.label,
-			Slices: slices(counts, fmt.Sprintf(`band = "%s"`, bd.key)),
+			Slices: slices(tierCounts, bandFilter),
+			Bins:   bins(perBandBins[bd.key], bandFilter),
 		})
 	}
 
-	return signalQualityBand{Key: "all", Label: "All", Slices: slices(overall, "")}, bands
+	overall := signalQualityBand{
+		Key:    "all",
+		Label:  "All",
+		Slices: slices(overallTiers, ""),
+		Bins:   bins(overallBins, ""),
+	}
+	return overall, bands
 }
 
-// apiClientSignalQuality counts the connected clients per signal quality tier,
-// overall and per frequency band, for the dashboard's "Client Signal Quality"
-// card. Each slice carries the filter that lists its clients.
+// apiClientSignalQuality counts the connected clients per signal quality tier and
+// per signal-scale bin, overall and per frequency band, for the dashboard's
+// "Client Signal Quality" card. Each slice/bin carries the filter that lists its
+// clients.
 func apiClientSignalQuality(e *core.RequestEvent) error {
 	records, err := e.App.FindAllRecords("connected_clients")
 	if err != nil {
@@ -4131,7 +4240,8 @@ func apiClientSignalQuality(e *core.RequestEvent) error {
 	}
 
 	overall, bands := buildSignalQuality(clients)
-	return e.JSON(200, map[string]any{"overall": overall, "bands": bands})
+	scale := signalQualityScale{Min: signalScaleMin, Max: signalScaleMax, BinSize: signalBinSize}
+	return e.JSON(200, map[string]any{"overall": overall, "bands": bands, "scale": scale})
 }
 
 func apiNetworkOverview(e *core.RequestEvent) error {

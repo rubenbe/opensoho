@@ -22,7 +22,19 @@
     let frequencyOverview;
     let networkOverview;
     let wifiVersionChart;
+
+    // Remember the "Client Signal Quality" per-band view across page loads.
+    const SIGNAL_SPLIT_STORAGE_KEY = "dashboard_signal_split_by_band";
     let signalSplitByBand = false;
+    try {
+        signalSplitByBand = window.localStorage?.getItem(SIGNAL_SPLIT_STORAGE_KEY) === "1";
+    } catch (_) {}
+
+    function saveSignalSplitByBand(value) {
+        try {
+            window.localStorage?.setItem(SIGNAL_SPLIT_STORAGE_KEY, value ? "1" : "0");
+        } catch (_) {}
+    }
 
     function refreshAll() {
         deviceHealthChart?.load();
@@ -72,7 +84,12 @@
                 <h6 class="card-title">Client Signal Quality</h6>
                 <CardMenu label="Client signal quality options">
                     <Field class="form-field form-field-sm form-field-toggle m-0 p-5" let:uniqueId>
-                        <input type="checkbox" id={uniqueId} bind:checked={signalSplitByBand} />
+                        <input
+                            type="checkbox"
+                            id={uniqueId}
+                            bind:checked={signalSplitByBand}
+                            on:change={(e) => saveSignalSplitByBand(e.currentTarget.checked)}
+                        />
                         <label for={uniqueId}>Split per frequency band</label>
                     </Field>
                 </CardMenu>

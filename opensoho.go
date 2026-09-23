@@ -1442,7 +1442,10 @@ func resolveRadioBand(app core.App, radio *core.Record) string {
 
 func generateRadioConfig(app core.App, radio *core.Record, country_code string) string {
 
+	band := resolveRadioBand(app, radio)
+
 	frequency_txt := "        option channel 'auto'\n"
+	chanlist_txt := ""
 	if radio.GetBool("auto_frequency") != true {
 		frequency := radio.GetInt("frequency")
 		channel, channelOk := frequencyToChannel(frequency)
@@ -1456,9 +1459,11 @@ func generateRadioConfig(app core.App, radio *core.Record, country_code string) 
 			app.Logger().Error("Radio frequency does not map to a channel/band; emitting auto",
 				"device", radio.GetString("device"), "radio", radio.GetInt("radio"), "frequency", frequency)
 		}
+	} else if band == "6" {
+		// hostapd's ACS ignores PSCs; restrict it to them so auto stays discoverable.
+		chanlist_txt = pscChanlistForRadio(app, radio.GetString("device"), radio.GetInt("radio"))
 	}
 
-	band := resolveRadioBand(app, radio)
 	band_txt := ""
 	if uciband := bandToUciBand(band); len(uciband) > 0 {
 		band_txt = fmt.Sprintf("        option band '%[1]s'\n", uciband)
@@ -1496,7 +1501,28 @@ func generateRadioConfig(app core.App, radio *core.Record, country_code string) 
 
 	return fmt.Sprintf(`
 config wifi-device 'radio%[1]d'
-%[2]s%[6]s%[3]s%[4]s%[5]s`, radio.GetInt("radio"), frequency_txt, country_txt, htmode_txt, txpower_txt, band_txt)
+%[2]s%[7]s%[6]s%[3]s%[4]s%[5]s`, radio.GetInt("radio"), frequency_txt, country_txt, htmode_txt, txpower_txt, band_txt, chanlist_txt)
+}
+
+// pscChanlistForRadio returns UCI "list channels" lines for the PSCs the radio
+// advertised. Empty when there are none, so hostapd never gets an empty list.
+func pscChanlistForRadio(app core.App, device string, radio int) string {
+	freqs, err := app.FindAllRecords("radio_frequencies", dbx.HashExp{"device": device, "radio": radio})
+	if err != nil {
+		return ""
+	}
+	advertised := make(map[int]bool, len(freqs))
+	for _, f := range freqs {
+		advertised[f.GetInt("frequency")] = true
+	}
+
+	var b strings.Builder
+	for _, ch := range frequencyplan.PSCChannels() {
+		if advertised[5950+ch*5] {
+			b.WriteString(fmt.Sprintf("        list channels '%d'\n", ch))
+		}
+	}
+	return b.String()
 }
 
 func getRadiosForDevice(device *core.Record, app core.App) ([]*core.Record, error) {

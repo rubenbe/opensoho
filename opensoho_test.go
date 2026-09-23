@@ -4567,11 +4567,10 @@ config wifi-device 'radio2'
 	radio, err := app.FindFirstRecordByData("radios", "radio", "2")
 	assert.Nil(t, err)
 	assert.Equal(t, "6", radio.GetString("band"))
-	// Of advertised channels 1/5/9, only 5 is a PSC.
 	assert.Equal(t, `
 config wifi-device 'radio2'
         option channel 'auto'
-        list channels '5'
+        list hostapd_options 'acs_exclude_6ghz_non_psc=1'
         option band '6g'
         option htmode 'EHT80'
 `, generateRadioConfig(app, radio, ""))
@@ -5394,11 +5393,15 @@ config wifi-device 'radio0'
 		// A band selected alongside auto_frequency pins the band while the
 		// channel stays 'auto'.
 		record.Set("band", b.band)
+		psc := ""
+		if b.band == "6" {
+			psc = "        list hostapd_options 'acs_exclude_6ghz_non_psc=1'\n"
+		}
 		assert.Equal(t, fmt.Sprintf(`
 config wifi-device 'radio0'
         option channel 'auto'
-        option band '%s'
-`, b.uciband), generateRadioConfig(app, record, ""))
+%s        option band '%s'
+`, psc, b.uciband), generateRadioConfig(app, record, ""))
 
 		// An unknown band is ignored rather than emitted verbatim.
 		record.Set("band", "7")
@@ -5409,9 +5412,9 @@ config wifi-device 'radio0'
 	}
 }
 
-// TestGenerateRadioConfigPSCChanlist covers restricting 6 GHz auto channel
-// selection to the advertised Preferred Scanning Channels.
-func TestGenerateRadioConfigPSCChanlist(t *testing.T) {
+// TestGenerateRadioConfigPSCOnlyACS covers restricting 6 GHz auto channel
+// selection to the Preferred Scanning Channels.
+func TestGenerateRadioConfigPSCOnlyACS(t *testing.T) {
 	setup := func(t *testing.T, frequencies []int, band string, autoFrequency bool) (core.App, *core.Record) {
 		app, err := tests.NewTestApp()
 		assert.Nil(t, err)
@@ -5448,19 +5451,17 @@ func TestGenerateRadioConfigPSCChanlist(t *testing.T) {
 		return app, radio
 	}
 
-	t.Run("6GHz auto emits only the advertised PSCs", func(t *testing.T) {
-		// Channels 1, 61, 5, 9, 37: only 5 and 37 are PSCs.
-		app, radio := setup(t, []int{5955, 6255, 5975, 5995, 6135}, "6", true)
+	t.Run("6GHz auto excludes non-PSC channels", func(t *testing.T) {
+		app, radio := setup(t, []int{5955, 6255, 5975, 6135}, "6", true)
 		assert.Equal(t, `
 config wifi-device 'radio2'
         option channel 'auto'
-        list channels '5'
-        list channels '37'
+        list hostapd_options 'acs_exclude_6ghz_non_psc=1'
         option band '6g'
 `, generateRadioConfig(app, radio, ""))
 	})
 
-	t.Run("5GHz auto never gets a chanlist", func(t *testing.T) {
+	t.Run("5GHz auto is unaffected", func(t *testing.T) {
 		// PSC is 6 GHz-only.
 		app, radio := setup(t, []int{5180}, "5", true)
 		assert.Equal(t, `
@@ -5481,12 +5482,12 @@ config wifi-device 'radio2'
 `, generateRadioConfig(app, radio, ""))
 	})
 
-	t.Run("no advertised PSC falls back to plain auto", func(t *testing.T) {
-		// Only non-PSC channel 61 advertised.
-		app, radio := setup(t, []int{6255}, "6", true)
+	t.Run("6GHz auto without a reported freqlist still excludes non-PSC", func(t *testing.T) {
+		app, radio := setup(t, nil, "6", true)
 		assert.Equal(t, `
 config wifi-device 'radio2'
         option channel 'auto'
+        list hostapd_options 'acs_exclude_6ghz_non_psc=1'
         option band '6g'
 `, generateRadioConfig(app, radio, ""))
 	})

@@ -83,21 +83,6 @@ func StandardChannels(band string) []Channel {
 	return standardChannels[band]
 }
 
-// PSCChannels returns the 6 GHz Preferred Scanning Channels (5, 21, ... 229).
-// Clients scan only these by default, so an AP off-PSC is hard to discover.
-func PSCChannels() []int {
-	list := make([]int, 0, 15)
-	for ch := 5; ch <= 229; ch += 16 {
-		list = append(list, ch)
-	}
-	return list
-}
-
-// IsPSCChannel reports whether ch is a 6 GHz Preferred Scanning Channel.
-func IsPSCChannel(ch int) bool {
-	return ch >= 5 && ch <= 229 && (ch-5)%16 == 0
-}
-
 // bandRanges is the single source of truth for the inclusive MHz bounds of each
 // band, in the order FrequencyToBand checks them.
 var bandRanges = []struct {

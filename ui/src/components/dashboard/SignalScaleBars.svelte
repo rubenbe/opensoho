@@ -70,10 +70,11 @@
         <div class="scale-loader loader" transition:scaleTransition={{ duration: 150 }} />
     {/if}
     {#each series as band (band.key)}
-        <div class="scale-row">
+        <div class="scale-row" class:labeled={showLabels}>
             {#if showLabels}
                 <div class="band-label">{band.label}</div>
             {/if}
+            <div class="scale-main">
             <div class="scale-plot">
                 {#each band.bins.filter((b) => b.count > 0) as bin (bin.min)}
                     <button
@@ -93,6 +94,7 @@
                 {#each ticks() as t (t)}
                     <span class="tick" style="left: {fraction(t) * 100}%">{t}</span>
                 {/each}
+            </div>
             </div>
         </div>
     {/each}
@@ -117,6 +119,23 @@
     }
     .scale-row {
         margin-bottom: 22px;
+    }
+    /* Label beside the scale (not above it) so three bands fit the card. */
+    .scale-row.labeled {
+        display: flex;
+        align-items: flex-end;
+        gap: 4px;
+        margin-bottom: 12px;
+    }
+    .scale-row.labeled .band-label {
+        flex: 0 0 auto;
+        width: 44px;
+        margin: 0 0 22px;
+        text-align: right;
+    }
+    .scale-main {
+        flex: 1;
+        min-width: 0;
     }
     .scale-row:last-child {
         margin-bottom: 0;

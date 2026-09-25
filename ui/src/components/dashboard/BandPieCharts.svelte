@@ -5,7 +5,7 @@
 
     export let series = []; // [{ key, label, slices: [{ label, value, color }] }]
     export let isLoading = false;
-    export let height = 180; // px, fixed canvas height so all columns line up
+    export let height = 140; // px, fixed canvas height so all columns line up
 
     const dispatch = createEventDispatcher();
 

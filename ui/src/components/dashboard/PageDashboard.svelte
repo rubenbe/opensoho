@@ -111,11 +111,13 @@
                     </Field>
                 </CardMenu>
             </div>
-            <ClientSignalQualityChart
-                bind:this={clientSignalQualityChart}
-                splitByBand={signalSplitByBand}
-                linearScale={signalLinearScale}
-            />
+            <div class="card-body">
+                <ClientSignalQualityChart
+                    bind:this={clientSignalQualityChart}
+                    splitByBand={signalSplitByBand}
+                    linearScale={signalLinearScale}
+                />
+            </div>
         </div>
         <div class="dashboard-card wide">
             <h6 class="card-title">Frequency Overview</h6>
@@ -153,6 +155,15 @@
     }
     .card-header .card-title {
         margin: 0;
+    }
+    /* The menu button must not make the header taller than a plain title. */
+    .card-header :global(.btn) {
+        margin: -8px 0;
+    }
+    /* Same chart height as the other cards (260px); taller content scrolls. */
+    .card-body {
+        height: 260px;
+        overflow-y: auto;
     }
     .card-title {
         margin: 0 0 var(--smSpacing);

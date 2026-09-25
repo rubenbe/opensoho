@@ -10,3 +10,15 @@
         <slot />
     </Toggler>
 </div>
+
+<style>
+    /* The dropdown lives inside a centered .btn; keep its content left-aligned. */
+    div :global(.dropdown) {
+        text-align: left;
+        justify-content: flex-start;
+    }
+    div :global(.dropdown .form-field) {
+        justify-content: flex-start;
+        text-align: left;
+    }
+</style>

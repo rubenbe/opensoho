@@ -49,6 +49,7 @@ import (
 	"github.com/rubenbe/pocketbase/plugins/migratecmd"
 	"github.com/rubenbe/pocketbase/tools/filesystem"
 	"github.com/rubenbe/pocketbase/tools/hook"
+	"github.com/rubenbe/pocketbase/tools/router"
 	"github.com/rubenbe/pocketbase/tools/security"
 	"github.com/rubenbe/pocketbase/tools/types"
 )
@@ -141,6 +142,27 @@ var vlanInterfaceRegexp = regexp.MustCompile(`-(?:vl)?\d+$`)
 // isVlanInterface reports whether a name is one of our own VLAN interfaces.
 func isVlanInterface(name string) bool {
 	return vlanInterfaceRegexp.MatchString(name)
+}
+
+var requiredReferenceRegexp = regexp.MustCompile(`part of a required reference in record \w+ \((\w+) collection\)`)
+
+// replace the generic PocketBase error, returned when a
+// device is still referenced, by a more user friendly one naming the collection.
+// Other errors are returned unchanged.
+func deviceDeleteError(name string, err error) error {
+	var apiErr *router.ApiError
+	if !errors.As(err, &apiErr) {
+		return err
+	}
+	reason, ok := apiErr.RawData().(error)
+	if !ok {
+		return err
+	}
+	m := requiredReferenceRegexp.FindStringSubmatch(reason.Error())
+	if m == nil {
+		return err
+	}
+	return router.NewBadRequestError(fmt.Sprintf("Cannot delete device %q because it is still used in the %q collection.", name, m[1]), nil)
 }
 
 // extractRadioNumber derives the radio index from a wireless interface name.
@@ -3539,6 +3561,10 @@ table.table > thead > tr > th > div.col-header-content > span.txt
 			return err
 		}
 		return e.Next()
+	})
+
+	app.OnRecordDeleteRequest("devices").BindFunc(func(e *core.RecordRequestEvent) error {
+		return deviceDeleteError(e.Record.GetString("name"), e.Next())
 	})
 
 	app.OnRecordCreateRequest("wifi_ssids").BindFunc(func(e *core.RecordRequestEvent) error {

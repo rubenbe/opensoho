@@ -9010,3 +9010,21 @@ func TestBuildSignalQualityBins(t *testing.T) {
 	assert.Equal(t, 1, outOfRange.Bins[0].Count)
 	assert.Equal(t, 1, outOfRange.Bins[11].Count)
 }
+
+func TestDeviceDeleteError(t *testing.T) {
+	// Still referenced: the collection is named
+	referenced := router.NewBadRequestError("Failed to delete record.", errors.New("the record cannot be deleted because it is part of a required reference in record l6bh6eqwcptgxzh (client_steering collection)"))
+	err := deviceDeleteError("OpenWrt-Garage", referenced)
+	assert.Equal(t, `Cannot delete device "OpenWrt-Garage" because it is still used in the "client_steering" collection.`, err.Error())
+
+	// Regexp doesn't match: the original error is returned
+	other := router.NewBadRequestError("Failed to delete record.", errors.New("database is locked"))
+	assert.Same(t, other, deviceDeleteError("OpenWrt-Garage", other))
+
+	// No raw error or not an ApiError: returned as is
+	noRaw := router.NewBadRequestError("Failed to delete record.", nil)
+	assert.Same(t, noRaw, deviceDeleteError("OpenWrt-Garage", noRaw))
+	plain := errors.New("plain")
+	assert.Same(t, plain, deviceDeleteError("OpenWrt-Garage", plain))
+	assert.Nil(t, deviceDeleteError("OpenWrt-Garage", nil))
+}

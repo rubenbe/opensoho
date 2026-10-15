@@ -22,8 +22,11 @@ builds:
       - amd64
       - arm64
       - arm
+      - mipsle
     goarm:
       - 7
+    gomips:
+      - softfloat
 release:
   draft: true
 

@@ -32,6 +32,11 @@ opensoho:
 Mounting a volume to `/ko-app/pb_data` preserves your configuration and history across upgrades.
 Copy the contents of the `pb_data` directory when migrating.
 
+Initial Setup Note: 
+When starting the application for the first time, look at the startup logfiles. 
+You will find an automatically generated "create user" link printed there. 
+Use this link in your browser to set up your initial admin username and password.
+
 ## Kubernetes
 
 A Helm chart is available, provided by the community.

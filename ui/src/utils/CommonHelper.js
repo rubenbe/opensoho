@@ -78,6 +78,7 @@ export default class CommonHelper {
         const replacements = {
             "ssh_keys": "SSH keys",
             "mac_address": "MAC address",
+            "dhcp_reservations": "DHCP reservations",
             "dhcp_leases": "DHCP leases",
             "ip_address": "IP address",
             "wifi_client_psk": "Wifi client PSK",
@@ -1286,6 +1287,8 @@ export default class CommonHelper {
                 return "ri-exchange-box-line"
             case "clients":
                 return "ri-device-line"
+	    case "dhcp_reservations":
+            return "ri-door-lock-box-line"
 	    case "vlan":
 		return "ri-stack-line"
 	    case "wifi_ssids":

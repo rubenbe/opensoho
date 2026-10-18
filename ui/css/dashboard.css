@@ -1,5 +1,8 @@
 /* everything is scoped to the dashboard page to not affect the upstream UI */
 .page-dashboard {
+    /* fits the per band pies with 4 legend rows */
+    --chartHeight: 300px;
+
     .dashboard-grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -29,7 +32,7 @@
         }
         /* same chart height for all regular cards; taller content scrolls */
         &:not(.wide) .card-body {
-            height: 260px;
+            height: var(--chartHeight);
             overflow-y: auto;
         }
     }
@@ -47,7 +50,7 @@
     .chart-wrapper {
         position: relative;
         width: 100%;
-        height: 260px;
+        height: var(--chartHeight);
     }
     .chart-wrapper.loading .chart-canvas,
     .band-charts.loading .chart-canvas {
@@ -58,7 +61,7 @@
     .band-charts {
         position: relative;
         width: 100%;
-        min-height: 260px;
+        min-height: var(--chartHeight);
     }
     .band-charts-columns {
         display: flex;

@@ -1634,7 +1634,11 @@ func generateWifiConfig(wifirecord WifiRecord, wifiid int, radio uint, app core.
 		fmt.Println("Steering error:", err)
 	}
 
-	clientpskconfig := generateHostApdPskForWifi(app, wifi, ifaceName)
+	// Client specific PSKs are WPA2 only, and 6GHz radios are forced to SAE.
+	clientpskconfig := ""
+	if radioProxy == nil || !radioProxy.IsBand6GHz() {
+		clientpskconfig = generateHostApdPskForWifi(app, wifi, ifaceName)
+	}
 	vta_flag, vta_tz := getTimeAdvertisementValues(wifi.GetString("ieee80211v_time_advertisement"))
 
 	rDeadLine := max(1000, wifi.GetInt("ieee80211r_reassoc_deadline"))
@@ -4505,7 +4509,7 @@ func generateHostApdPsk(app core.App, client_psks []*core.Record, wifiname strin
 		password := client_psk.GetString("password")
 		for num, client := range clients {
 			output += fmt.Sprintf(`
-config wifi-station 'psk_%[5]s_%[6]d'
+config wifi-station 'psk_%[5]s_%[3]s_%[6]d'
         option iface '%[3]s'
         option key '%[1]s'
         option mac '%[2]s'

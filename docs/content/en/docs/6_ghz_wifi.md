@@ -26,6 +26,8 @@ When an SSID lands on an enabled 6GHz radio, OpenSOHO automatically enables the 
   OpenSOHO will autoupgrade your encryption settings to comply with these 6GHz wifi regulations.
   e.g. when you choose `psk2+ccmp` as encryption on your SSID, OpenSOHO will auto upgrade this to `sae` on a 6GHz radio.
   This allows to have a backwards compatible encryption (important for older clients) on the classic 2.4 and 5 GHz frequencies.
+
+  Client specific PSKs (and the VLAN they assign) are WPA2 only, so they are not applied on 6GHz radios.
   
   The resulting configuration looks like this:
   ```

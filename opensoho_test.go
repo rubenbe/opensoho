@@ -7387,7 +7387,7 @@ config wifi-iface 'wifi_3_radio4'
         option macfilter 'deny'
         list maclist '11:22:33:44:55:66'
 
-config wifi-station 'psk_somethingapsk03_0'
+config wifi-station 'psk_somethingapsk03_wifi_3_radio4_0'
         option iface 'wifi_3_radio4'
         option key 'aaaabbbb'
         option mac '00:00:00:00:00:00'
@@ -7422,7 +7422,7 @@ config wifi-iface 'wifi_3_radio4'
         option macfilter 'deny'
         list maclist '11:22:33:44:55:66'
 
-config wifi-station 'psk_somethingapsk03_0'
+config wifi-station 'psk_somethingapsk03_wifi_3_radio4_0'
         option iface 'wifi_3_radio4'
         option key 'aaaabbbb'
         option mac '00:00:00:00:00:00'
@@ -7457,7 +7457,7 @@ config wifi-iface 'wifi_3_radio4'
         option macfilter 'deny'
         list maclist '11:22:33:44:55:66'
 
-config wifi-station 'psk_somethingapsk03_0'
+config wifi-station 'psk_somethingapsk03_wifi_3_radio4_0'
         option iface 'wifi_3_radio4'
         option key 'aaaabbbb'
         option mac '00:00:00:00:00:00'
@@ -7499,7 +7499,7 @@ config wifi-iface 'wifi_3_radio4'
         option macfilter 'deny'
         list maclist '11:22:33:44:55:66'
 
-config wifi-station 'psk_somethingapsk03_0'
+config wifi-station 'psk_somethingapsk03_wifi_3_radio4_0'
         option iface 'wifi_3_radio4'
         option key 'psk{'\''pass'
         option mac '00:00:00:00:00:00'
@@ -7574,6 +7574,64 @@ func TestGenerateWifiConfigEncryptionOn6GHz(t *testing.T) {
 			assert.Contains(t, wificonfig, fmt.Sprintf("option encryption '%s'\n", s.expected))
 		})
 	}
+}
+
+// Client specific PSKs are WPA2 only, so they must not be emitted on a 6GHz
+// radio, while the other radios of the same wifi still get them.
+func TestGenerateWifiConfigClientPskSkipped6GHz(t *testing.T) {
+	app, err := tests.NewTestApp()
+	assert.Nil(t, err)
+	defer app.Cleanup()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	clientcollection := setupClientsCollection(t, app)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	setupClientSteeringCollection(t, app, clientcollection, devicecollection, wificollection)
+	radiocollection := setupRadioCollection(t, app, devicecollection)
+	clientpskcollection := setupClientPskCollection(t, app, clientcollection, vlancollection, wificollection)
+
+	d := core.NewRecord(devicecollection)
+	d.Set("name", "the_device")
+	d.Set("health_status", "healthy")
+	assert.Nil(t, app.Save(d))
+
+	w := core.NewRecord(wificollection)
+	w.Set("ssid", "the_ssid")
+	w.Set("key", "the_key")
+	w.Set("encryption", "psk2+ccmp")
+	w.Set("enabled", true)
+	w.Set("ieee80211r", true)
+	assert.Nil(t, app.Save(w))
+	wr := WifiRecord{Record: w}
+
+	psk := core.NewRecord(clientpskcollection)
+	psk.Id = "somethingapsk01"
+	psk.Set("password", "aaaabbbb")
+	psk.Set("wifi", w.Id)
+	assert.Nil(t, app.Save(psk))
+
+	radio24 := core.NewRecord(radiocollection)
+	radio24.Set("device", d.Id)
+	radio24.Set("radio", 0)
+	radio24.Set("frequency", 2412)
+	radio24.Set("tx_power_mode", "auto")
+	assert.Nil(t, app.Save(radio24))
+
+	radio6 := core.NewRecord(radiocollection)
+	radio6.Set("device", d.Id)
+	radio6.Set("radio", 2)
+	radio6.Set("frequency", 6115)
+	radio6.Set("tx_power_mode", "auto")
+	assert.Nil(t, app.Save(radio6))
+
+	wificonfig, has_psk := generateWifiConfig(wr, 1, 0, app, d, records.NewRadio(radio24), true)
+	assert.True(t, has_psk)
+	assert.Contains(t, wificonfig, "config wifi-station 'psk_somethingapsk01_wifi_1_radio0_0'\n")
+
+	wificonfig, has_psk = generateWifiConfig(wr, 1, 2, app, d, records.NewRadio(radio6), true)
+	assert.False(t, has_psk)
+	assert.NotContains(t, wificonfig, "wifi-station")
 }
 
 // TestGenerateWifiConfig80211vOptions verifies that wnm_sleep_mode,
@@ -8440,7 +8498,7 @@ func TestGenerateHostApdPsk(t *testing.T) {
 	assert.Nil(t, err)
 
 	assert.Equal(t, `
-config wifi-station 'psk_somethingapsk01_0'
+config wifi-station 'psk_somethingapsk01_something_0'
         option iface 'something'
         option key 'aaaabbbb'
         option mac '00:00:00:00:00:00'
@@ -8474,17 +8532,17 @@ config wifi-station 'psk_somethingapsk01_0'
 	err = app.Save(psk2)
 	assert.Nil(t, err)
 	wifi_psk_config1 := `
-config wifi-station 'psk_somethingapsk01_0'
+config wifi-station 'psk_somethingapsk01_wifi_1_0'
         option iface 'wifi_1'
         option key 'aaaabbbb'
         option mac '00:00:00:00:00:00'
 
-config wifi-station 'psk_somethingapsk02_0'
+config wifi-station 'psk_somethingapsk02_wifi_1_0'
         option iface 'wifi_1'
         option key 'aaaacccc'
         option mac '11:aa:bb:cc:dd:ee'
 
-config wifi-station 'psk_somethingapsk02_1'
+config wifi-station 'psk_somethingapsk02_wifi_1_1'
         option iface 'wifi_1'
         option key 'aaaacccc'
         option mac '22:aa:bb:cc:dd:ee'
@@ -8506,7 +8564,7 @@ config wifi-station 'psk_somethingapsk02_1'
 
 	assert.Equal(t, wifi_psk_config1, generateHostApdPskForWifi(app, w1, "wifi_1"))
 	assert.Equal(t, `
-config wifi-station 'psk_somethingapsk03_0'
+config wifi-station 'psk_somethingapsk03_wifi_2_0'
         option iface 'wifi_2'
         option key 'dddddddd'
         option mac '00:00:00:00:00:00'
@@ -8534,12 +8592,19 @@ config wifi-station 'psk_somethingapsk03_0'
 	err = app.Save(psk3)
 	assert.Nil(t, err)
 	assert.Equal(t, `
-config wifi-station 'psk_somethingapsk03_0'
+config wifi-station 'psk_somethingapsk03_wifi_2_0'
         option iface 'wifi_2'
         option key 'dddddddd'
         option mac '00:00:00:00:00:00'
         option vid '300'
 `, generateHostApdPskForWifi(app, w2, "wifi_2"))
+
+	// The same wifi on multiple radios must yield distinct UCI sections,
+	// otherwise UCI merges them and only the last radio keeps the PSK.
+	radio0 := generateHostApdPskForWifi(app, w2, "wifi_2_radio0")
+	radio1 := generateHostApdPskForWifi(app, w2, "wifi_2_radio1")
+	assert.Contains(t, radio0, "config wifi-station 'psk_somethingapsk03_wifi_2_radio0_0'\n")
+	assert.Contains(t, radio1, "config wifi-station 'psk_somethingapsk03_wifi_2_radio1_0'\n")
 }
 
 func setupWifiApsCollection(t *testing.T, app core.App, devicecollection *core.Collection, wificollection *core.Collection) *core.Collection {

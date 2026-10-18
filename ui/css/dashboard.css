@@ -1,0 +1,476 @@
+/* everything is scoped to the dashboard page to not affect the upstream UI */
+.page-dashboard {
+    .dashboard-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: var(--smSpacing);
+    }
+    .dashboard-card {
+        min-width: 0;
+        padding: var(--smSpacing);
+        border: 1px solid var(--surfaceAlt2Color);
+        border-radius: var(--lgBorderRadius);
+        background: var(--surfaceColor);
+        &.wide {
+            grid-column: 1 / -1;
+        }
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            min-height: var(--smBtnHeight);
+            margin: 0 0 10px;
+        }
+        .card-title {
+            margin: 0;
+            font-size: var(--lgFontSize);
+            font-weight: 600;
+        }
+        /* same chart height for all regular cards; taller content scrolls */
+        &:not(.wide) .card-body {
+            height: 260px;
+            overflow-y: auto;
+        }
+    }
+
+    .chart-loader {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 2;
+    }
+    .chart-canvas {
+        cursor: pointer;
+    }
+    .chart-wrapper {
+        position: relative;
+        width: 100%;
+        height: 260px;
+    }
+    .chart-wrapper.loading .chart-canvas,
+    .band-charts.loading .chart-canvas {
+        opacity: 0.5;
+        pointer-events: none;
+    }
+
+    .band-charts {
+        position: relative;
+        width: 100%;
+        min-height: 260px;
+    }
+    .band-charts-columns {
+        display: flex;
+        align-items: flex-start;
+        gap: var(--smSpacing);
+    }
+    .band-chart {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+    }
+    .band-label {
+        text-align: center;
+        font-size: var(--smFontSize);
+        font-weight: 600;
+        color: var(--surfaceTxtHintColor);
+        margin-bottom: 4px;
+    }
+    /* fixed height so every pie renders at the same size and lines up */
+    .chart-canvas-wrap {
+        position: relative;
+        width: 100%;
+        height: 140px;
+    }
+    .chart-legend {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 4px 12px;
+        margin-top: 8px;
+        font-size: var(--smFontSize);
+        color: var(--surfaceTxtHintColor);
+    }
+    .legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+    }
+    .legend-swatch {
+        width: 10px;
+        height: 10px;
+        border-radius: 2px;
+        flex-shrink: 0;
+    }
+
+    /* client signal quality scale */
+    .scale-bars-wrapper {
+        position: relative;
+        &.loading {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+    }
+    .scale-bars {
+        position: relative;
+        width: 100%;
+        min-height: 100px;
+    }
+    .scale-row {
+        margin-bottom: 22px;
+        &:last-child {
+            margin-bottom: 0;
+        }
+        .band-label {
+            text-align: left;
+            margin-bottom: 6px;
+        }
+        /* label beside the scale (not above it) so three bands fit the card */
+        &.labeled {
+            display: flex;
+            align-items: flex-end;
+            gap: 4px;
+            margin-bottom: 12px;
+            .band-label {
+                flex: 0 0 auto;
+                width: 52px;
+                white-space: nowrap;
+                margin: 0 0 22px;
+                text-align: right;
+            }
+        }
+    }
+    .scale-main {
+        flex: 1;
+        min-width: 0;
+    }
+    /* 24px badge + 18px stem sit above an 8px track */
+    .scale-plot {
+        position: relative;
+        height: 50px;
+        margin: 0 12px;
+    }
+    .scale-track {
+        position: absolute;
+        top: 42px;
+        left: 0;
+        right: 0;
+        height: 8px;
+        border-radius: 4px;
+    }
+    .scale-badge {
+        position: absolute;
+        top: 0;
+        transform: translateX(-50%);
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        border: 2px solid var(--surfaceColor);
+        color: #fff;
+        font-size: 11px;
+        font-weight: 600;
+        line-height: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        padding: 0;
+        &::after {
+            content: "";
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            width: 2px;
+            height: 18px;
+            background: var(--surfaceTxtHintColor);
+            opacity: 0.5;
+            transform: translateX(-50%);
+        }
+    }
+    .scale-axis {
+        position: relative;
+        height: 16px;
+        margin: 6px 12px 0;
+        .tick {
+            position: absolute;
+            transform: translateX(-50%);
+            font-size: 11px;
+            color: var(--surfaceTxtHintColor);
+        }
+    }
+
+    /* device selectors of the overview cards */
+    .inline-select {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: var(--smFontSize);
+        color: var(--surfaceTxtHintColor);
+        select {
+            width: auto;
+            font-size: var(--smFontSize);
+            padding: 4px 8px;
+            border-radius: var(--borderRadius);
+            border: 1px solid var(--surfaceAlt3Color);
+            background: var(--surfaceColor);
+            color: var(--surfaceTxtColor);
+        }
+    }
+
+    .device-link {
+        padding: 0;
+        border: 0;
+        background: none;
+        font: inherit;
+        color: var(--infoColor);
+        cursor: pointer;
+        text-decoration: none;
+        &:hover {
+            text-decoration: underline;
+        }
+    }
+
+    /* frequency overview */
+    .freq-overview {
+        --cell: 26px;
+        --cell-gap: 3px;
+        position: relative;
+        width: 100%;
+        min-height: 120px;
+        &.loading .freq-bands {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+    }
+    .freq-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-bottom: var(--smSpacing);
+    }
+    .freq-legend {
+        display: inline-flex;
+        gap: var(--smSpacing);
+        font-size: var(--smFontSize);
+        color: var(--surfaceTxtHintColor);
+        .legend-item {
+            gap: 6px;
+        }
+    }
+    .swatch {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border-radius: 2px;
+    }
+    .band-block {
+        margin-bottom: var(--smSpacing);
+        .band-label {
+            text-align: left;
+            margin-bottom: 6px;
+        }
+    }
+    .band-scroll {
+        overflow-x: auto;
+        padding-bottom: 4px;
+    }
+    .band-grid {
+        display: flex;
+        flex-direction: column;
+        gap: var(--cell-gap);
+        width: max-content;
+    }
+    .tier {
+        display: flex;
+        align-items: center;
+        gap: var(--cell-gap);
+    }
+    .tier-label {
+        position: sticky;
+        left: 0;
+        z-index: 1;
+        flex: 0 0 auto;
+        width: 34px;
+        text-align: right;
+        padding-right: 6px;
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--surfaceTxtHintColor);
+        background: var(--surfaceColor);
+    }
+    .tier-cells {
+        display: grid;
+        grid-template-columns: repeat(var(--cols), var(--cell));
+        gap: var(--cell-gap);
+    }
+    .block {
+        height: var(--cell);
+        border-radius: 2px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        box-sizing: border-box;
+    }
+    .block-label {
+        font-size: 10px;
+        line-height: 1;
+        white-space: nowrap;
+        color: var(--surfaceTxtHintColor);
+    }
+    .block.used .block-label {
+        color: #fff;
+    }
+    .block.invalid .block-label {
+        color: var(--surfaceTxtDisabledColor);
+    }
+    .block.used,
+    .swatch.used {
+        background: var(--successColor);
+    }
+    .block.available,
+    .swatch.available {
+        background: var(--surfaceColor);
+        border: 1px solid var(--successColor);
+    }
+    .block.invalid,
+    .swatch.invalid {
+        background: var(--surfaceAlt1Color);
+        border: 1px solid var(--surfaceAlt3Color);
+    }
+    .freq-empty,
+    .net-empty {
+        font-size: var(--smFontSize);
+        color: var(--surfaceTxtHintColor);
+        padding: var(--smSpacing) 0;
+    }
+    .freq-tip {
+        position: fixed;
+        z-index: 1000;
+        min-width: 200px;
+        max-width: 320px;
+        padding: 10px 12px;
+        background: var(--surfaceColor);
+        border: 1px solid var(--surfaceAlt3Color);
+        border-radius: var(--borderRadius);
+        box-shadow: var(--boxShadow);
+        font-size: 13px;
+        color: var(--surfaceTxtColor);
+    }
+    .tip-heading {
+        font-weight: 600;
+        margin-bottom: 6px;
+    }
+    .tip-row {
+        display: flex;
+        gap: 8px;
+        margin-top: 4px;
+        line-height: 1.4;
+    }
+    .tip-label {
+        flex: 0 0 84px;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        color: var(--surfaceTxtHintColor);
+        padding-top: 1px;
+    }
+    .tip-state.used {
+        color: var(--successColor);
+    }
+    .tip-state.invalid {
+        color: var(--surfaceTxtDisabledColor);
+    }
+    .tip-devices {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 10px;
+    }
+
+    /* network overview */
+    .net-overview {
+        position: relative;
+        width: 100%;
+        min-height: 120px;
+        &.loading .net-scroll {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+    }
+    .net-toolbar {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-bottom: var(--smSpacing);
+    }
+    .net-status {
+        display: inline-flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    .net-scroll {
+        overflow-x: auto;
+    }
+    .net-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: var(--smFontSize);
+        th {
+            text-align: left;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            color: var(--surfaceTxtHintColor);
+            padding: 4px 8px;
+            border-bottom: 1px solid var(--surfaceAlt3Color);
+        }
+        td {
+            padding: 6px 8px;
+            border-bottom: 1px solid var(--surfaceAlt2Color);
+            vertical-align: top;
+        }
+    }
+    .net-port {
+        font-family: var(--monospaceFontFamily);
+        white-space: nowrap;
+    }
+    .net-muted {
+        color: var(--surfaceTxtHintColor);
+    }
+    .net-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        margin-right: 6px;
+        vertical-align: middle;
+        background: var(--surfaceTxtHintColor);
+    }
+    .net-dot--up {
+        background: var(--successColor);
+    }
+    .net-poe-idle {
+        filter: grayscale(1);
+        opacity: 0.4;
+        cursor: help;
+    }
+    .net-warning {
+        font-size: var(--smFontSize);
+        color: var(--surfaceTxtHintColor);
+        text-decoration: none;
+    }
+    a.net-warning:hover {
+        text-decoration: underline;
+    }
+    .net-neighbour + .net-neighbour {
+        margin-top: 2px;
+    }
+}

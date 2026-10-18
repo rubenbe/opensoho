@@ -1,5 +1,3 @@
-import PrngHelper from "./prng.js";
-
 /**
  * Defines the sidebar grouping and display order for collections.
  *
@@ -7,7 +5,7 @@ import PrngHelper from "./prng.js";
  * - Collections within each group appear in the order listed.
  * - Collections not listed here are appended at the bottom, ungrouped.
  */
-export const collectionGroups = [
+app.opensoho.collectionGroups = [
     {
         name: "Devices",
         items: ["devices"],
@@ -56,10 +54,10 @@ const nameReplacementsPattern = new RegExp("^" + Object.keys(nameReplacements).j
  * @param  {string} value
  * @return {string}
  */
-export function cleanupName(value) {
+app.opensoho.cleanupName = function(value) {
     const cleaned = value.replace(nameReplacementsPattern, (matched) => nameReplacements[matched.toLowerCase()]);
     return cleaned.replace(/_/g, " ");
-}
+};
 
 /**
  * Converts bytes into a readable string.
@@ -67,12 +65,12 @@ export function cleanupName(value) {
  * @param  {number} size
  * @return {string}
  */
-export function formatBytes(size) {
+app.opensoho.formatBytes = function(size) {
     if (size === 0) return "0 B";
     const units = ["B", "KB", "MB", "GB", "TB", "PB"];
     const i = Math.floor(Math.log(size) / Math.log(1024));
     return (size / Math.pow(1024, i)).toFixed(2) + " " + units[i];
-}
+};
 
 /**
  * Returns true when the user is not allowed to make new records.
@@ -80,7 +78,7 @@ export function formatBytes(size) {
  * @param  {string} name
  * @return {boolean}
  */
-export function isCollectionReadOnly(name) {
+app.opensoho.isCollectionReadOnly = function(name) {
     switch (name?.toLowerCase()) {
         case "devices":
         case "dhcp_leases":
@@ -94,7 +92,7 @@ export function isCollectionReadOnly(name) {
         default:
             return false;
     }
-}
+};
 
 /**
  * Returns true when the user is not allowed to edit the field.
@@ -103,7 +101,7 @@ export function isCollectionReadOnly(name) {
  * @param  {string} fieldName
  * @return {boolean}
  */
-export function isCollectionFieldReadOnly(collectionName, fieldName) {
+app.opensoho.isCollectionFieldReadOnly = function(collectionName, fieldName) {
     switch (collectionName?.toLowerCase()) {
         // full read-only
         case "bridges":
@@ -159,7 +157,7 @@ export function isCollectionFieldReadOnly(collectionName, fieldName) {
         default:
             return false;
     }
-}
+};
 
 /**
  * Returns a stable color for a network (or VLAN) name.
@@ -167,7 +165,7 @@ export function isCollectionFieldReadOnly(collectionName, fieldName) {
  * @param  {string} forName
  * @return {string}
  */
-export function getNetworkColor(forName) {
+app.opensoho.getNetworkColor = function(forName) {
     if (forName == null) {
         return "#eeeeee";
     } else if (forName == "lan") {
@@ -176,9 +174,9 @@ export function getNetworkColor(forName) {
         return "#f09090";
     }
 
-    const prng = new PrngHelper();
+    const prng = new app.opensoho.PrngHelper();
     return prng.derive_color(forName);
-}
+};
 
 /**
  * Returns the sidebar icon of a collection.
@@ -186,7 +184,7 @@ export function getNetworkColor(forName) {
  * @param  {string} name
  * @return {string} Empty string when there is no OpenSOHO specific icon.
  */
-export function getCollectionIcon(name) {
+app.opensoho.getCollectionIcon = function(name) {
     switch (name?.toLowerCase()) {
         case "port_tagging":
             return "ri-price-tag-line";
@@ -235,4 +233,4 @@ export function getCollectionIcon(name) {
         default:
             return "";
     }
-}
+};

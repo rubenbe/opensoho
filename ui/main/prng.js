@@ -9,9 +9,7 @@
 */
 
 
-'use strict';
-
-var s = [0x0000, 0x0000, 0x0000, 0x0000];
+let s = [0x0000, 0x0000, 0x0000, 0x0000];
 
 function mul(a, b) {
 	var r = [0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000];
@@ -157,7 +155,7 @@ function toHex(n) {
   return n.toString(16).padStart(2, "0");
 }
 
-export default class PrngHelper {
+app.opensoho.PrngHelper = class PrngHelper {
 	seed(n) {
 		n = (n - 1)|0;
 		s[0] = n & 0xffff;
@@ -213,4 +211,4 @@ export default class PrngHelper {
 		//return '#%02x%02x%02x'.format(0xff - r, 0xff - g, 0xff - b);
 		return `#${toHex(0xff - r)}${toHex(0xff - g)}${toHex(0xff - b)}`;
 	}
-}
+};

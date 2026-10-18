@@ -13,8 +13,8 @@ import (
 	"time"
 
 	paho "github.com/eclipse/paho.mqtt.golang"
+	"github.com/pocketbase/pocketbase/core"
 	"github.com/rubenbe/opensoho/poe"
-	"github.com/rubenbe/pocketbase/core"
 )
 
 const (

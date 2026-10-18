@@ -30,13 +30,23 @@ import (
 	"time"
 
 	"github.com/endobit/oui"
+	"github.com/fatih/color"
 	"github.com/go-ozzo/ozzo-validation/v4"
 	"github.com/google/uuid"
 	"github.com/pocketbase/dbx"
-	"github.com/rubenbe/pocketbase"
-	"github.com/rubenbe/pocketbase/apis"
-	"github.com/rubenbe/pocketbase/core"
-	//"github.com/rubenbe/pocketbase/plugins/ghupdate"
+	"github.com/pocketbase/pocketbase"
+	"github.com/pocketbase/pocketbase/apis"
+	"github.com/pocketbase/pocketbase/core"
+	//"github.com/pocketbase/pocketbase/plugins/ghupdate"
+	"github.com/pocketbase/pocketbase/plugins/jsvm"
+	"github.com/pocketbase/pocketbase/plugins/migratecmd"
+	"github.com/pocketbase/pocketbase/tools/filesystem"
+	"github.com/pocketbase/pocketbase/tools/hook"
+	"github.com/pocketbase/pocketbase/tools/osutils"
+	"github.com/pocketbase/pocketbase/tools/router"
+	"github.com/pocketbase/pocketbase/tools/security"
+	"github.com/pocketbase/pocketbase/tools/types"
+	pbui "github.com/pocketbase/pocketbase/ui"
 	"github.com/reugn/wifiqr"
 	"github.com/rubenbe/opensoho/frequencyplan"
 	"github.com/rubenbe/opensoho/htmodes"
@@ -45,13 +55,6 @@ import (
 	"github.com/rubenbe/opensoho/poe"
 	"github.com/rubenbe/opensoho/records"
 	"github.com/rubenbe/opensoho/ui"
-	"github.com/rubenbe/pocketbase/plugins/jsvm"
-	"github.com/rubenbe/pocketbase/plugins/migratecmd"
-	"github.com/rubenbe/pocketbase/tools/filesystem"
-	"github.com/rubenbe/pocketbase/tools/hook"
-	"github.com/rubenbe/pocketbase/tools/router"
-	"github.com/rubenbe/pocketbase/tools/security"
-	"github.com/rubenbe/pocketbase/tools/types"
 )
 
 // Files that need to be extracted at startup
@@ -3415,6 +3418,29 @@ func GetDataDirPath() (string, error) {
 	return cwdPath, nil
 }
 
+// installerFunc replaces apis.DefaultInstallerFunc, which only prints the
+// installer link when the upstream superuser UI is embedded.
+func installerFunc(app core.App, systemSuperuser *core.Record, baseURL string) error {
+	token, err := systemSuperuser.NewStaticAuthToken(30 * time.Minute)
+	if err != nil {
+		return err
+	}
+
+	executable := os.Args[0]
+	if osutils.IsProbablyGoRun() {
+		executable = "go run ."
+	}
+
+	// launch url (ignore errors and always print a help text as fallback)
+	url := fmt.Sprintf("%s/_/#/pbinstal/%s", strings.TrimRight(baseURL, "/"), token)
+	_ = osutils.LaunchURL(url)
+	color.Magenta("\n(!) Launch the URL below in the browser if it hasn't been open already to create your first superuser account:")
+	color.New(color.Bold).Add(color.FgCyan).Println(url)
+	color.New(color.FgHiBlack, color.Italic).Printf("(you can also create your first superuser by running: %s superuser upsert EMAIL PASS)\n\n", executable)
+
+	return nil
+}
+
 func main() {
 	shared_secret := os.Getenv("OPENSOHO_SHARED_SECRET")
 	if shared_secret == "" {
@@ -3463,11 +3489,22 @@ func main() {
 		"Enable newly discovered devices, set to false for \"monitoring mode\"",
 	)
 
+	var developerMode bool
+	app.RootCmd.PersistentFlags().BoolVar(
+		&developerMode,
+		"developerMode",
+		false,
+		"Turns off admin protections, only for development",
+	)
+
 	app.RootCmd.ParseFlags(os.Args[1:])
+
+	// Disable the upstream superuser UI route, the OpenSOHO UI is served at /_/ instead
+	pbui.DistDirFS = nil
 
 	app.OnSettingsListRequest().BindFunc(func(e *core.SettingsListRequestEvent) error {
 		e.Settings.Meta.AppName = "OpenSOHO"
-		e.Settings.Meta.HideControls = !app.IsDeveloperMode()
+		e.Settings.Meta.HideControls = !developerMode
 
 		return e.Next()
 	})
@@ -3502,6 +3539,13 @@ func main() {
 
 	// static route to serves files from the provided public dir
 	// (if publicDir exists and the route path is not already defined)
+	app.OnServe().BindFunc(func(e *core.ServeEvent) error {
+		if e.InstallerFunc != nil {
+			e.InstallerFunc = installerFunc
+		}
+
+		return e.Next()
+	})
 	app.OnServe().Bind(&hook.Handler[*core.ServeEvent]{
 		Func: func(e *core.ServeEvent) error {
 			if !e.Router.HasRoute(http.MethodGet, "/{path...}") {

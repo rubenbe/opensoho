@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/pocketbase/dbx"
-	"github.com/rubenbe/pocketbase/core"
-	"github.com/rubenbe/pocketbase/tests"
+	"github.com/pocketbase/pocketbase/core"
+	"github.com/pocketbase/pocketbase/tests"
 	"github.com/stretchr/testify/assert"
 )
 

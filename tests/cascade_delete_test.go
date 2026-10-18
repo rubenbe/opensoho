@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	"github.com/pocketbase/dbx"
-	"github.com/rubenbe/pocketbase/core"
-	_ "github.com/rubenbe/pocketbase/migrations" // registers core.SystemMigrations
-	"github.com/rubenbe/pocketbase/plugins/jsvm"
+	"github.com/pocketbase/pocketbase/core"
+	_ "github.com/pocketbase/pocketbase/migrations" // registers core.SystemMigrations
+	"github.com/pocketbase/pocketbase/plugins/jsvm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

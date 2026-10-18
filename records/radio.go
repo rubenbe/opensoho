@@ -1,8 +1,8 @@
 package records
 
 import (
+	"github.com/pocketbase/pocketbase/core"
 	"github.com/rubenbe/opensoho/frequencyplan"
-	"github.com/rubenbe/pocketbase/core"
 )
 
 const CollectionNameRadios = "radios"

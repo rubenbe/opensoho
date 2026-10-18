@@ -1,7 +1,7 @@
 package records
 
 import (
-	"github.com/rubenbe/pocketbase/core"
+	"github.com/pocketbase/pocketbase/core"
 )
 
 const CollectionNameDevices = "devices"

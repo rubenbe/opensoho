@@ -3,7 +3,7 @@ package records
 import (
 	"testing"
 
-	"github.com/rubenbe/pocketbase/core"
+	"github.com/pocketbase/pocketbase/core"
 	"github.com/stretchr/testify/assert"
 )
 

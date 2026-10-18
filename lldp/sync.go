@@ -2,7 +2,7 @@ package lldp
 
 import (
 	"github.com/pocketbase/dbx"
-	"github.com/rubenbe/pocketbase/core"
+	"github.com/pocketbase/pocketbase/core"
 )
 
 func Sync(app core.App, device *core.Record, info Info) error {

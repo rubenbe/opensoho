@@ -46,3 +46,11 @@ th.sort-handle > .inline-flex > .txt {
 .page[data-opensoho-readonly] [data-pb="recordsList"] .sticky-content .btn:has(.ri-add-line) {
     display: none;
 }
+
+/* Read-only record fields (see main/upsert.js) */
+.opensoho-readonly-field .readonly-value {
+    width: 100%;
+    min-height: var(--btnHeight);
+    padding: 0 var(--inputPadding) var(--inputPadding);
+    overflow: auto;
+}

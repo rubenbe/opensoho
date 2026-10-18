@@ -11,3 +11,17 @@ th.sort-handle > .inline-flex > i {
 th.sort-handle > .inline-flex > .txt {
     text-transform: capitalize;
 }
+
+/* The sidebar collections are shown in the OpenSOHO groups instead (see main/sidebar.js) */
+.collections-list .nav-group-pinned-collections,
+.collections-list .nav-group-regular-collections {
+    display: none;
+}
+
+.opensoho-collection-groups .nav-item .txt {
+    text-transform: capitalize;
+}
+
+.app.hide-controls .nav-group-system-collections {
+    display: none;
+}

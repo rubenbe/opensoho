@@ -22,6 +22,7 @@ var mainScripts = []string{
 	"main/prng.js",
 	"main/helpers.js",
 	"main/dashboard.js",
+	"main/sidebar.js",
 }
 
 // ExtensionFS contains the files of the "opensoho" superuser UI extension.

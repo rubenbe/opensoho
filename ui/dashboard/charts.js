@@ -77,6 +77,7 @@ export function loader(state) {
 export function pieCanvas({ legend = true, onclick } = {}) {
     let chart;
     let slices = [];
+    let isDrawn = false;
 
     const canvas = t.canvas({
         className: "chart-canvas",
@@ -117,6 +118,7 @@ export function pieCanvas({ legend = true, onclick } = {}) {
         onunmount: () => {
             chart?.destroy();
             chart = null;
+            isDrawn = false;
         },
     });
 
@@ -126,7 +128,9 @@ export function pieCanvas({ legend = true, onclick } = {}) {
         chart.data.labels = slices.map((s) => s.label);
         chart.data.datasets[0].data = slices.map((s) => s.value);
         chart.data.datasets[0].backgroundColor = slices.map((s) => s.color);
-        chart.update();
+        // only animate the first draw, not the periodic refreshes
+        chart.update(isDrawn ? "none" : undefined);
+        isDrawn = slices.length > 0;
     };
 
     return canvas;
@@ -159,6 +163,8 @@ export function pieChart(state, canvas) {
 export function bandPieCharts(state, onselect) {
     const columns = t.div({ className: "band-charts-columns" });
     let canvases = {};
+    // not Object.keys(canvases), which lists integer-like keys (e.g. "5") first
+    let shownKeys = "";
 
     const el = t.div(
         { className: () => `band-charts ${state.isLoading ? "loading" : ""}` },
@@ -168,7 +174,8 @@ export function bandPieCharts(state, onselect) {
 
     el.update = (series) => {
         const keys = series.map((s) => s.key).join(",");
-        if (keys != Object.keys(canvases).join(",")) {
+        if (keys != shownKeys) {
+            shownKeys = keys;
             canvases = {};
             columns.replaceChildren(...series.map((s) => {
                 const canvas = pieCanvas({ legend: false, onclick: (slice) => onselect(s.key, slice) });

@@ -5,7 +5,6 @@ go 1.27.0
 require (
 	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/endobit/oui v0.7.0
-	github.com/fatih/color v1.19.0
 	github.com/go-ozzo/ozzo-validation/v4 v4.3.0
 	github.com/google/uuid v1.6.0
 	github.com/liyue201/goqr v0.0.0-20200803022322-df443203d4ea
@@ -27,6 +26,7 @@ require (
 	github.com/dop251/goja v0.0.0-20260901132549-43234fa61381 // indirect
 	github.com/dop251/goja_nodejs v0.0.0-20260212111938-1f56ff5bcf14 // indirect
 	github.com/dustin/go-humanize v1.1.0 // indirect
+	github.com/fatih/color v1.19.0 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.15 // indirect
 	github.com/ganigeorgiev/fexpr v0.6.0 // indirect

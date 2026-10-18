@@ -30,7 +30,6 @@ import (
 	"time"
 
 	"github.com/endobit/oui"
-	"github.com/fatih/color"
 	"github.com/go-ozzo/ozzo-validation/v4"
 	"github.com/google/uuid"
 	"github.com/pocketbase/dbx"
@@ -42,11 +41,9 @@ import (
 	"github.com/pocketbase/pocketbase/plugins/migratecmd"
 	"github.com/pocketbase/pocketbase/tools/filesystem"
 	"github.com/pocketbase/pocketbase/tools/hook"
-	"github.com/pocketbase/pocketbase/tools/osutils"
 	"github.com/pocketbase/pocketbase/tools/router"
 	"github.com/pocketbase/pocketbase/tools/security"
 	"github.com/pocketbase/pocketbase/tools/types"
-	pbui "github.com/pocketbase/pocketbase/ui"
 	"github.com/reugn/wifiqr"
 	"github.com/rubenbe/opensoho/frequencyplan"
 	"github.com/rubenbe/opensoho/htmodes"
@@ -61,11 +58,6 @@ import (
 //
 //go:embed pb_migrations/**
 var embeddedFiles embed.FS
-
-// Files that can be served directly from the binary
-//
-//go:embed favicon.png logo.svg
-var internalFiles embed.FS
 
 // The actual radio-dump logic, pushed to /usr/share/opensoho/dump-radios.uc.
 // Not deployed at the hotplug.d entry point itself - see
@@ -3418,29 +3410,6 @@ func GetDataDirPath() (string, error) {
 	return cwdPath, nil
 }
 
-// installerFunc replaces apis.DefaultInstallerFunc, which only prints the
-// installer link when the upstream superuser UI is embedded.
-func installerFunc(app core.App, systemSuperuser *core.Record, baseURL string) error {
-	token, err := systemSuperuser.NewStaticAuthToken(30 * time.Minute)
-	if err != nil {
-		return err
-	}
-
-	executable := os.Args[0]
-	if osutils.IsProbablyGoRun() {
-		executable = "go run ."
-	}
-
-	// launch url (ignore errors and always print a help text as fallback)
-	url := fmt.Sprintf("%s/_/#/pbinstal/%s", strings.TrimRight(baseURL, "/"), token)
-	_ = osutils.LaunchURL(url)
-	color.Magenta("\n(!) Launch the URL below in the browser if it hasn't been open already to create your first superuser account:")
-	color.New(color.Bold).Add(color.FgCyan).Println(url)
-	color.New(color.FgHiBlack, color.Italic).Printf("(you can also create your first superuser by running: %s superuser upsert EMAIL PASS)\n\n", executable)
-
-	return nil
-}
-
 func main() {
 	shared_secret := os.Getenv("OPENSOHO_SHARED_SECRET")
 	if shared_secret == "" {
@@ -3499,9 +3468,6 @@ func main() {
 
 	app.RootCmd.ParseFlags(os.Args[1:])
 
-	// Disable the upstream superuser UI route, the OpenSOHO UI is served at /_/ instead
-	pbui.DistDirFS = nil
-
 	app.OnSettingsListRequest().BindFunc(func(e *core.SettingsListRequestEvent) error {
 		e.Settings.Meta.AppName = "OpenSOHO"
 		e.Settings.Meta.HideControls = !developerMode
@@ -3539,13 +3505,6 @@ func main() {
 
 	// static route to serves files from the provided public dir
 	// (if publicDir exists and the route path is not already defined)
-	app.OnServe().BindFunc(func(e *core.ServeEvent) error {
-		if e.InstallerFunc != nil {
-			e.InstallerFunc = installerFunc
-		}
-
-		return e.Next()
-	})
 	app.OnServe().Bind(&hook.Handler[*core.ServeEvent]{
 		Func: func(e *core.ServeEvent) error {
 			if !e.Router.HasRoute(http.MethodGet, "/{path...}") {
@@ -3561,73 +3520,17 @@ func main() {
 	})
 	app.OnServe().Bind(&hook.Handler[*core.ServeEvent]{
 		Func: func(e *core.ServeEvent) error {
-			e.Router.GET("/_/{path...}", apis.Static(ui.DistDirFS, false)).
-				BindFunc(func(e *core.RequestEvent) error {
-					// ignore root path
-					if e.Request.PathValue(apis.StaticWildcardParam) != "" {
-						e.Response.Header().Set("Cache-Control", "max-age=1209600, stale-while-revalidate=86400")
-					}
+			// the OpenSOHO customizations of the upstream superuser UI
+			e.UIExtensions = append(e.UIExtensions, core.UIExtension{Name: "opensoho", FS: ui.ExtensionFS})
 
-					// add a default CSP
-					if e.Response.Header().Get("Content-Security-Policy") == "" {
-						e.Response.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' http://127.0.0.1:* https://tile.openstreetmap.org data: blob:; connect-src 'self' http://127.0.0.1:* https://nominatim.openstreetmap.org; script-src 'self' 'sha256-GRUzBA7PzKYug7pqxv5rJaec5bwDCw1Vo6/IXwvD3Tc='")
-					}
+			// the extension files have no hashed names, so don't let the
+			// browser keep them for weeks after an upgrade
+			e.Router.BindFunc(func(e *core.RequestEvent) error {
+				if strings.HasPrefix(e.Request.URL.Path, "/_/extensions") {
+					e.Response.Header().Set("Cache-Control", "no-cache")
+				}
 
-					return e.Next()
-				}).
-				Bind(apis.Gzip())
-			e.Router.GET("/_/images/favicon/apple-touch-icon.png", func(e *core.RequestEvent) error {
-
-				bytes, _ := internalFiles.ReadFile("favicon.png")
-				return e.Blob(200, "image/png", bytes)
-			})
-			e.Router.GET("/_/images/favicon/favicon.png", func(e *core.RequestEvent) error {
-
-				bytes, _ := internalFiles.ReadFile("favicon.png")
-				return e.Blob(200, "image/png", bytes)
-			})
-			e.Router.GET("/_/images/logo.svg", func(e *core.RequestEvent) error {
-
-				bytes, _ := internalFiles.ReadFile("logo.svg")
-				return e.Blob(200, "image/svg+xml", bytes)
-			})
-			e.Router.GET("/_/user.css", func(e *core.RequestEvent) error {
-				e.Response.Header().Set("Content-Type", "text/css; charset=utf-8")
-				return e.String(200, `
-td.col-field-health_status span.data--health_status--healthy,
-td.col-field-config_status span.data--config_status--applied {
-	background: var(--successAltColor);
-}
-td.col-field-health_status span.data--health_status--unhealthy,
-td.col-field-config_status span.data--config_status--error{
-
-	background: var(--dangerAltColor);
-}
-/* Hide the API Preview button */
-.page-content > .page-header > .btns-group > button:nth-child(1){
-	display: none;
-}
-/* Hide PocketBase references in bottom right footer */
-.page-footer > a:nth-child(2),
-.page-footer > span:nth-child(3),
-	display: none;
-}
-/* Hide column type icons */
-.col-header-content > i {
-	display: none;
-}
-header.page-header > nav.breadcrumbs > div.breadcrumb-item,
-div.sidebar-content > a.sidebar-list-item > span.txt,
-table.table > thead > tr > th > div.col-header-content > span.txt
-{
-  text-transform: capitalize;
-}
-				`)
-			})
-			e.Router.GET("/_/user.js", func(e *core.RequestEvent) error {
-				e.Response.Header().Set("Content-Type", "text/javascript; charset=utf-8")
-
-				return e.String(200, ``)
+				return e.Next()
 			})
 
 			e.Router.GET("/api/v1/devicestatus/{mac_address}", apiGenerateDeviceStatus).Bind(apis.RequireAuth())

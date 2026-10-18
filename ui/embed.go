@@ -1,4 +1,4 @@
-// Package ui handles the PocketBase Superuser frontend embedding.
+// Package ui contains the OpenSOHO extension of the PocketBase superuser UI.
 package ui
 
 import (
@@ -6,8 +6,8 @@ import (
 	"io/fs"
 )
 
-//go:embed all:dist
-var distDir embed.FS
+//go:embed main.js js css images
+var extensionDir embed.FS
 
-// DistDirFS contains the embedded dist directory files (without the "dist" prefix)
-var DistDirFS, _ = fs.Sub(distDir, "dist")
+// ExtensionFS contains the files of the "opensoho" superuser UI extension.
+var ExtensionFS fs.FS = extensionDir

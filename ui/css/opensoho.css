@@ -1,0 +1,13 @@
+/* Hide the API preview button */
+.page-header-primary-btns .api-preview-btn {
+    display: none;
+}
+
+/* Hide the column type icons */
+th.sort-handle > .inline-flex > i {
+    display: none;
+}
+
+th.sort-handle > .inline-flex > .txt {
+    text-transform: capitalize;
+}

@@ -9,6 +9,11 @@ th.sort-handle > .inline-flex > i {
 }
 
 th.sort-handle > .inline-flex > .txt {
+    white-space: nowrap;
+    text-transform: capitalize;
+}
+
+[data-pb="pageCollections"] .page-header .breadcrumbs {
     text-transform: capitalize;
 }
 
@@ -23,5 +28,21 @@ th.sort-handle > .inline-flex > .txt {
 }
 
 .app.hide-controls .nav-group-system-collections {
+    display: none;
+}
+
+/* Device health and config status colors (see main/records.js) */
+.label.data--health_status--healthy,
+.label.data--config_status--applied {
+    background: var(--surfaceSuccessColor);
+}
+.label.data--health_status--unhealthy,
+.label.data--config_status--error {
+    background: var(--surfaceDangerColor);
+}
+
+/* Read-only collections can't have new records */
+.page[data-opensoho-readonly] .new-record-btn,
+.page[data-opensoho-readonly] [data-pb="recordsList"] .sticky-content .btn:has(.ri-add-line) {
     display: none;
 }

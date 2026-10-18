@@ -23,6 +23,7 @@ var mainScripts = []string{
 	"main/helpers.js",
 	"main/dashboard.js",
 	"main/sidebar.js",
+	"main/records.js",
 }
 
 // ExtensionFS contains the files of the "opensoho" superuser UI extension.

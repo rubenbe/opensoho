@@ -29,7 +29,7 @@ overrideView("text", (props) => {
 
             return t.span(
                 {
-                    className: "label",
+                    className: "label vlan-label",
                     style: `background-color: ${app.opensoho.getNetworkColor(value)}; color: #1a1a24;`,
                 },
                 t.span({ className: "txt txt-ellipsis" }, value),

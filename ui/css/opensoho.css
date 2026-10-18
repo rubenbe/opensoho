@@ -41,6 +41,12 @@ th.sort-handle > .inline-flex > .txt {
     background: var(--surfaceDangerColor);
 }
 
+/* The VLAN name label is also shown inside the (colored) relation label,
+   don't give it the nested label border there (see main/records.js) */
+.label .label.vlan-label {
+    border-width: 0;
+}
+
 /* Read-only collections can't have new records */
 .page[data-opensoho-readonly] .new-record-btn,
 .page[data-opensoho-readonly] [data-pb="recordsList"] .sticky-content .btn:has(.ri-add-line) {

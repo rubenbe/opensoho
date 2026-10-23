@@ -8545,6 +8545,115 @@ func TestMacClientSteering(t *testing.T) {
 	}
 }
 
+func callApiDeviceResources(t *testing.T, app core.App, device string, query string) (*httptest.ResponseRecorder, error) {
+	event := core.RequestEvent{}
+	var err error
+	event.Request, err = http.NewRequest("GET", "/api/v1/device-resources/"+device+"?"+query, nil)
+	assert.Nil(t, err)
+	event.Request.SetPathValue("device", device)
+	event.App = app
+	rec := httptest.NewRecorder()
+	event.Response = rec
+	return rec, apiDeviceResources(&event)
+}
+
+func TestApiDeviceResources(t *testing.T) {
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	resourcescollection := setupDeviceResourcesCollection(t, app, devicecollection)
+
+	newDevice := func(name string) *core.Record {
+		d := core.NewRecord(devicecollection)
+		d.Set("name", name)
+		d.Set("health_status", "healthy")
+		assert.Nil(t, app.Save(d))
+		return d
+	}
+	d := newDevice("ap1")
+	other := newDevice("ap2")
+
+	start := time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)
+	addSample := func(device *core.Record, offset time.Duration, load1 float64, memAvailable int) {
+		r := core.NewRecord(resourcescollection)
+		r.Set("device", device.Id)
+		r.Set("time", start.Add(offset))
+		r.Set("load1", load1)
+		r.Set("load5", load1/2)
+		r.Set("load15", load1/4)
+		r.Set("cpus", 2)
+		r.Set("mem_total", 1000)
+		r.Set("mem_available", memAvailable)
+		r.Set("swap_total", 100)
+		r.Set("swap_free", 40)
+		assert.Nil(t, app.Save(r))
+	}
+	// Two samples in the first minute, one in the second
+	addSample(d, 0, 1.0, 600)
+	addSample(d, 30*time.Second, 3.0, 400)
+	addSample(d, 60*time.Second, 0.5, 900)
+	// Outside the requested range, and another device
+	addSample(d, -time.Hour, 9.0, 0)
+	addSample(other, 0, 9.0, 0)
+
+	type response struct {
+		Device string                 `json:"device"`
+		From   int64                  `json:"from"`
+		To     int64                  `json:"to"`
+		Bucket int64                  `json:"bucket"`
+		Points []ResourceHistoryPoint `json:"points"`
+	}
+	query := fmt.Sprintf("from=%d&to=%d", start.Unix(), start.Add(2*time.Minute).Unix())
+
+	{
+		_, err := callApiDeviceResources(t, app, "doesnotexist123", query)
+		var apiresponse *router.ApiError
+		assert.True(t, errors.As(err, &apiresponse))
+		assert.Equal(t, 404, apiresponse.Status)
+	}
+
+	// 2 minutes over 300 points rounds up to the 30 second minimum
+	{
+		rec, err := callApiDeviceResources(t, app, d.Id, query)
+		assert.Nil(t, err)
+		var r response
+		assert.Nil(t, json.Unmarshal(rec.Body.Bytes(), &r))
+		assert.Equal(t, d.Id, r.Device)
+		assert.Equal(t, int64(30), r.Bucket)
+		assert.Equal(t, 3, len(r.Points))
+	}
+
+	{
+		rec, err := callApiDeviceResources(t, app, d.Id, query+"&bucket=60")
+		assert.Nil(t, err)
+		var r response
+		assert.Nil(t, json.Unmarshal(rec.Body.Bytes(), &r))
+		assert.Equal(t, int64(60), r.Bucket)
+		assert.Equal(t, []ResourceHistoryPoint{
+			{Time: start.Unix(), Load1: 2.0, Load5: 1.0, Load15: 0.5, Load1Max: 3.0, Cpus: 2, MemTotal: 1000, MemUsed: 500, SwapUsed: 60},
+			{Time: start.Unix() + 60, Load1: 0.5, Load5: 0.25, Load15: 0.125, Load1Max: 0.5, Cpus: 2, MemTotal: 1000, MemUsed: 100, SwapUsed: 60},
+		}, r.Points)
+	}
+
+	// No samples gives an empty list, not null
+	{
+		rec, err := callApiDeviceResources(t, app, other.Id, fmt.Sprintf("from=%d&to=%d", start.Add(time.Hour).Unix(), start.Add(2*time.Hour).Unix()))
+		assert.Nil(t, err)
+		assert.Contains(t, rec.Body.String(), `"points":[]`)
+	}
+
+	for _, bad := range []string{"from=abc", "to=abc", "bucket=0", "bucket=abc",
+		fmt.Sprintf("from=%d&to=%d", start.Unix(), start.Unix())} {
+		_, err := callApiDeviceResources(t, app, d.Id, bad)
+		var apiresponse *router.ApiError
+		assert.True(t, errors.As(err, &apiresponse), bad)
+		assert.Equal(t, 400, apiresponse.Status, bad)
+	}
+}
+
 func TestApiGenerateDeviceStatus(t *testing.T) {
 	app, err := tests.NewTestApp()
 	defer app.Cleanup()

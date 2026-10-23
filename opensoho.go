@@ -3655,6 +3655,7 @@ func main() {
 			e.Router.GET("/api/v1/network-overview", apiNetworkOverview).Bind(apis.RequireAuth())
 			e.Router.GET("/api/v1/wifi-versions", apiWifiVersions).Bind(apis.RequireAuth())
 			e.Router.GET("/api/v1/client-signal-quality", apiClientSignalQuality).Bind(apis.RequireAuth())
+			e.Router.GET("/api/v1/device-resources/{device}", apiDeviceResources).Bind(apis.RequireAuth())
 
 			return e.Next()
 		},
@@ -4000,6 +4001,112 @@ func regenerateAllDeviceConfigs(app core.App) {
 			fmt.Println("regenerateAllDeviceConfigs: failed for", record.GetString("name"), err)
 		}
 	}
+}
+
+// resourceHistoryPoints is roughly how many points the resource history API
+// returns when no bucket size is requested.
+const resourceHistoryPoints = 300
+
+// ResourceHistoryPoint aggregates the resource samples of one time bucket.
+type ResourceHistoryPoint struct {
+	Time     int64   `db:"t" json:"t"`
+	Load1    float64 `db:"load1" json:"load1"`
+	Load5    float64 `db:"load5" json:"load5"`
+	Load15   float64 `db:"load15" json:"load15"`
+	Load1Max float64 `db:"load1_max" json:"load1_max"`
+	Cpus     int     `db:"cpus" json:"cpus"`
+	MemTotal float64 `db:"mem_total" json:"mem_total"`
+	MemUsed  float64 `db:"mem_used" json:"mem_used"`
+	SwapUsed float64 `db:"swap_used" json:"swap_used"`
+}
+
+// parseUnixParam reads an optional query parameter holding unix seconds.
+func parseUnixParam(e *core.RequestEvent, name string, fallback time.Time) (time.Time, error) {
+	value := e.Request.URL.Query().Get(name)
+	if value == "" {
+		return fallback, nil
+	}
+	seconds, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return time.Unix(seconds, 0).UTC(), nil
+}
+
+// apiDeviceResources returns a device's CPU load and memory history, averaged
+// per bucket. "from" and "to" are unix seconds (default: the last 24 hours),
+// "bucket" is the bucket size in seconds (default: about 300 points).
+func apiDeviceResources(e *core.RequestEvent) error {
+	device, err := e.App.FindRecordById("devices", e.Request.PathValue("device"))
+	if err != nil {
+		return e.NotFoundError("Device not found", err)
+	}
+
+	now := time.Now().UTC()
+	to, err := parseUnixParam(e, "to", now)
+	if err != nil {
+		return e.BadRequestError("Invalid 'to'", err)
+	}
+	from, err := parseUnixParam(e, "from", to.Add(-24*time.Hour))
+	if err != nil {
+		return e.BadRequestError("Invalid 'from'", err)
+	}
+	if !from.Before(to) {
+		return e.BadRequestError("'from' must be before 'to'", nil)
+	}
+
+	span := int64(to.Sub(from).Seconds())
+	bucket := (span + resourceHistoryPoints - 1) / resourceHistoryPoints
+	if value := e.Request.URL.Query().Get("bucket"); value != "" {
+		bucket, err = strconv.ParseInt(value, 10, 64)
+		if err != nil || bucket < 1 {
+			return e.BadRequestError("Invalid 'bucket'", err)
+		}
+	}
+	// The agent reports every 30 seconds, smaller buckets are mostly empty.
+	bucket = max(bucket, 30)
+
+	fromDT, err := types.ParseDateTime(from)
+	if err != nil {
+		return e.BadRequestError("Invalid 'from'", err)
+	}
+	toDT, err := types.ParseDateTime(to)
+	if err != nil {
+		return e.BadRequestError("Invalid 'to'", err)
+	}
+
+	points := []ResourceHistoryPoint{}
+	err = e.App.DB().NewQuery(`
+		SELECT
+			(CAST(strftime('%s', [[time]]) AS INTEGER) / {:bucket}) * {:bucket} AS t,
+			AVG([[load1]]) AS load1,
+			AVG([[load5]]) AS load5,
+			AVG([[load15]]) AS load15,
+			MAX([[load1]]) AS load1_max,
+			MAX([[cpus]]) AS cpus,
+			AVG([[mem_total]]) AS mem_total,
+			AVG([[mem_total]] - [[mem_available]]) AS mem_used,
+			AVG([[swap_total]] - [[swap_free]]) AS swap_used
+		FROM {{device_resources}}
+		WHERE [[device]] = {:device} AND [[time]] >= {:from} AND [[time]] < {:to}
+		GROUP BY t
+		ORDER BY t`).Bind(dbx.Params{
+		"bucket": bucket,
+		"device": device.Id,
+		"from":   fromDT.String(),
+		"to":     toDT.String(),
+	}).All(&points)
+	if err != nil {
+		return e.InternalServerError("Failed to load resource history", err)
+	}
+
+	return e.JSON(http.StatusOK, map[string]any{
+		"device": device.Id,
+		"from":   from.Unix(),
+		"to":     to.Unix(),
+		"bucket": bucket,
+		"points": points,
+	})
 }
 
 func apiGenerateDeviceStatus(e *core.RequestEvent) error {

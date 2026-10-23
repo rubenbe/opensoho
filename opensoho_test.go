@@ -1520,6 +1520,63 @@ func TestValidateSetting(t *testing.T) {
 
 	s.Set("value", "XX")
 	assert.Error(t, validateSetting(s))
+
+	s.Set("name", "history_retention_days")
+	for _, value := range []string{"", "1", "30", "365"} {
+		s.Set("value", value)
+		assert.Nil(t, validateSetting(s), value)
+	}
+	for _, value := range []string{"0", "-1", "366", "1000", "abc", "7d"} {
+		s.Set("value", value)
+		assert.Error(t, validateSetting(s), value)
+	}
+}
+
+func TestPruneResourceHistory(t *testing.T) {
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	resourcescollection := setupDeviceResourcesCollection(t, app, devicecollection)
+	settingscollection := setupSettingsCollection(t, app)
+
+	d := core.NewRecord(devicecollection)
+	d.Set("name", "ap1")
+	d.Set("health_status", "healthy")
+	assert.Nil(t, app.Save(d))
+
+	now := time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)
+	for _, age := range []int{40, 31, 29, 10, 0} {
+		r := core.NewRecord(resourcescollection)
+		r.Set("device", d.Id)
+		r.Set("time", now.AddDate(0, 0, -age))
+		assert.Nil(t, app.Save(r))
+	}
+	remaining := func() int {
+		samples, err := app.FindAllRecords("device_resources")
+		assert.Nil(t, err)
+		return len(samples)
+	}
+
+	// Without a setting, 30 days are kept
+	assert.Equal(t, 30, historyRetentionDays(app))
+	pruneResourceHistory(app, now)
+	assert.Equal(t, 3, remaining())
+
+	setting := core.NewRecord(settingscollection)
+	setting.Set("name", "history_retention_days")
+	setting.Set("value", "7")
+	assert.Nil(t, app.Save(setting))
+	assert.Equal(t, 7, historyRetentionDays(app))
+	pruneResourceHistory(app, now)
+	assert.Equal(t, 1, remaining())
+
+	// An invalid value falls back to the default
+	setting.Set("value", "abc")
+	assert.Nil(t, app.Save(setting))
+	assert.Equal(t, 30, historyRetentionDays(app))
 }
 
 func TestValidateVlan(t *testing.T) {

@@ -3150,6 +3150,37 @@ func storeResourceSample(app core.App, device *core.Record, resources Resources,
 	}
 }
 
+const (
+	defaultHistoryRetentionDays = 30
+	maxHistoryRetentionDays     = 365
+)
+
+// historyRetentionDays is how long the resource history is kept, from the
+// history_retention_days setting.
+func historyRetentionDays(app core.App) int {
+	record, err := app.FindFirstRecordByData("settings", "name", "history_retention_days")
+	if err != nil {
+		return defaultHistoryRetentionDays
+	}
+	days, err := strconv.Atoi(record.GetString("value"))
+	if err != nil || days < 1 || days > maxHistoryRetentionDays {
+		return defaultHistoryRetentionDays
+	}
+	return days
+}
+
+// pruneResourceHistory drops the resource samples older than the retention.
+func pruneResourceHistory(app core.App, now time.Time) {
+	cutoff, err := types.ParseDateTime(now.AddDate(0, 0, -historyRetentionDays(app)))
+	if err != nil {
+		return
+	}
+	_, err = app.DB().Delete("device_resources", dbx.NewExp("time < {:cutoff}", dbx.Params{"cutoff": cutoff.String()})).Execute()
+	if err != nil {
+		app.Logger().Error("Failed to prune resource history", "error", err)
+	}
+}
+
 func storeDHCPLeases(app core.App, leaseslist []DHCPLease, expirytime types.DateTime) {
 	// TODO needs to run in a transaction?
 	collection, _ := app.FindCollectionByNameOrId("dhcp_leases")
@@ -3743,6 +3774,10 @@ func main() {
 		updateDeviceHealth(app, types.NowDateTime())
 	})
 
+	app.Cron().MustAdd("pruneResourceHistory", "17 * * * *", func() {
+		pruneResourceHistory(app, time.Now())
+	})
+
 	if err := app.Start(); err != nil {
 		log.Fatal(err)
 	}
@@ -3906,6 +3941,12 @@ func validateSetting(record *core.Record) error {
 	case "mqtt_broker":
 		if value != "" && !strings.HasPrefix(value, "tcp://") && !strings.HasPrefix(value, "ssl://") && !strings.HasPrefix(value, "ws://") && !strings.HasPrefix(value, "wss://") {
 			errs["value"] = validation.NewError("validation_invalid_value", "Must be a broker URL, e.g. 'tcp://host:1883', 'ssl://host:8883', 'ws://host:8083' or 'wss://host:8084'.")
+		}
+	case "history_retention_days":
+		if value != "" {
+			if days, err := strconv.Atoi(value); err != nil || days < 1 || days > maxHistoryRetentionDays {
+				errs["value"] = validation.NewError("validation_invalid_value", fmt.Sprintf("Value must be a number of days between 1 and %d. Leave empty for the default of %d days.", maxHistoryRetentionDays, defaultHistoryRetentionDays))
+			}
 		}
 	}
 	if len(errs) > 0 {

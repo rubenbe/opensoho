@@ -814,8 +814,25 @@ type Interface struct {
 	BridgeMembers []string    `json:"bridge_members,omitempty"`
 }
 
+type Memory struct {
+	Total     uint64 `json:"total"`
+	Free      uint64 `json:"free"`
+	Shared    uint64 `json:"shared"`
+	Buffered  uint64 `json:"buffered"`
+	Available uint64 `json:"available"`
+	Cached    uint64 `json:"cached"`
+}
+
+type Swap struct {
+	Total uint64 `json:"total"`
+	Free  uint64 `json:"free"`
+}
+
 type Resources struct {
-	Load []float32 `json:"load"`
+	Load   []float32 `json:"load"`
+	Cpus   int       `json:"cpus"`
+	Memory Memory    `json:"memory"`
+	Swap   Swap      `json:"swap"`
 }
 
 type Neighbor struct {

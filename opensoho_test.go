@@ -3295,6 +3295,31 @@ func TestUpdateMonitoringUnclassifiedEthernet(t *testing.T) {
 	assert.Equal(t, []string{}, bridges[0].GetStringSlice("wifi"))
 }
 
+func TestDecodeMonitoringResources(t *testing.T) {
+	payload := `{
+  "type": "DeviceMonitoring",
+  "resources": {
+    "memory": {"total": 1027969024, "shared": 548864, "free": 830447616, "cached": 28909568, "available": 836423680, "buffered": 0},
+    "cpus": 3,
+    "load": [0.03, 0.08, 0.08],
+    "swap": {"free": 0, "total": 0}
+  }
+}`
+	var data MonitoringData
+	assert.Nil(t, json.Unmarshal([]byte(payload), &data))
+	assert.Equal(t, []float32{0.03, 0.08, 0.08}, data.Resources.Load)
+	assert.Equal(t, 3, data.Resources.Cpus)
+	assert.Equal(t, Memory{
+		Total:     1027969024,
+		Free:      830447616,
+		Shared:    548864,
+		Buffered:  0,
+		Available: 836423680,
+		Cached:    28909568,
+	}, data.Resources.Memory)
+	assert.Equal(t, Swap{Total: 0, Free: 0}, data.Resources.Swap)
+}
+
 // Verify an empty monitoring request is correctly ignored
 func TestUpdateMonitoringEmptyBody(t *testing.T) {
 	var err error

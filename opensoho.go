@@ -1635,10 +1635,11 @@ func generateWifiConfig(wifirecord WifiRecord, wifiid int, radio uint, app core.
 	}
 
 	// Client specific PSKs are WPA2 only, and 6GHz radios are forced to SAE.
-	clientpskconfig := ""
+	var clientpsks []*core.Record
 	if radioProxy == nil || !radioProxy.IsBand6GHz() {
-		clientpskconfig = generateHostApdPskForWifi(app, wifi, ifaceName)
+		clientpsks = findClientPsksForWifi(app, wifi)
 	}
+	clientpskconfig := generateHostApdPsk(app, clientpsks, ifaceName)
 	vta_flag, vta_tz := getTimeAdvertisementValues(wifi.GetString("ieee80211v_time_advertisement"))
 
 	rDeadLine := max(1000, wifi.GetInt("ieee80211r_reassoc_deadline"))
@@ -1674,6 +1675,16 @@ func generateWifiConfig(wifirecord WifiRecord, wifiid int, radio uint, app core.
 		rnrOption = "        option rnr '1'\n"
 	}
 
+	// Without dynamic_vlan, OpenWRT does not pass vlan_no_bridge to hostapd,
+	// so hostapd puts the per-VLAN interfaces in its own 'brvlan<vid>'
+	// bridges while netifd adds them to the wifi-vlan network. Whichever
+	// is last wins, leaving clients in a bridge without uplink. '1' keeps
+	// clients without a VLAN on the iface network.
+	dynamicVlanOption := ""
+	if clientPsksHaveVlan(clientpsks) {
+		dynamicVlanOption = "        option dynamic_vlan '1'\n"
+	}
+
 	return fmt.Sprintf(`
 config wifi-iface '%s'
         option device 'radio%d'
@@ -1693,7 +1704,7 @@ config wifi-iface '%s'
 %s        option dtim_period '%d'
         option ft_over_ds '0'
         option ft_psk_generate_local '1'
-%s%s%s`,
+%s%s%s%s`,
 			ifaceName, radio, vlanName, disabled,
 			uciQuote(ssid), encryption, uciQuote(key),
 			wifi.GetInt("hidden"),
@@ -1704,7 +1715,7 @@ config wifi-iface '%s'
 			vta_flag, vta_tz,
 			ieee80211vOptions,
 			dtim,
-			rnrOption,
+			rnrOption, dynamicVlanOption,
 			steeringconfig, clientpskconfig),
 		len(clientpskconfig) > 0
 }
@@ -4474,14 +4485,28 @@ func generateWifiQr(wifi *core.Record) (*bytes.Buffer, error) {
 	return buf, nil
 }
 
-func generateHostApdPskForWifi(app core.App, wifi *core.Record, wifiname string) string {
+func findClientPsksForWifi(app core.App, wifi *core.Record) []*core.Record {
 	records, err := app.FindAllRecords("wifi_client_psk",
 		dbx.NewExp("wifi = {:wifi}", dbx.Params{"wifi": wifi.Id}))
 	if err != nil {
 		fmt.Println("Failed to fetch client psks for wifi", wifi)
-		return ""
+		return nil
 	}
-	return generateHostApdPsk(app, records, wifiname)
+	return records
+}
+
+func generateHostApdPskForWifi(app core.App, wifi *core.Record, wifiname string) string {
+	return generateHostApdPsk(app, findClientPsksForWifi(app, wifi), wifiname)
+}
+
+// clientPsksHaveVlan reports whether any client PSK assigns its clients a VLAN.
+func clientPsksHaveVlan(client_psks []*core.Record) bool {
+	for _, client_psk := range client_psks {
+		if client_psk.GetString("vlan") != "" {
+			return true
+		}
+	}
+	return false
 }
 func generateHostApdPsk(app core.App, client_psks []*core.Record, wifiname string) string {
 	output := ""

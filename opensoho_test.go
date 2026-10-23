@@ -7634,6 +7634,72 @@ func TestGenerateWifiConfigClientPskSkipped6GHz(t *testing.T) {
 	assert.NotContains(t, wificonfig, "wifi-station")
 }
 
+// TestGenerateWifiConfigDynamicVlan verifies dynamic_vlan is only set when a
+// client PSK assigns a VLAN, so hostapd leaves the VLAN bridging to netifd.
+func TestGenerateWifiConfigDynamicVlan(t *testing.T) {
+	app, err := tests.NewTestApp()
+	assert.Nil(t, err)
+	defer app.Cleanup()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	clientcollection := setupClientsCollection(t, app)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	setupClientSteeringCollection(t, app, clientcollection, devicecollection, wificollection)
+	radiocollection := setupRadioCollection(t, app, devicecollection)
+	clientpskcollection := setupClientPskCollection(t, app, clientcollection, vlancollection, wificollection)
+
+	d := core.NewRecord(devicecollection)
+	d.Set("name", "the_device")
+	d.Set("health_status", "healthy")
+	assert.Nil(t, app.Save(d))
+
+	w := core.NewRecord(wificollection)
+	w.Set("ssid", "the_ssid")
+	w.Set("key", "the_key")
+	w.Set("encryption", "psk2+ccmp")
+	w.Set("enabled", true)
+	w.Set("ieee80211r", true)
+	assert.Nil(t, app.Save(w))
+	wr := WifiRecord{Record: w}
+
+	radio24 := core.NewRecord(radiocollection)
+	radio24.Set("device", d.Id)
+	radio24.Set("radio", 0)
+	radio24.Set("frequency", 2412)
+	radio24.Set("tx_power_mode", "auto")
+	assert.Nil(t, app.Save(radio24))
+
+	// No client PSKs
+	wificonfig, _ := generateWifiConfig(wr, 1, 0, app, d, records.NewRadio(radio24), false)
+	assert.NotContains(t, wificonfig, "dynamic_vlan")
+
+	// A client PSK without a VLAN
+	psk := core.NewRecord(clientpskcollection)
+	psk.Id = "somethingapsk01"
+	psk.Set("password", "aaaabbbb")
+	psk.Set("wifi", w.Id)
+	assert.Nil(t, app.Save(psk))
+
+	wificonfig, has_psk := generateWifiConfig(wr, 1, 0, app, d, records.NewRadio(radio24), false)
+	assert.True(t, has_psk)
+	assert.NotContains(t, wificonfig, "dynamic_vlan")
+
+	// A client PSK with a VLAN
+	printer_vlan := core.NewRecord(vlancollection)
+	printer_vlan.Set("name", "printer")
+	printer_vlan.Set("number", "140")
+	assert.Nil(t, app.Save(printer_vlan))
+
+	psk.Set("vlan", printer_vlan.Id)
+	assert.Nil(t, app.Save(psk))
+
+	wificonfig, has_psk = generateWifiConfig(wr, 1, 0, app, d, records.NewRadio(radio24), false)
+	assert.True(t, has_psk)
+	assert.Contains(t, wificonfig, "        option ft_psk_generate_local '1'\n        option dynamic_vlan '1'\n")
+	assert.Equal(t, 1, strings.Count(wificonfig, "dynamic_vlan"))
+}
+
 // TestGenerateWifiConfig80211vOptions verifies that wnm_sleep_mode,
 // proxy_arp and bss_transition are each only written to the generated
 // UCI config when their corresponding field is enabled - independently

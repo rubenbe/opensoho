@@ -1522,11 +1522,11 @@ func TestValidateSetting(t *testing.T) {
 	assert.Error(t, validateSetting(s))
 
 	s.Set("name", "history_retention_days")
-	for _, value := range []string{"", "1", "30", "365"} {
+	for _, value := range []string{"", "0", "1", "30", "365"} {
 		s.Set("value", value)
 		assert.Nil(t, validateSetting(s), value)
 	}
-	for _, value := range []string{"0", "-1", "366", "1000", "abc", "7d"} {
+	for _, value := range []string{"-1", "366", "1000", "abc", "7d"} {
 		s.Set("value", value)
 		assert.Error(t, validateSetting(s), value)
 	}
@@ -1582,7 +1582,14 @@ func TestPruneResourceHistory(t *testing.T) {
 	pruneResourceHistory(app, now)
 	assert.Equal(t, 2, remaining())
 
-	// As does a missing setting
+	// 0 drops the whole history
+	setting.Set("value", "0")
+	assert.Nil(t, app.Save(setting))
+	assert.Equal(t, 0, historyRetentionDays(app))
+	pruneResourceHistory(app, now)
+	assert.Equal(t, 0, remaining())
+
+	// A missing setting falls back to the default too
 	assert.Nil(t, app.Delete(setting))
 	assert.Equal(t, 1, historyRetentionDays(app))
 }
@@ -3462,6 +3469,37 @@ func TestHandleMonitoringStoresResourceSamples(t *testing.T) {
 	samples, err = app.FindAllRecords("device_resources")
 	assert.Nil(t, err)
 	assert.Equal(t, 2, len(samples))
+}
+
+func TestHandleMonitoringStoresNoResourcesWithZeroRetention(t *testing.T) {
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	clientcollection := setupClientsCollection(t, app)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	setupDeviceResourcesCollection(t, app, devicecollection)
+	settingscollection := setupSettingsCollection(t, app)
+
+	setting := core.NewRecord(settingscollection)
+	setting.Set("name", "history_retention_days")
+	setting.Set("value", "0")
+	assert.Nil(t, app.Save(setting))
+
+	d := core.NewRecord(devicecollection)
+	d.Set("name", "ap1")
+	d.Set("health_status", "healthy")
+	assert.Nil(t, app.Save(d))
+
+	body := `{"type": "DeviceMonitoring", "interfaces": [], "resources": {
+  "memory": {"total": 1000, "available": 600}, "cpus": 2, "load": [0.5, 0.25, 0.125]}}`
+	postResourcesMonitoring(t, app, d, clientcollection, "current=true", body)
+	postResourcesMonitoring(t, app, d, clientcollection, "time=01-10-2026_08:00:00.000000", body)
+
+	samples, err := app.FindAllRecords("device_resources")
+	assert.Nil(t, err)
+	assert.Equal(t, 0, len(samples))
 }
 
 // Verify an empty monitoring request is correctly ignored

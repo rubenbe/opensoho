@@ -3125,6 +3125,9 @@ func storeResourceSample(app core.App, device *core.Record, resources Resources,
 	if len(resources.Load) < 3 && resources.Memory.Total == 0 {
 		return
 	}
+	if historyRetentionDays(app) == 0 {
+		return
+	}
 	collection, err := app.FindCachedCollectionByNameOrId("device_resources")
 	if err != nil {
 		return
@@ -3156,26 +3159,32 @@ const (
 )
 
 // historyRetentionDays is how long the resource history is kept, from the
-// history_retention_days setting.
+// history_retention_days setting. 0 means no history is stored.
 func historyRetentionDays(app core.App) int {
 	record, err := app.FindFirstRecordByData("settings", "name", "history_retention_days")
 	if err != nil {
 		return defaultHistoryRetentionDays
 	}
 	days, err := strconv.Atoi(record.GetString("value"))
-	if err != nil || days < 1 || days > maxHistoryRetentionDays {
+	if err != nil || days < 0 || days > maxHistoryRetentionDays {
 		return defaultHistoryRetentionDays
 	}
 	return days
 }
 
 // pruneResourceHistory drops the resource samples older than the retention.
+// A retention of 0 drops all of them.
 func pruneResourceHistory(app core.App, now time.Time) {
-	cutoff, err := types.ParseDateTime(now.AddDate(0, 0, -historyRetentionDays(app)))
-	if err != nil {
-		return
+	days := historyRetentionDays(app)
+	var where dbx.Expression
+	if days > 0 {
+		cutoff, err := types.ParseDateTime(now.AddDate(0, 0, -days))
+		if err != nil {
+			return
+		}
+		where = dbx.NewExp("time < {:cutoff}", dbx.Params{"cutoff": cutoff.String()})
 	}
-	_, err = app.DB().Delete("device_resources", dbx.NewExp("time < {:cutoff}", dbx.Params{"cutoff": cutoff.String()})).Execute()
+	_, err := app.DB().Delete("device_resources", where).Execute()
 	if err != nil {
 		app.Logger().Error("Failed to prune resource history", "error", err)
 	}
@@ -3945,8 +3954,8 @@ func validateSetting(record *core.Record) error {
 		}
 	case "history_retention_days":
 		if value != "" {
-			if days, err := strconv.Atoi(value); err != nil || days < 1 || days > maxHistoryRetentionDays {
-				errs["value"] = validation.NewError("validation_invalid_value", fmt.Sprintf("Value must be a number of days between 1 and %d. Leave empty for the default.", maxHistoryRetentionDays))
+			if days, err := strconv.Atoi(value); err != nil || days < 0 || days > maxHistoryRetentionDays {
+				errs["value"] = validation.NewError("validation_invalid_value", fmt.Sprintf("Value must be a number of days between 0 and %d, 0 stores no history. Leave empty for the default.", maxHistoryRetentionDays))
 			}
 		}
 	}

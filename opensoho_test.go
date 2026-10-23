@@ -3320,6 +3320,85 @@ func TestDecodeMonitoringResources(t *testing.T) {
 	assert.Equal(t, Swap{Total: 0, Free: 0}, data.Resources.Swap)
 }
 
+func TestParseAgentTime(t *testing.T) {
+	ts, ok := parseAgentTime("23-10-2026_14:05:30.000000")
+	assert.True(t, ok)
+	assert.Equal(t, time.Date(2026, 10, 23, 14, 5, 30, 0, time.UTC), ts)
+
+	_, ok = parseAgentTime("")
+	assert.False(t, ok)
+	_, ok = parseAgentTime("2026-10-23T14:05:30Z")
+	assert.False(t, ok)
+	_, ok = parseAgentTime("garbage")
+	assert.False(t, ok)
+}
+
+func postResourcesMonitoring(t *testing.T, app core.App, device *core.Record, clientcollection *core.Collection, query string, body string) {
+	event := core.RequestEvent{}
+	var err error
+	event.Request, err = http.NewRequest("POST", "/api/v1/monitoring/device/?"+query, strings.NewReader(body))
+	assert.Nil(t, err)
+	event.Request.Header.Set("content-type", "application/json")
+	event.App = app
+	event.Response = httptest.NewRecorder()
+	response, _ := handleMonitoring(&event, app, device, clientcollection)
+	assert.Nil(t, response)
+}
+
+func TestHandleMonitoringStoresResourceSamples(t *testing.T) {
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	clientcollection := setupClientsCollection(t, app)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	setupDeviceResourcesCollection(t, app, devicecollection)
+
+	d := core.NewRecord(devicecollection)
+	d.Set("name", "ap1")
+	d.Set("health_status", "healthy")
+	assert.Nil(t, app.Save(d))
+
+	body := `{"type": "DeviceMonitoring", "interfaces": [], "resources": {
+  "memory": {"total": 1000, "free": 400, "cached": 100, "available": 600, "buffered": 50},
+  "cpus": 2, "load": [0.5, 0.25, 0.125], "swap": {"total": 10, "free": 4}}}`
+
+	// A backfilled report keeps the time it was collected at
+	postResourcesMonitoring(t, app, d, clientcollection, "time=01-10-2026_08:00:00.000000", body)
+	// The live report
+	before := time.Now().UTC().Add(-time.Second)
+	postResourcesMonitoring(t, app, d, clientcollection, "current=true", body)
+
+	samples, err := app.FindRecordsByFilter("device_resources", "", "time", 0, 0)
+	assert.Nil(t, err)
+	assert.Equal(t, 2, len(samples))
+
+	s := samples[0]
+	assert.Equal(t, d.Id, s.GetString("device"))
+	assert.Equal(t, time.Date(2026, 10, 1, 8, 0, 0, 0, time.UTC), s.GetDateTime("time").Time())
+	assert.Equal(t, 0.5, s.GetFloat("load1"))
+	assert.Equal(t, 0.25, s.GetFloat("load5"))
+	assert.Equal(t, 0.125, s.GetFloat("load15"))
+	assert.Equal(t, 2, s.GetInt("cpus"))
+	assert.Equal(t, 1000, s.GetInt("mem_total"))
+	assert.Equal(t, 600, s.GetInt("mem_available"))
+	assert.Equal(t, 400, s.GetInt("mem_free"))
+	assert.Equal(t, 100, s.GetInt("mem_cached"))
+	assert.Equal(t, 50, s.GetInt("mem_buffered"))
+	assert.Equal(t, 10, s.GetInt("swap_total"))
+	assert.Equal(t, 4, s.GetInt("swap_free"))
+
+	// Without a time the sample is stamped on arrival
+	assert.True(t, samples[1].GetDateTime("time").Time().After(before))
+
+	// An empty resources block stores nothing
+	postResourcesMonitoring(t, app, d, clientcollection, "current=true", `{"type": "DeviceMonitoring", "interfaces": []}`)
+	samples, err = app.FindAllRecords("device_resources")
+	assert.Nil(t, err)
+	assert.Equal(t, 2, len(samples))
+}
+
 // Verify an empty monitoring request is correctly ignored
 func TestUpdateMonitoringEmptyBody(t *testing.T) {
 	var err error
@@ -6725,6 +6804,31 @@ func setupInterfacesCollection(t *testing.T, app core.App) *core.Collection {
 	err := app.Save(ifacecollection)
 	assert.Equal(t, err, nil)
 	return ifacecollection
+}
+
+func setupDeviceResourcesCollection(t *testing.T, app core.App, devicecollection *core.Collection) *core.Collection {
+	col := core.NewBaseCollection("device_resources")
+	col.Fields.Add(&core.RelationField{
+		Name:          "device",
+		MaxSelect:     1,
+		Required:      true,
+		CollectionId:  devicecollection.Id,
+		CascadeDelete: true,
+	})
+	col.Fields.Add(&core.DateField{
+		Name:     "time",
+		Required: true,
+	})
+	for _, name := range []string{"load1", "load5", "load15"} {
+		col.Fields.Add(&core.NumberField{Name: name})
+	}
+	for _, name := range []string{"cpus", "mem_total", "mem_available", "mem_free", "mem_cached", "mem_buffered", "swap_total", "swap_free"} {
+		col.Fields.Add(&core.NumberField{Name: name, OnlyInt: true})
+	}
+	col.AddIndex("idx_device_resources_device_time", false, "device, time", "")
+	err := app.Save(col)
+	assert.Nil(t, err)
+	return col
 }
 
 func setupSettingsCollection(t *testing.T, app core.App) *core.Collection {

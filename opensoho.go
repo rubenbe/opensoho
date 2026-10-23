@@ -2971,7 +2971,7 @@ func updateInterface(app core.App, iface Interface, deviceId string, interfaceCo
 
 func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, collection *core.Collection) (error, radioReport) {
 	e.Response.Header().Set("X-Openwisp-Controller", "true")
-	time := e.Request.URL.Query().Get("time")
+	agentTime := e.Request.URL.Query().Get("time")
 	// The openwisp agent marks the up-to-date info with current=true
 	// Only live data is published to Home Assistant does not support backfill over MQTT
 	current := e.Request.URL.Query().Get("current") == "true"
@@ -3091,9 +3091,63 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 
 	storeDHCPLeases(app, payload.DHCPLeases, types.NowDateTime())
 
+	// Backfilled reports are stored too, they fill the gaps in the history.
+	sampleTime, ok := parseAgentTime(agentTime)
+	if !ok {
+		sampleTime = time.Now().UTC()
+	}
+	storeResourceSample(app, device, payload.Resources, sampleTime)
+
 	//current := e.Request.URL.Query().Get("current")
-	fmt.Println(payload.Type, "@", time)
+	fmt.Println(payload.Type, "@", agentTime)
 	return e.Blob(200, "text/plain", []byte("")), report
+}
+
+// agentTimeLayout is the UTC timestamp the openwisp agent puts in the "time"
+// query parameter: the spool file name (date -u +'%d-%m-%Y_%H:%M:%S') with
+// ".000000" appended.
+const agentTimeLayout = "02-01-2006_15:04:05.000000"
+
+func parseAgentTime(value string) (time.Time, bool) {
+	if value == "" {
+		return time.Time{}, false
+	}
+	t, err := time.Parse(agentTimeLayout, value)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return t.UTC(), true
+}
+
+// storeResourceSample appends one CPU load/memory sample to the device's
+// resource history.
+func storeResourceSample(app core.App, device *core.Record, resources Resources, sampleTime time.Time) {
+	if len(resources.Load) < 3 && resources.Memory.Total == 0 {
+		return
+	}
+	collection, err := app.FindCachedCollectionByNameOrId("device_resources")
+	if err != nil {
+		return
+	}
+	record := core.NewRecord(collection)
+	record.Set("device", device.Id)
+	record.Set("time", sampleTime)
+	if len(resources.Load) >= 3 {
+		record.Set("load1", resources.Load[0])
+		record.Set("load5", resources.Load[1])
+		record.Set("load15", resources.Load[2])
+	}
+	record.Set("cpus", resources.Cpus)
+	record.Set("mem_total", resources.Memory.Total)
+	record.Set("mem_available", resources.Memory.Available)
+	record.Set("mem_free", resources.Memory.Free)
+	record.Set("mem_cached", resources.Memory.Cached)
+	record.Set("mem_buffered", resources.Memory.Buffered)
+	record.Set("swap_total", resources.Swap.Total)
+	record.Set("swap_free", resources.Swap.Free)
+	if err := app.Save(record); err != nil {
+		app.Logger().Error("Failed to store resource sample", "device", device.Id, "error", err)
+	}
 }
 
 func storeDHCPLeases(app core.App, leaseslist []DHCPLease, expirytime types.DateTime) {

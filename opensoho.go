@@ -3151,7 +3151,7 @@ func storeResourceSample(app core.App, device *core.Record, resources Resources,
 }
 
 const (
-	defaultHistoryRetentionDays = 30
+	defaultHistoryRetentionDays = 1
 	maxHistoryRetentionDays     = 365
 )
 
@@ -3946,7 +3946,7 @@ func validateSetting(record *core.Record) error {
 	case "history_retention_days":
 		if value != "" {
 			if days, err := strconv.Atoi(value); err != nil || days < 1 || days > maxHistoryRetentionDays {
-				errs["value"] = validation.NewError("validation_invalid_value", fmt.Sprintf("Value must be a number of days between 1 and %d. Leave empty for the default of %d days.", maxHistoryRetentionDays, defaultHistoryRetentionDays))
+				errs["value"] = validation.NewError("validation_invalid_value", fmt.Sprintf("Value must be a number of days between 1 and %d. Leave empty for the default.", maxHistoryRetentionDays))
 			}
 		}
 	}

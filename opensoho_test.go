@@ -1548,10 +1548,11 @@ func TestPruneResourceHistory(t *testing.T) {
 	assert.Nil(t, app.Save(d))
 
 	now := time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)
-	for _, age := range []int{40, 31, 29, 10, 0} {
+	day := 24 * time.Hour
+	for _, age := range []time.Duration{40 * day, 31 * day, 29 * day, 10 * day, 3 * day, 12 * time.Hour, 0} {
 		r := core.NewRecord(resourcescollection)
 		r.Set("device", d.Id)
-		r.Set("time", now.AddDate(0, 0, -age))
+		r.Set("time", now.Add(-age))
 		assert.Nil(t, app.Save(r))
 	}
 	remaining := func() int {
@@ -1560,23 +1561,30 @@ func TestPruneResourceHistory(t *testing.T) {
 		return len(samples)
 	}
 
-	// Without a setting, 30 days are kept
-	assert.Equal(t, 30, historyRetentionDays(app))
-	pruneResourceHistory(app, now)
-	assert.Equal(t, 3, remaining())
-
 	setting := core.NewRecord(settingscollection)
 	setting.Set("name", "history_retention_days")
+	setting.Set("value", "30")
+	assert.Nil(t, app.Save(setting))
+	assert.Equal(t, 30, historyRetentionDays(app))
+	pruneResourceHistory(app, now)
+	assert.Equal(t, 5, remaining())
+
 	setting.Set("value", "7")
 	assert.Nil(t, app.Save(setting))
 	assert.Equal(t, 7, historyRetentionDays(app))
 	pruneResourceHistory(app, now)
-	assert.Equal(t, 1, remaining())
+	assert.Equal(t, 3, remaining())
 
-	// An invalid value falls back to the default
+	// An invalid value falls back to the default of 1 day
 	setting.Set("value", "abc")
 	assert.Nil(t, app.Save(setting))
-	assert.Equal(t, 30, historyRetentionDays(app))
+	assert.Equal(t, 1, historyRetentionDays(app))
+	pruneResourceHistory(app, now)
+	assert.Equal(t, 2, remaining())
+
+	// As does a missing setting
+	assert.Nil(t, app.Delete(setting))
+	assert.Equal(t, 1, historyRetentionDays(app))
 }
 
 func TestValidateVlan(t *testing.T) {

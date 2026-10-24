@@ -1,6 +1,7 @@
 import { loadChartJs } from "./charts.js";
 import { frequencyOverview } from "./frequency.js";
 import { networkOverview } from "./network.js";
+import { resourceHistoryChart } from "./resources.js";
 import { clientsPerChannelChart, clientsPerDeviceChart, deviceHealthChart, wifiVersionChart } from "./pies.js";
 import { clientSignalQualityChart } from "./signal.js";
 
@@ -91,6 +92,7 @@ export async function pageDashboard() {
     const signalQuality = clientSignalQualityChart(signalPrefs);
     const frequencies = frequencyOverview();
     const network = networkOverview();
+    const resources = resourceHistoryChart();
 
     const cards = [
         deviceHealth,
@@ -100,6 +102,7 @@ export async function pageDashboard() {
         signalQuality,
         frequencies,
         network,
+        resources,
     ];
 
     function refreshAll() {
@@ -149,6 +152,7 @@ export async function pageDashboard() {
                 }),
                 card("Frequency Overview", frequencies.el, { wide: true }),
                 card("Network Overview", network.el, { wide: true }),
+                card("Resource History", resources.el, { wide: true }),
             ),
             t.footer({ className: "page-footer" }, app.components.credits()),
         ),

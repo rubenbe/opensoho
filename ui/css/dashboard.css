@@ -476,4 +476,44 @@
     .net-neighbour + .net-neighbour {
         margin-top: 2px;
     }
+
+    /* resource history */
+    .resource-history {
+        position: relative;
+        width: 100%;
+        min-height: 120px;
+        &.loading .resource-content {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+    }
+    .resource-picker {
+        max-height: 320px;
+        overflow-y: auto;
+    }
+    .resource-charts {
+        display: flex;
+        flex-direction: column;
+        gap: var(--smSpacing);
+        margin-bottom: var(--smSpacing);
+    }
+    .resource-chart .band-label {
+        text-align: left;
+    }
+    .resource-chart-wrap {
+        position: relative;
+        width: 100%;
+        height: var(--chartHeight);
+    }
+    .resource-summary {
+        .num {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+        .legend-swatch {
+            display: inline-block;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+    }
 }

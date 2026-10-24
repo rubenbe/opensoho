@@ -8679,8 +8679,8 @@ func TestApiDeviceResources(t *testing.T) {
 		assert.Nil(t, json.Unmarshal(rec.Body.Bytes(), &r))
 		assert.Equal(t, int64(60), r.Bucket)
 		assert.Equal(t, []ResourceHistoryPoint{
-			{Time: start.Unix(), Load1: 2.0, Load5: 1.0, Load15: 0.5, Load1Max: 3.0, Cpus: 2, MemTotal: 1000, MemUsed: 500, SwapUsed: 60},
-			{Time: start.Unix() + 60, Load1: 0.5, Load5: 0.25, Load15: 0.125, Load1Max: 0.5, Cpus: 2, MemTotal: 1000, MemUsed: 100, SwapUsed: 60},
+			{Time: start.Unix(), Load1: 2.0, Load5: 1.0, Load15: 0.5, Load1Max: 3.0, Cpus: 2, MemTotal: 1000, MemAvailable: 500, MemUsed: 500, SwapTotal: 100, SwapFree: 40, SwapUsed: 60},
+			{Time: start.Unix() + 60, Load1: 0.5, Load5: 0.25, Load15: 0.125, Load1Max: 0.5, Cpus: 2, MemTotal: 1000, MemAvailable: 900, MemUsed: 100, SwapTotal: 100, SwapFree: 40, SwapUsed: 60},
 		}, r.Points)
 	}
 

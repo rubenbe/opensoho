@@ -4018,15 +4018,21 @@ const resourceHistoryPoints = 300
 
 // ResourceHistoryPoint aggregates the resource samples of one time bucket.
 type ResourceHistoryPoint struct {
-	Time     int64   `db:"t" json:"t"`
-	Load1    float64 `db:"load1" json:"load1"`
-	Load5    float64 `db:"load5" json:"load5"`
-	Load15   float64 `db:"load15" json:"load15"`
-	Load1Max float64 `db:"load1_max" json:"load1_max"`
-	Cpus     int     `db:"cpus" json:"cpus"`
-	MemTotal float64 `db:"mem_total" json:"mem_total"`
-	MemUsed  float64 `db:"mem_used" json:"mem_used"`
-	SwapUsed float64 `db:"swap_used" json:"swap_used"`
+	Time         int64   `db:"t" json:"t"`
+	Load1        float64 `db:"load1" json:"load1"`
+	Load5        float64 `db:"load5" json:"load5"`
+	Load15       float64 `db:"load15" json:"load15"`
+	Load1Max     float64 `db:"load1_max" json:"load1_max"`
+	Cpus         int     `db:"cpus" json:"cpus"`
+	MemTotal     float64 `db:"mem_total" json:"mem_total"`
+	MemAvailable float64 `db:"mem_available" json:"mem_available"`
+	MemFree      float64 `db:"mem_free" json:"mem_free"`
+	MemCached    float64 `db:"mem_cached" json:"mem_cached"`
+	MemBuffered  float64 `db:"mem_buffered" json:"mem_buffered"`
+	MemUsed      float64 `db:"mem_used" json:"mem_used"`
+	SwapTotal    float64 `db:"swap_total" json:"swap_total"`
+	SwapFree     float64 `db:"swap_free" json:"swap_free"`
+	SwapUsed     float64 `db:"swap_used" json:"swap_used"`
 }
 
 // parseUnixParam reads an optional query parameter holding unix seconds.
@@ -4094,7 +4100,13 @@ func apiDeviceResources(e *core.RequestEvent) error {
 			MAX([[load1]]) AS load1_max,
 			MAX([[cpus]]) AS cpus,
 			AVG([[mem_total]]) AS mem_total,
+			AVG([[mem_available]]) AS mem_available,
+			AVG([[mem_free]]) AS mem_free,
+			AVG([[mem_cached]]) AS mem_cached,
+			AVG([[mem_buffered]]) AS mem_buffered,
 			AVG([[mem_total]] - [[mem_available]]) AS mem_used,
+			AVG([[swap_total]]) AS swap_total,
+			AVG([[swap_free]]) AS swap_free,
 			AVG([[swap_total]] - [[swap_free]]) AS swap_used
 		FROM {{device_resources}}
 		WHERE [[device]] = {:device} AND [[time]] >= {:from} AND [[time]] < {:to}

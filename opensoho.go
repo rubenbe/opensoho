@@ -3108,8 +3108,9 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 	return e.Blob(200, "text/plain", []byte("")), report
 }
 
-// storeClientSample appends the byte counters of one associated client to its
-// history, with the device, SSID and band (GHz) it was connected to. The
+// storeClientSample appends the byte counters and signal (dBm) of one
+// associated client to its history, with the device, SSID and band (GHz) it
+// was connected to. The
 // counters are cumulative, as reported by the AP: rx is what the AP received
 // from the client, tx what it sent to it. They restart when the client
 // reconnects.
@@ -3123,6 +3124,7 @@ func storeClientSample(app core.App, clientRecord *core.Record, device *core.Rec
 	record.Set("device", device.Id)
 	record.Set("ssid", ssid)
 	record.Set("band", band)
+	record.Set("signal", client.Signal)
 	record.Set("time", sampleTime)
 	record.Set("rx_bytes", client.Bytes.Rx)
 	record.Set("tx_bytes", client.Bytes.Tx)
@@ -4278,6 +4280,7 @@ const clientTrafficSQL = `
 			[[device]] AS device,
 			[[ssid]] AS ssid,
 			[[band]] AS band,
+			[[signal]] AS signal,
 			CAST(strftime('%%s', [[time]]) AS INTEGER) AS t,
 			[[rx_bytes]] AS rx,
 			[[tx_bytes]] AS tx,
@@ -4308,11 +4311,14 @@ const clientTrafficSQL = `
 	)`
 
 // ClientTrafficPoint is the average traffic of a client in one time bucket,
-// in bytes per second while it was connected.
+// in bytes per second while it was connected, and its average signal (dBm).
+// The signal is null when it is unknown: samples stored before the signal
+// was have 0.
 type ClientTrafficPoint struct {
-	Time     int64   `db:"bucket_t" json:"t"`
-	Download float64 `db:"download" json:"download"`
-	Upload   float64 `db:"upload" json:"upload"`
+	Time     int64    `db:"bucket_t" json:"t"`
+	Download float64  `db:"download" json:"download"`
+	Upload   float64  `db:"upload" json:"upload"`
+	Signal   *float64 `db:"signal" json:"signal"`
 }
 
 // clientsCollection is the collection the client history refers to.
@@ -4389,7 +4395,8 @@ func apiClientResources(e *core.RequestEvent) error {
 		SELECT
 			(t / {:bucket}) * {:bucket} AS bucket_t,
 			AVG(download_bytes * 1.0 / (t - prev_t)) AS download,
-			AVG(upload_bytes * 1.0 / (t - prev_t)) AS upload
+			AVG(upload_bytes * 1.0 / (t - prev_t)) AS upload,
+			AVG(NULLIF(signal, 0)) AS signal
 		FROM traffic
 		GROUP BY bucket_t
 		ORDER BY bucket_t`).Bind(params).All(&points)

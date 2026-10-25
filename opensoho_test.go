@@ -3548,19 +3548,22 @@ func TestHandleMonitoringStoresClientSamples(t *testing.T) {
 
 	type sample struct {
 		client, device, ssid, band string
+		signal                     int
 		time                       time.Time
 		rx, tx                     int
 	}
 	got := []sample{}
 	for _, s := range samples {
-		got = append(got, sample{s.GetString("client"), s.GetString("device"), s.GetString("ssid"), s.GetString("band"), s.GetDateTime("time").Time(), s.GetInt("rx_bytes"), s.GetInt("tx_bytes")})
+		got = append(got, sample{s.GetString("client"), s.GetString("device"), s.GetString("ssid"), s.GetString("band"), s.GetInt("signal"), s.GetDateTime("time").Time(), s.GetInt("rx_bytes"), s.GetInt("tx_bytes")})
 	}
 	at := func(sec int) time.Time { return time.Date(2026, 10, 1, 8, 0, sec, 0, time.UTC) }
 	assert.Equal(t, []sample{
-		{other.Id, ap1.Id, "IoT", "2.4", at(0), 30, 40},
-		{roamer.Id, ap1.Id, "Home", "5", at(0), 1000, 2000},
-		{roamer.Id, ap2.Id, "Home", "5", at(30), 10, 20},
+		{other.Id, ap1.Id, "IoT", "2.4", -70, at(0), 30, 40},
+		{roamer.Id, ap1.Id, "Home", "5", -60, at(0), 1000, 2000},
+		{roamer.Id, ap2.Id, "Home", "5", -55, at(30), 10, 20},
 	}, got)
+	// the same signal as the clients list
+	assert.Equal(t, -55, roamer.GetInt("signal"))
 
 	// A client that is not associated has no record and no history
 	_, err = app.FindFirstRecordByData(clientcollection, "mac_address", "aa:aa:aa:aa:aa:aa")
@@ -7086,6 +7089,7 @@ func setupClientResourcesCollection(t *testing.T, app core.App, clientcollection
 	})
 	col.Fields.Add(&core.TextField{Name: "ssid"})
 	col.Fields.Add(&core.SelectField{Name: "band", MaxSelect: 1, Values: []string{"2.4", "5", "6", "60"}})
+	col.Fields.Add(&core.NumberField{Name: "signal"})
 	col.Fields.Add(&core.DateField{
 		Name:     "time",
 		Required: true,
@@ -8907,6 +8911,8 @@ func TestApiClientResources(t *testing.T) {
 		r.Set("device", device.Id)
 		r.Set("ssid", ssid)
 		r.Set("band", band)
+		// the signal drops 1 dBm every 30 s
+		r.Set("signal", -40-int(offset/(30*time.Second)))
 		r.Set("time", start.Add(offset))
 		r.Set("rx_bytes", rx)
 		r.Set("tx_bytes", tx)
@@ -8937,6 +8943,12 @@ func TestApiClientResources(t *testing.T) {
 	addSample(phone, 240*time.Second, ap2, "IoT", "5", 20, 40)
 	// After the period
 	addSample(phone, 10*time.Minute, ap2, "IoT", "5", 1, 1)
+	// A sample stored before the signal was
+	unknownSignalAt, err := types.ParseDateTime(start.Add(30 * time.Second))
+	assert.Nil(t, err)
+	_, err = app.DB().NewQuery("UPDATE client_resources SET signal = 0 WHERE client = {:client} AND time = {:time}").
+		Bind(dbx.Params{"client": phone.Id, "time": unknownSignalAt.String()}).Execute()
+	assert.Nil(t, err)
 
 	// Other clients, interleaved. The laptop's first sample was stored before
 	// the band was: that is no band switch.
@@ -8967,15 +8979,17 @@ func TestApiClientResources(t *testing.T) {
 		assert.Equal(t, phone.Id, res.Client)
 		assert.Equal(t, int64(60), res.Bucket)
 
+		signal := func(dBm float64) *float64 { return &dBm }
 		expected := []ClientTrafficPoint{
-			{Time: start.Unix(), Download: 100, Upload: 20},
+			// the signal of the second sample is unknown
+			{Time: start.Unix(), Download: 100, Upload: 20, Signal: signal(-40)},
 			// reconnect (400 B, 100 B) and roam (60 B, 50 B), 30 s each
-			{Time: start.Unix() + 60, Download: (400.0/30 + 2) / 2, Upload: (100.0/30 + 50.0/30) / 2},
-			{Time: start.Unix() + 120, Download: 3, Upload: 1},
+			{Time: start.Unix() + 60, Download: (400.0/30 + 2) / 2, Upload: (100.0/30 + 50.0/30) / 2, Signal: signal(-42.5)},
+			{Time: start.Unix() + 120, Download: 3, Upload: 1, Signal: signal(-44)},
 			// 600 B down and 300 B up in a minute
-			{Time: start.Unix() + 180, Download: 10, Upload: 5},
+			{Time: start.Unix() + 180, Download: 10, Upload: 5, Signal: signal(-46)},
 			// restarted counters on the other band
-			{Time: start.Unix() + 240, Download: 40.0 / 60, Upload: 20.0 / 60},
+			{Time: start.Unix() + 240, Download: 40.0 / 60, Upload: 20.0 / 60, Signal: signal(-48)},
 		}
 		assert.Equal(t, len(expected), len(res.Points))
 		for i := range expected {
@@ -8985,6 +8999,9 @@ func TestApiClientResources(t *testing.T) {
 			assert.Equal(t, expected[i].Time, res.Points[i].Time, i)
 			assert.InDelta(t, expected[i].Download, res.Points[i].Download, 1e-9, i)
 			assert.InDelta(t, expected[i].Upload, res.Points[i].Upload, 1e-9, i)
+			if assert.NotNil(t, res.Points[i].Signal, i) {
+				assert.InDelta(t, *expected[i].Signal, *res.Points[i].Signal, 1e-9, i)
+			}
 		}
 
 		assert.Equal(t, []ResourceEvent{

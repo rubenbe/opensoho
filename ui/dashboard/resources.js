@@ -99,6 +99,13 @@ function themeColor(name) {
     return color;
 }
 
+function median(values) {
+    if (!values.length) return null;
+    const sorted = [...values].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
 function formatTime(ms, withDate) {
     return new Date(ms).toLocaleString(undefined, withDate
         ? { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }
@@ -422,6 +429,7 @@ export function resourceHistoryChart() {
                     color,
                     latest: values.length ? values[values.length - 1] : null,
                     average: values.length ? values.reduce((a, b) => a + b, 0) / values.length : null,
+                    median: median(values),
                     peak: values.length ? Math.max(...values) : null,
                     data: axis.map((t) => ({ x: t * 1000, y: byTime.get(t)?.[c.key] ?? null })),
                 });
@@ -494,6 +502,7 @@ export function resourceHistoryChart() {
                     t.th(null, "Metric"),
                     t.th({ className: "num" }, "Latest"),
                     t.th({ className: "num" }, "Average"),
+                    t.th({ className: "num" }, "Median"),
                     t.th({ className: "num" }, "Peak"),
                 ),
             ),
@@ -507,6 +516,7 @@ export function resourceHistoryChart() {
                 t.td(null, r.column.label),
                 t.td({ className: "num" }, r.unit.format(r.latest)),
                 t.td({ className: "num" }, r.unit.format(r.average)),
+                t.td({ className: "num" }, r.unit.format(r.median)),
                 t.td({ className: "num" }, r.unit.format(r.peak)),
             ))),
         ));

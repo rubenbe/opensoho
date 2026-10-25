@@ -1,6 +1,6 @@
 import { loader, loading } from "./charts.js";
 import { selectAllLabel, selectItems, setItem } from "./selection.js";
-import { eventMarks, median, timeTicks } from "./timeseries.js";
+import { eventMarks, groupRows, median, timeTicks } from "./timeseries.js";
 
 // A dashboard card charting the history of some items (devices, clients)
 // over time: one line per selected item and metric, one chart per unit.
@@ -521,30 +521,36 @@ export function historyChart(config) {
                         t.th({ className: "num" }, "Peak"),
                     ),
                 ),
-                t.tbody(null, rows.map((r) => t.tr(
-                    null,
-                    t.td(
+                // one tbody per item, its name once for all its metrics
+                groupRows(rows, shownItems, config.metrics).map((group) => t.tbody(
+                    { className: "resource-group" },
+                    group.rows.map((r, i) => t.tr(
                         null,
-                        t.span({ className: "legend-swatch", style: `background:${r.color}` }),
-                        t.button(
-                            {
-                                type: "button",
-                                className: "device-link",
-                                title: config.openTitle,
-                                onclick: () => config.openItem(r.item),
-                            },
-                            nameOf(r.item),
-                        ),
-                        config.itemDetail?.(r.item)
-                            ? t.span({ className: "resource-item-detail" }, ` · ${config.itemDetail(r.item)}`)
+                        i === 0
+                            ? t.th(
+                                { scope: "rowgroup", rowSpan: group.rows.length, className: "resource-item" },
+                                t.span({ className: "legend-swatch", style: `background:${r.color}` }),
+                                t.button(
+                                    {
+                                        type: "button",
+                                        className: "device-link",
+                                        title: config.openTitle,
+                                        onclick: () => config.openItem(r.item),
+                                    },
+                                    nameOf(r.item),
+                                ),
+                                config.itemDetail?.(r.item)
+                                    ? t.span({ className: "resource-item-detail" }, ` · ${config.itemDetail(r.item)}`)
+                                    : null,
+                            )
                             : null,
-                    ),
-                    t.td(null, r.metric.label),
-                    t.td({ className: "num" }, r.unit.format(r.latest)),
-                    t.td({ className: "num" }, r.unit.format(r.average)),
-                    t.td({ className: "num" }, r.unit.format(r.median)),
-                    t.td({ className: "num" }, r.unit.format(r.peak)),
-                ))),
+                        t.td(null, r.metric.label),
+                        t.td({ className: "num" }, r.unit.format(r.latest)),
+                        t.td({ className: "num" }, r.unit.format(r.average)),
+                        t.td({ className: "num" }, r.unit.format(r.median)),
+                        t.td({ className: "num" }, r.unit.format(r.peak)),
+                    )),
+                )),
             ),
             // native replaceChildren() would render a null as text
             ...(marks.length

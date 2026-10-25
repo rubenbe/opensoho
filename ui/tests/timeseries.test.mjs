@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, test } from "node:test";
 
-import { bandLabel, bitRateStep, byteStep, clientLocation, formatDbm, eventMarks, formatBitRate, formatBytes, formatNumber, median, timeTicks } from "../dashboard/timeseries.js";
+import { bandLabel, bitRateStep, byteStep, clientLocation, formatDbm, groupRows, eventMarks, formatBitRate, formatBytes, formatNumber, median, timeTicks } from "../dashboard/timeseries.js";
 
 const originalTZ = process.env.TZ;
 afterEach(() => {
@@ -273,5 +273,27 @@ describe("formatDbm", () => {
         assert.equal(formatDbm(-62), "-62 dBm");
         assert.equal(formatDbm(-42.5), "-42 dBm");
         assert.equal(formatDbm(-42.6), "-43 dBm");
+    });
+});
+
+describe("groupRows", () => {
+    const a = { id: "a" };
+    const b = { id: "b" };
+    const c = { id: "c" };
+    const metrics = [{ key: "load1" }, { key: "mem_used" }, { key: "cpus" }];
+    const row = (item, key) => ({ item, metric: { key } });
+
+    test("per item in display order, metrics in metric order", () => {
+        // as the charts produce them: unit by unit
+        const rows = [row(b, "load1"), row(a, "load1"), row(b, "mem_used"), row(a, "mem_used"), row(a, "cpus")];
+        const groups = groupRows(rows, [a, b], metrics);
+        assert.deepEqual(groups.map((g) => g.item.id), ["a", "b"]);
+        assert.deepEqual(groups[0].rows.map((r) => r.metric.key), ["load1", "mem_used", "cpus"]);
+        assert.deepEqual(groups[1].rows.map((r) => r.metric.key), ["load1", "mem_used"]);
+    });
+
+    test("no group for an item without rows", () => {
+        assert.deepEqual(groupRows([row(a, "cpus")], [a, b, c], metrics).map((g) => g.item.id), ["a"]);
+        assert.deepEqual(groupRows([], [a], metrics), []);
     });
 });

@@ -129,3 +129,24 @@ export function clientLocation(client) {
 export function formatDbm(v) {
     return v == null ? "—" : `${Math.round(v)} dBm`;
 }
+
+/**
+ * Groups the summary rows per item, in the order of the items, and the rows
+ * of an item in the order of the metrics.
+ *
+ * @param  {Array} rows    [{ item, metric, ... }]
+ * @param  {Array} items   [{ id }] in display order.
+ * @param  {Array} metrics [{ key }] in display order.
+ * @return {Array} [{ item, rows }] without the items that have no rows.
+ */
+export function groupRows(rows, items, metrics) {
+    const metricIndex = (row) => metrics.findIndex((m) => m.key === row.metric.key);
+    return items
+        .map((item) => ({
+            item,
+            rows: rows
+                .filter((r) => r.item.id === item.id)
+                .sort((a, b) => metricIndex(a) - metricIndex(b)),
+        }))
+        .filter((group) => group.rows.length);
+}

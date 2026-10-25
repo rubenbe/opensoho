@@ -527,6 +527,27 @@
         color: var(--surfaceTxtHintColor);
     }
     .resource-summary {
+        /* the item name, once per group of rows: a row header styled as a cell */
+        .resource-item {
+            text-transform: none;
+            letter-spacing: normal;
+            font-size: var(--smFontSize);
+            font-weight: normal;
+            color: var(--surfaceTxtColor);
+            padding: 6px 8px;
+            vertical-align: top;
+        }
+        /* the later rows of a group start after the item name: not at the
+           table edge, where the upstream table style puts a border */
+        .resource-group tr:not(:first-child) > td:first-child {
+            border-left: 0;
+            border-bottom-left-radius: 0;
+        }
+        /* a stronger line between the groups */
+        .resource-group tr:last-child td,
+        .resource-group .resource-item {
+            border-bottom-color: var(--surfaceAlt3Color);
+        }
         .num {
             text-align: right;
             font-variant-numeric: tabular-nums;

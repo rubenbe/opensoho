@@ -3029,6 +3029,13 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 	bridgeMembers := bridgeMemberNames(payload.Interfaces)
 	wiredPorts := map[string]bool{}
 
+	// Backfilled reports are stored too, they fill the gaps in the history.
+	sampleTime, ok := parseAgentTime(agentTime)
+	if !ok {
+		sampleTime = time.Now().UTC()
+	}
+	keepClientHistory := historyRetentionDays(app) > 0
+
 	for _, iface := range payload.Interfaces {
 		if iface.Type == "wireless" && iface.Wireless != nil {
 			if interfacecollection != nil && wificollection != nil {
@@ -3069,6 +3076,9 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 					if err != nil {
 						return e.InternalServerError("Could not store entry", err), report
 					}
+					if keepClientHistory {
+						storeClientSample(app, cliententry, device, client, sampleTime)
+					}
 				}
 			}
 		}
@@ -3091,16 +3101,31 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 
 	storeDHCPLeases(app, payload.DHCPLeases, types.NowDateTime())
 
-	// Backfilled reports are stored too, they fill the gaps in the history.
-	sampleTime, ok := parseAgentTime(agentTime)
-	if !ok {
-		sampleTime = time.Now().UTC()
-	}
 	storeResourceSample(app, device, payload.Resources, payload.General.Uptime, sampleTime)
 
 	//current := e.Request.URL.Query().Get("current")
 	fmt.Println(payload.Type, "@", agentTime)
 	return e.Blob(200, "text/plain", []byte("")), report
+}
+
+// storeClientSample appends the byte counters of one associated client to its
+// history. The counters are cumulative, as reported by the AP: rx is what the
+// AP received from the client, tx what it sent to it. They restart when the
+// client reconnects.
+func storeClientSample(app core.App, clientRecord *core.Record, device *core.Record, client Client, sampleTime time.Time) {
+	collection, err := app.FindCachedCollectionByNameOrId("client_resources")
+	if err != nil {
+		return
+	}
+	record := core.NewRecord(collection)
+	record.Set("client", clientRecord.Id)
+	record.Set("device", device.Id)
+	record.Set("time", sampleTime)
+	record.Set("rx_bytes", client.Bytes.Rx)
+	record.Set("tx_bytes", client.Bytes.Tx)
+	if err := app.Save(record); err != nil {
+		app.Logger().Error("Failed to store client sample", "client", clientRecord.Id, "device", device.Id, "error", err)
+	}
 }
 
 // agentTimeLayout is the UTC timestamp the openwisp agent puts in the "time"
@@ -3175,7 +3200,8 @@ func historyRetentionDays(app core.App) int {
 	return days
 }
 
-// pruneResourceHistory drops the resource samples older than the retention.
+// pruneResourceHistory drops the device and client resource samples older
+// than the retention.
 // A retention of 0 drops all of them.
 func pruneResourceHistory(app core.App, now time.Time) {
 	days := historyRetentionDays(app)
@@ -3187,9 +3213,10 @@ func pruneResourceHistory(app core.App, now time.Time) {
 		}
 		where = dbx.NewExp("time < {:cutoff}", dbx.Params{"cutoff": cutoff.String()})
 	}
-	_, err := app.DB().Delete("device_resources", where).Execute()
-	if err != nil {
-		app.Logger().Error("Failed to prune resource history", "error", err)
+	for _, table := range []string{"device_resources", "client_resources"} {
+		if _, err := app.DB().Delete(table, where).Execute(); err != nil {
+			app.Logger().Error("Failed to prune resource history", "table", table, "error", err)
+		}
 	}
 }
 

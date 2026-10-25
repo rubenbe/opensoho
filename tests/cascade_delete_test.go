@@ -92,6 +92,7 @@ func TestDeviceDeleteCascades(t *testing.T) {
 
 	cascaded := []string{
 		"bridges",
+		"client_resources",
 		"clients",
 		"device_resources",
 		"ethernet",
@@ -134,4 +135,34 @@ func TestDeviceDeleteCascades(t *testing.T) {
 
 	_, err = app.FindRecordById("devices", survivor.Id)
 	assert.NoError(t, err)
+}
+
+func TestClientDeleteCascadesToItsHistory(t *testing.T) {
+	app := setupMigratedMemoryApp(t)
+
+	newRecord := func(collection string, data map[string]any) *core.Record {
+		c, err := app.FindCollectionByNameOrId(collection)
+		require.NoError(t, err)
+		r := core.NewRecord(c)
+		for k, v := range data {
+			r.Set(k, v)
+		}
+		require.NoError(t, app.SaveNoValidate(r))
+		return r
+	}
+
+	device := newRecord("devices", map[string]any{"name": "ap"})
+	doomed := newRecord("clients", map[string]any{"mac_address": "11:22:33:44:55:66"})
+	survivor := newRecord("clients", map[string]any{"mac_address": "66:55:44:33:22:11"})
+	for _, client := range []*core.Record{doomed, survivor} {
+		newRecord("client_resources", map[string]any{"client": client.Id, "device": device.Id, "time": "2026-10-25 12:00:00.000Z"})
+	}
+
+	require.NoError(t, app.Delete(doomed))
+
+	remaining, err := app.FindAllRecords("client_resources")
+	require.NoError(t, err)
+	require.Len(t, remaining, 1)
+	assert.Equal(t, survivor.Id, remaining[0].GetString("client"))
+	assert.Equal(t, device.Id, remaining[0].GetString("device"))
 }

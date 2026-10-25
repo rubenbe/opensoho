@@ -1540,12 +1540,17 @@ func TestPruneResourceHistory(t *testing.T) {
 	wificollection := setupWifiCollection(t, app, vlancollection)
 	devicecollection := setupDeviceCollection(t, app, wificollection)
 	resourcescollection := setupDeviceResourcesCollection(t, app, devicecollection)
+	clientcollection := setupClientsCollection(t, app)
+	clientresourcescollection := setupClientResourcesCollection(t, app, clientcollection, devicecollection)
 	settingscollection := setupSettingsCollection(t, app)
 
 	d := core.NewRecord(devicecollection)
 	d.Set("name", "ap1")
 	d.Set("health_status", "healthy")
 	assert.Nil(t, app.Save(d))
+	c := core.NewRecord(clientcollection)
+	c.Set("mac_address", "11:22:33:44:55:66")
+	assert.Nil(t, app.Save(c))
 
 	now := time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)
 	day := 24 * time.Hour
@@ -1554,10 +1559,20 @@ func TestPruneResourceHistory(t *testing.T) {
 		r.Set("device", d.Id)
 		r.Set("time", now.Add(-age))
 		assert.Nil(t, app.Save(r))
+
+		cr := core.NewRecord(clientresourcescollection)
+		cr.Set("client", c.Id)
+		cr.Set("device", d.Id)
+		cr.Set("time", now.Add(-age))
+		assert.Nil(t, app.Save(cr))
 	}
+	// the device and client samples are pruned alike
 	remaining := func() int {
 		samples, err := app.FindAllRecords("device_resources")
 		assert.Nil(t, err)
+		clientSamples, err := app.FindAllRecords("client_resources")
+		assert.Nil(t, err)
+		assert.Equal(t, len(samples), len(clientSamples))
 		return len(samples)
 	}
 
@@ -3477,6 +3492,108 @@ func TestHandleMonitoringStoresResourceSamples(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, 42, uptimeOnly.GetInt("uptime"))
 	assert.Equal(t, 0, uptimeOnly.GetInt("mem_total"))
+}
+
+func clientMonitoringPayload(clients string) string {
+	return `{"type": "DeviceMonitoring", "interfaces": [{"type": "wireless", "name": "phy1-ap0", "mac": "aa:bb:cc:dd:ee:ff",
+  "wireless": {"ssid": "OpenWRT", "frequency": 5180, "channel": 36, "htmode": "HE80", "clients": [` + clients + `]}}]}`
+}
+
+func TestHandleMonitoringStoresClientSamples(t *testing.T) {
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	clientcollection := setupClientsCollection(t, app)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	setupClientResourcesCollection(t, app, clientcollection, devicecollection)
+
+	newDevice := func(name string) *core.Record {
+		d := core.NewRecord(devicecollection)
+		d.Set("name", name)
+		d.Set("health_status", "healthy")
+		assert.Nil(t, app.Save(d))
+		return d
+	}
+	ap1 := newDevice("ap1")
+	ap2 := newDevice("ap2")
+
+	clients := `
+    {"mac": "11:22:33:44:55:66", "assoc": true, "signal": -60, "bytes": {"rx": 1000, "tx": 2000}},
+    {"mac": "66:55:44:33:22:11", "assoc": true, "signal": -70, "bytes": {"rx": 30, "tx": 40}},
+    {"mac": "aa:aa:aa:aa:aa:aa", "assoc": false, "signal": -90, "bytes": {"rx": 5, "tx": 6}}`
+	postResourcesMonitoring(t, app, ap1, clientcollection, "time=01-10-2026_08:00:00.000000", clientMonitoringPayload(clients))
+	// The first client roamed to the other AP, with restarted counters
+	postResourcesMonitoring(t, app, ap2, clientcollection, "time=01-10-2026_08:00:30.000000", clientMonitoringPayload(
+		`{"mac": "11:22:33:44:55:66", "assoc": true, "signal": -55, "bytes": {"rx": 10, "tx": 20}}`))
+
+	samples, err := app.FindRecordsByFilter("client_resources", "", "time,rx_bytes", 0, 0)
+	assert.Nil(t, err)
+	assert.Equal(t, 3, len(samples))
+
+	roamer, err := app.FindFirstRecordByData(clientcollection, "mac_address", "11:22:33:44:55:66")
+	assert.Nil(t, err)
+	other, err := app.FindFirstRecordByData(clientcollection, "mac_address", "66:55:44:33:22:11")
+	assert.Nil(t, err)
+
+	type sample struct {
+		client, device string
+		time           time.Time
+		rx, tx         int
+	}
+	got := []sample{}
+	for _, s := range samples {
+		got = append(got, sample{s.GetString("client"), s.GetString("device"), s.GetDateTime("time").Time(), s.GetInt("rx_bytes"), s.GetInt("tx_bytes")})
+	}
+	at := func(sec int) time.Time { return time.Date(2026, 10, 1, 8, 0, sec, 0, time.UTC) }
+	assert.Equal(t, []sample{
+		{other.Id, ap1.Id, at(0), 30, 40},
+		{roamer.Id, ap1.Id, at(0), 1000, 2000},
+		{roamer.Id, ap2.Id, at(30), 10, 20},
+	}, got)
+
+	// A client that is not associated has no record and no history
+	_, err = app.FindFirstRecordByData(clientcollection, "mac_address", "aa:aa:aa:aa:aa:aa")
+	assert.NotNil(t, err)
+
+	// Deleting the client deletes its history
+	assert.Nil(t, app.Delete(other))
+	samples, err = app.FindAllRecords("client_resources")
+	assert.Nil(t, err)
+	assert.Equal(t, 2, len(samples))
+}
+
+func TestHandleMonitoringStoresNoClientSamplesWithZeroRetention(t *testing.T) {
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	clientcollection := setupClientsCollection(t, app)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	setupClientResourcesCollection(t, app, clientcollection, devicecollection)
+	settingscollection := setupSettingsCollection(t, app)
+
+	setting := core.NewRecord(settingscollection)
+	setting.Set("name", "history_retention_days")
+	setting.Set("value", "0")
+	assert.Nil(t, app.Save(setting))
+
+	d := core.NewRecord(devicecollection)
+	d.Set("name", "ap1")
+	d.Set("health_status", "healthy")
+	assert.Nil(t, app.Save(d))
+
+	postResourcesMonitoring(t, app, d, clientcollection, "current=true", clientMonitoringPayload(
+		`{"mac": "11:22:33:44:55:66", "assoc": true, "signal": -60, "bytes": {"rx": 1000, "tx": 2000}}`))
+
+	// The client itself is still updated, only its history is not kept
+	_, err := app.FindFirstRecordByData(clientcollection, "mac_address", "11:22:33:44:55:66")
+	assert.Nil(t, err)
+	samples, err := app.FindAllRecords("client_resources")
+	assert.Nil(t, err)
+	assert.Equal(t, 0, len(samples))
 }
 
 func TestHandleMonitoringStoresNoResourcesWithZeroRetention(t *testing.T) {
@@ -6937,6 +7054,33 @@ func setupDeviceResourcesCollection(t *testing.T, app core.App, devicecollection
 		col.Fields.Add(&core.NumberField{Name: name, OnlyInt: true})
 	}
 	col.AddIndex("idx_device_resources_device_time", false, "device, time", "")
+	err := app.Save(col)
+	assert.Nil(t, err)
+	return col
+}
+
+func setupClientResourcesCollection(t *testing.T, app core.App, clientcollection *core.Collection, devicecollection *core.Collection) *core.Collection {
+	col := core.NewBaseCollection("client_resources")
+	col.Fields.Add(&core.RelationField{
+		Name:          "client",
+		MaxSelect:     1,
+		Required:      true,
+		CollectionId:  clientcollection.Id,
+		CascadeDelete: true,
+	})
+	col.Fields.Add(&core.RelationField{
+		Name:          "device",
+		MaxSelect:     1,
+		Required:      true,
+		CollectionId:  devicecollection.Id,
+		CascadeDelete: true,
+	})
+	col.Fields.Add(&core.DateField{
+		Name:     "time",
+		Required: true,
+	})
+	col.Fields.Add(&core.NumberField{Name: "rx_bytes", OnlyInt: true})
+	col.Fields.Add(&core.NumberField{Name: "tx_bytes", OnlyInt: true})
 	err := app.Save(col)
 	assert.Nil(t, err)
 	return col

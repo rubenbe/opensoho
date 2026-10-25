@@ -3495,9 +3495,9 @@ func TestHandleMonitoringStoresResourceSamples(t *testing.T) {
 	assert.Equal(t, 0, uptimeOnly.GetInt("mem_total"))
 }
 
-func clientInterface(name string, ssid string, clients string) string {
+func clientInterface(name string, ssid string, frequency int, clients string) string {
 	return `{"type": "wireless", "name": "` + name + `", "mac": "aa:bb:cc:dd:ee:ff",
-  "wireless": {"ssid": "` + ssid + `", "frequency": 5180, "channel": 36, "htmode": "HE80", "clients": [` + clients + `]}}`
+  "wireless": {"ssid": "` + ssid + `", "frequency": ` + strconv.Itoa(frequency) + `, "htmode": "HE20", "clients": [` + clients + `]}}`
 }
 
 func clientMonitoringPayload(interfaces ...string) string {
@@ -3525,17 +3525,17 @@ func TestHandleMonitoringStoresClientSamples(t *testing.T) {
 	ap1 := newDevice("ap1")
 	ap2 := newDevice("ap2")
 
-	// Two SSIDs on the same AP, each with its own clients
+	// Two SSIDs on the same AP, on different bands, each with its own clients
 	postResourcesMonitoring(t, app, ap1, clientcollection, "time=01-10-2026_08:00:00.000000", clientMonitoringPayload(
-		clientInterface("phy1-ap0", "Home", `
+		clientInterface("phy1-ap0", "Home", 5180, `
     {"mac": "11:22:33:44:55:66", "assoc": true, "signal": -60, "bytes": {"rx": 1000, "tx": 2000}},
     {"mac": "aa:aa:aa:aa:aa:aa", "assoc": false, "signal": -90, "bytes": {"rx": 5, "tx": 6}}`),
-		clientInterface("phy1-ap1", "IoT", `
+		clientInterface("phy0-ap1", "IoT", 2412, `
     {"mac": "66:55:44:33:22:11", "assoc": true, "signal": -70, "bytes": {"rx": 30, "tx": 40}}`),
 	))
 	// The first client roamed to the other AP, with restarted counters
 	postResourcesMonitoring(t, app, ap2, clientcollection, "time=01-10-2026_08:00:30.000000", clientMonitoringPayload(
-		clientInterface("phy1-ap0", "Home", `{"mac": "11:22:33:44:55:66", "assoc": true, "signal": -55, "bytes": {"rx": 10, "tx": 20}}`)))
+		clientInterface("phy1-ap0", "Home", 5180, `{"mac": "11:22:33:44:55:66", "assoc": true, "signal": -55, "bytes": {"rx": 10, "tx": 20}}`)))
 
 	samples, err := app.FindRecordsByFilter("client_resources", "", "time,rx_bytes", 0, 0)
 	assert.Nil(t, err)
@@ -3547,19 +3547,19 @@ func TestHandleMonitoringStoresClientSamples(t *testing.T) {
 	assert.Nil(t, err)
 
 	type sample struct {
-		client, device, ssid string
-		time                 time.Time
-		rx, tx               int
+		client, device, ssid, band string
+		time                       time.Time
+		rx, tx                     int
 	}
 	got := []sample{}
 	for _, s := range samples {
-		got = append(got, sample{s.GetString("client"), s.GetString("device"), s.GetString("ssid"), s.GetDateTime("time").Time(), s.GetInt("rx_bytes"), s.GetInt("tx_bytes")})
+		got = append(got, sample{s.GetString("client"), s.GetString("device"), s.GetString("ssid"), s.GetString("band"), s.GetDateTime("time").Time(), s.GetInt("rx_bytes"), s.GetInt("tx_bytes")})
 	}
 	at := func(sec int) time.Time { return time.Date(2026, 10, 1, 8, 0, sec, 0, time.UTC) }
 	assert.Equal(t, []sample{
-		{other.Id, ap1.Id, "IoT", at(0), 30, 40},
-		{roamer.Id, ap1.Id, "Home", at(0), 1000, 2000},
-		{roamer.Id, ap2.Id, "Home", at(30), 10, 20},
+		{other.Id, ap1.Id, "IoT", "2.4", at(0), 30, 40},
+		{roamer.Id, ap1.Id, "Home", "5", at(0), 1000, 2000},
+		{roamer.Id, ap2.Id, "Home", "5", at(30), 10, 20},
 	}, got)
 
 	// A client that is not associated has no record and no history
@@ -3595,7 +3595,7 @@ func TestHandleMonitoringStoresNoClientSamplesWithZeroRetention(t *testing.T) {
 	assert.Nil(t, app.Save(d))
 
 	postResourcesMonitoring(t, app, d, clientcollection, "current=true", clientMonitoringPayload(
-		clientInterface("phy1-ap0", "Home", `{"mac": "11:22:33:44:55:66", "assoc": true, "signal": -60, "bytes": {"rx": 1000, "tx": 2000}}`)))
+		clientInterface("phy1-ap0", "Home", 5180, `{"mac": "11:22:33:44:55:66", "assoc": true, "signal": -60, "bytes": {"rx": 1000, "tx": 2000}}`)))
 
 	// The client itself is still updated, only its history is not kept
 	_, err := app.FindFirstRecordByData(clientcollection, "mac_address", "11:22:33:44:55:66")
@@ -7085,6 +7085,7 @@ func setupClientResourcesCollection(t *testing.T, app core.App, clientcollection
 		CascadeDelete: true,
 	})
 	col.Fields.Add(&core.TextField{Name: "ssid"})
+	col.Fields.Add(&core.SelectField{Name: "band", MaxSelect: 1, Values: []string{"2.4", "5", "6", "60"}})
 	col.Fields.Add(&core.DateField{
 		Name:     "time",
 		Required: true,
@@ -8900,11 +8901,12 @@ func TestApiClientResources(t *testing.T) {
 	gone := newClient("ff:ee:dd:cc:bb:aa", "Gone")
 
 	start := time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
-	addSample := func(client *core.Record, offset time.Duration, device *core.Record, ssid string, rx int, tx int) {
+	addSample := func(client *core.Record, offset time.Duration, device *core.Record, ssid string, band string, rx int, tx int) {
 		r := core.NewRecord(clientresourcescollection)
 		r.Set("client", client.Id)
 		r.Set("device", device.Id)
 		r.Set("ssid", ssid)
+		r.Set("band", band)
 		r.Set("time", start.Add(offset))
 		r.Set("rx_bytes", rx)
 		r.Set("tx_bytes", tx)
@@ -8919,26 +8921,29 @@ func TestApiClientResources(t *testing.T) {
 	}
 
 	// Before the period
-	addSample(phone, -30*time.Second, ap1, "Home", 1000, 5000)
+	addSample(phone, -30*time.Second, ap1, "Home", "5", 1000, 5000)
 	// 20 B/s up, 100 B/s down
-	addSample(phone, 0, ap1, "Home", 1600, 8000)
-	addSample(phone, 30*time.Second, ap1, "Home", 2200, 11000)
+	addSample(phone, 0, ap1, "Home", "5", 1600, 8000)
+	addSample(phone, 30*time.Second, ap1, "Home", "5", 2200, 11000)
 	// Reconnected: the counters restarted
-	addSample(phone, 60*time.Second, ap1, "Home", 100, 400)
+	addSample(phone, 60*time.Second, ap1, "Home", "5", 100, 400)
 	// Roamed to the other AP
-	addSample(phone, 90*time.Second, ap2, "Home", 50, 60)
-	// Switched SSID on that AP
-	addSample(phone, 120*time.Second, ap2, "IoT", 30, 90)
+	addSample(phone, 90*time.Second, ap2, "Home", "5", 50, 60)
+	// Switched SSID on that AP, which is on 2.4 GHz
+	addSample(phone, 120*time.Second, ap2, "IoT", "2.4", 30, 90)
 	// After a gap of a minute
-	addSample(phone, 180*time.Second, ap2, "IoT", 330, 690)
+	addSample(phone, 180*time.Second, ap2, "IoT", "2.4", 330, 690)
+	// Switched to 5 GHz, same AP and SSID
+	addSample(phone, 240*time.Second, ap2, "IoT", "5", 20, 40)
 	// After the period
-	addSample(phone, 10*time.Minute, ap2, "IoT", 1, 1)
+	addSample(phone, 10*time.Minute, ap2, "IoT", "5", 1, 1)
 
-	// Other clients, interleaved
-	addSample(laptop, 0, ap1, "Home", 10, 10)
-	addSample(laptop, 30*time.Second, ap1, "Home", 40, 70)
-	addSample(tv, 60*time.Second, ap1, "Home", 5, 5)
-	addSample(gone, -5*time.Minute, ap1, "Home", 5, 5)
+	// Other clients, interleaved. The laptop's first sample was stored before
+	// the band was: that is no band switch.
+	addSample(laptop, 0, ap1, "Home", "", 10, 10)
+	addSample(laptop, 30*time.Second, ap1, "Home", "2.4", 40, 70)
+	addSample(tv, 60*time.Second, ap1, "Home", "6", 5, 5)
+	addSample(gone, -5*time.Minute, ap1, "Home", "5", 5, 5)
 
 	// The AP the phone roamed to rebooted at 12:02:20, while the phone was on
 	// it. The AP it left and one it never used rebooted then too.
@@ -8969,6 +8974,8 @@ func TestApiClientResources(t *testing.T) {
 			{Time: start.Unix() + 120, Download: 3, Upload: 1},
 			// 600 B down and 300 B up in a minute
 			{Time: start.Unix() + 180, Download: 10, Upload: 5},
+			// restarted counters on the other band
+			{Time: start.Unix() + 240, Download: 40.0 / 60, Upload: 20.0 / 60},
 		}
 		assert.Equal(t, len(expected), len(res.Points))
 		for i := range expected {
@@ -8981,10 +8988,11 @@ func TestApiClientResources(t *testing.T) {
 		}
 
 		assert.Equal(t, []ResourceEvent{
-			{Type: "reconnect", Time: start.Unix() + 60, Device: ap1.Id, DeviceName: "Garage AP", SSID: "Home"},
-			{Type: "roam", Time: start.Unix() + 90, Device: ap2.Id, DeviceName: "Living Room AP", SSID: "Home"},
-			{Type: "ssid", Time: start.Unix() + 120, Device: ap2.Id, DeviceName: "Living Room AP", SSID: "IoT"},
+			{Type: "reconnect", Time: start.Unix() + 60, Device: ap1.Id, DeviceName: "Garage AP", SSID: "Home", Band: "5"},
+			{Type: "roam", Time: start.Unix() + 90, Device: ap2.Id, DeviceName: "Living Room AP", SSID: "Home", Band: "5"},
+			{Type: "ssid", Time: start.Unix() + 120, Device: ap2.Id, DeviceName: "Living Room AP", SSID: "IoT", Band: "2.4"},
 			{Type: "reboot", Time: start.Unix() + 140, Device: ap2.Id, DeviceName: "Living Room AP"},
+			{Type: "band", Time: start.Unix() + 240, Device: ap2.Id, DeviceName: "Living Room AP", SSID: "IoT", Band: "5"},
 		}, res.Events)
 	})
 
@@ -9010,10 +9018,11 @@ func TestApiClientResources(t *testing.T) {
 		}
 		assert.Nil(t, json.Unmarshal(rec.Body.Bytes(), &res))
 		// by name, without the client that has no samples in the period
+		// with the band of their last sample in the period
 		assert.Equal(t, []ClientTraffic{
-			{Id: laptop.Id, Name: "66:55:44:33:22:11", MAC: "66:55:44:33:22:11", Download: 60, Upload: 30},
-			{Id: phone.Id, Name: "Phone", MAC: "11:22:33:44:55:66", Download: 3000 + 3000 + 400 + 60 + 90 + 600, Upload: 600 + 600 + 100 + 50 + 30 + 300},
-			{Id: tv.Id, Name: "TV", MAC: "aa:bb:cc:dd:ee:ff", Download: 0, Upload: 0},
+			{Id: laptop.Id, Name: "66:55:44:33:22:11", MAC: "66:55:44:33:22:11", Band: "2.4", Download: 60, Upload: 30},
+			{Id: phone.Id, Name: "Phone", MAC: "11:22:33:44:55:66", Band: "5", Download: 3000 + 3000 + 400 + 60 + 90 + 600 + 40, Upload: 600 + 600 + 100 + 50 + 30 + 300 + 20},
+			{Id: tv.Id, Name: "TV", MAC: "aa:bb:cc:dd:ee:ff", Band: "6", Download: 0, Upload: 0},
 		}, res.Clients)
 	})
 }

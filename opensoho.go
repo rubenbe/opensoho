@@ -3077,7 +3077,7 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 						return e.InternalServerError("Could not store entry", err), report
 					}
 					if keepClientHistory {
-						storeClientSample(app, cliententry, device, iface.Wireless.SSID, client, sampleTime)
+						storeClientSample(app, cliententry, device, iface.Wireless.SSID, frequencyToBand(iface.Wireless.Frequency), client, sampleTime)
 					}
 				}
 			}
@@ -3109,10 +3109,11 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 }
 
 // storeClientSample appends the byte counters of one associated client to its
-// history, with the device and SSID it was connected to. The counters are
-// cumulative, as reported by the AP: rx is what the AP received from the
-// client, tx what it sent to it. They restart when the client reconnects.
-func storeClientSample(app core.App, clientRecord *core.Record, device *core.Record, ssid string, client Client, sampleTime time.Time) {
+// history, with the device, SSID and band (GHz) it was connected to. The
+// counters are cumulative, as reported by the AP: rx is what the AP received
+// from the client, tx what it sent to it. They restart when the client
+// reconnects.
+func storeClientSample(app core.App, clientRecord *core.Record, device *core.Record, ssid string, band string, client Client, sampleTime time.Time) {
 	collection, err := app.FindCachedCollectionByNameOrId("client_resources")
 	if err != nil {
 		return
@@ -3121,6 +3122,7 @@ func storeClientSample(app core.App, clientRecord *core.Record, device *core.Rec
 	record.Set("client", clientRecord.Id)
 	record.Set("device", device.Id)
 	record.Set("ssid", ssid)
+	record.Set("band", band)
 	record.Set("time", sampleTime)
 	record.Set("rx_bytes", client.Bytes.Rx)
 	record.Set("tx_bytes", client.Bytes.Tx)
@@ -4194,11 +4196,12 @@ func apiDeviceResources(e *core.RequestEvent) error {
 // ResourceEvent is something that happened to a device, derived from its
 // resource history when it is requested.
 type ResourceEvent struct {
-	Type       string `json:"type"` // "reboot", "roam", "ssid" or "reconnect"
+	Type       string `json:"type"` // "reboot", "roam", "ssid", "band" or "reconnect"
 	Time       int64  `json:"t"`    // unix seconds
 	Device     string `json:"device,omitempty"`
 	DeviceName string `json:"device_name,omitempty"`
 	SSID       string `json:"ssid,omitempty"`
+	Band       string `json:"band,omitempty"` // GHz
 }
 
 // deviceRebootEvents finds the reboots of a device in [from, to). A sample
@@ -4262,8 +4265,8 @@ func deviceRebootEvents(app core.App, deviceId string, from time.Time, to time.T
 
 // clientTrafficSQL selects the client samples of the period with the traffic
 // since the client's previous sample. The byte counters restart when the
-// client reconnects, roams to another AP or switches SSID; the traffic is then
-// the new counter value. download is what the AP sent to the client (tx),
+// client reconnects, roams to another AP or switches SSID or band; the traffic
+// is then the new counter value. download is what the AP sent to the client (tx),
 // upload what it received from it (rx). The %s is the client filter.
 //
 // The samples from {:start} on are read, so the first sample of the period
@@ -4274,6 +4277,7 @@ const clientTrafficSQL = `
 			[[client]] AS client,
 			[[device]] AS device,
 			[[ssid]] AS ssid,
+			[[band]] AS band,
 			CAST(strftime('%%s', [[time]]) AS INTEGER) AS t,
 			[[rx_bytes]] AS rx,
 			[[tx_bytes]] AS tx,
@@ -4281,13 +4285,18 @@ const clientTrafficSQL = `
 			LAG([[rx_bytes]]) OVER w AS prev_rx,
 			LAG([[tx_bytes]]) OVER w AS prev_tx,
 			LAG([[device]]) OVER w AS prev_device,
-			LAG([[ssid]]) OVER w AS prev_ssid
+			LAG([[ssid]]) OVER w AS prev_ssid,
+			LAG([[band]]) OVER w AS prev_band
 		FROM {{client_resources}}
 		WHERE %s AND [[time]] < {:to} AND [[time]] >= {:start}
 		WINDOW w AS (PARTITION BY [[client]] ORDER BY [[time]])
 	),
 	deltas AS (
-		SELECT *, (device != prev_device OR ssid != prev_ssid OR rx < prev_rx OR tx < prev_tx) AS restarted
+		SELECT *, (
+			device != prev_device OR ssid != prev_ssid OR rx < prev_rx OR tx < prev_tx
+			-- samples stored before the band was have none
+			OR (band != prev_band AND band != '' AND prev_band != '')
+		) AS restarted
 		FROM samples
 		WHERE prev_t IS NOT NULL AND t > prev_t AND t >= {:from}
 	),
@@ -4340,7 +4349,8 @@ func deviceNames(app core.App, ids []string) map[string]string {
 
 // apiClientResources returns the traffic of one client per bucket, and its
 // events: roaming to another AP, switching SSID, reconnecting and the reboots
-// of the AP it was connected to. See parseHistoryRange for the parameters.
+// of the AP it was connected to. Switching band on the same AP and SSID is an
+// event of its own. See parseHistoryRange for the parameters.
 func apiClientResources(e *core.RequestEvent) error {
 	collection, err := clientsCollection(e.App)
 	if err != nil {
@@ -4391,11 +4401,13 @@ func apiClientResources(e *core.RequestEvent) error {
 		Time       int64  `db:"t"`
 		Device     string `db:"device"`
 		SSID       string `db:"ssid"`
+		Band       string `db:"band"`
 		PrevDevice string `db:"prev_device"`
 		PrevSSID   string `db:"prev_ssid"`
+		PrevBand   string `db:"prev_band"`
 	}
 	err = e.App.DB().NewQuery(query + `
-		SELECT t, device, ssid, prev_device, prev_ssid FROM deltas WHERE restarted ORDER BY t`).Bind(params).All(&changes)
+		SELECT t, device, ssid, band, prev_device, prev_ssid, prev_band FROM deltas WHERE restarted ORDER BY t`).Bind(params).All(&changes)
 	if err != nil {
 		return e.InternalServerError("Failed to load client events", err)
 	}
@@ -4426,11 +4438,13 @@ func apiClientResources(e *core.RequestEvent) error {
 
 	events := []ResourceEvent{}
 	for _, c := range changes {
-		event := ResourceEvent{Type: "reconnect", Time: c.Time, Device: c.Device, DeviceName: names[c.Device], SSID: c.SSID}
+		event := ResourceEvent{Type: "reconnect", Time: c.Time, Device: c.Device, DeviceName: names[c.Device], SSID: c.SSID, Band: c.Band}
 		if c.Device != c.PrevDevice {
 			event.Type = "roam"
 		} else if c.SSID != c.PrevSSID {
 			event.Type = "ssid"
+		} else if c.Band != c.PrevBand && c.Band != "" && c.PrevBand != "" {
+			event.Type = "band"
 		}
 		events = append(events, event)
 	}
@@ -4460,11 +4474,13 @@ func apiClientResources(e *core.RequestEvent) error {
 	})
 }
 
-// ClientTraffic is the total traffic of a client in a period, in bytes.
+// ClientTraffic is the total traffic of a client in a period, in bytes, and
+// the band (GHz) of its last sample in the period.
 type ClientTraffic struct {
 	Id       string `json:"id"`
 	Name     string `json:"name"`
 	MAC      string `json:"mac"`
+	Band     string `json:"band"`
 	Download int64  `json:"download"`
 	Upload   int64  `json:"upload"`
 }
@@ -4483,6 +4499,7 @@ func apiClientTraffic(e *core.RequestEvent) error {
 
 	var totals []struct {
 		Client   string `db:"client"`
+		Band     string `db:"band"`
 		Download int64  `db:"download"`
 		Upload   int64  `db:"upload"`
 	}
@@ -4493,7 +4510,11 @@ func apiClientTraffic(e *core.RequestEvent) error {
 		return e.BadRequestError("Invalid 'from'", err)
 	}
 	err = e.App.DB().NewQuery(fmt.Sprintf(clientTrafficSQL, "1 = 1") + `
-		SELECT c.client AS client, COALESCE(SUM(traffic.download_bytes), 0) AS download, COALESCE(SUM(traffic.upload_bytes), 0) AS upload
+		SELECT
+			c.client AS client,
+			(SELECT band FROM samples last WHERE last.client = c.client ORDER BY last.t DESC LIMIT 1) AS band,
+			COALESCE(SUM(traffic.download_bytes), 0) AS download,
+			COALESCE(SUM(traffic.upload_bytes), 0) AS upload
 		FROM (SELECT DISTINCT client FROM samples WHERE t >= {:from}) c
 		LEFT JOIN traffic ON traffic.client = c.client
 		GROUP BY c.client`).Bind(dbx.Params{
@@ -4528,6 +4549,7 @@ func apiClientTraffic(e *core.RequestEvent) error {
 			Id:       record.Id,
 			Name:     clientName(record),
 			MAC:      record.GetString("mac_address"),
+			Band:     t.Band,
 			Download: t.Download,
 			Upload:   t.Upload,
 		})

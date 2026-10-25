@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, test } from "node:test";
 
-import { bandLabel, bitRateStep, byteStep, clientLocation, formatDbm, groupRows, eventMarks, formatBitRate, formatBytes, formatNumber, median, timeTicks } from "../dashboard/timeseries.js";
+import { bandLabel, bitRateStep, byteStep, clientLocation, formatDbm, groupRows, markKey, marksNear, eventMarks, formatBitRate, formatBytes, formatNumber, median, timeTicks } from "../dashboard/timeseries.js";
 
 const originalTZ = process.env.TZ;
 afterEach(() => {
@@ -295,5 +295,30 @@ describe("groupRows", () => {
     test("no group for an item without rows", () => {
         assert.deepEqual(groupRows([row(a, "cpus")], [a, b, c], metrics).map((g) => g.item.id), ["a"]);
         assert.deepEqual(groupRows([], [a], metrics), []);
+    });
+});
+
+describe("marksNear", () => {
+    const at = (id, px) => ({ entity: { id }, type: "reboot", x: px * 1000, px });
+    const pixelOf = (m) => m.px;
+    const marks = [at("a", 100), at("b", 100), at("c", 130), at("d", 300)];
+
+    test("the marks of the nearest line within the tolerance", () => {
+        assert.deepEqual(marksNear(marks, pixelOf, 126, 12).map((m) => m.entity.id), ["c"]);
+        // lines at the same position come together
+        assert.deepEqual(marksNear(marks, pixelOf, 108, 12).map((m) => m.entity.id), ["a", "b"]);
+    });
+
+    test("nothing out of reach", () => {
+        assert.deepEqual(marksNear(marks, pixelOf, 200, 12), []);
+        assert.deepEqual(marksNear(marks, pixelOf, 106, 5), []);
+        assert.deepEqual(marksNear([], pixelOf, 100, 12), []);
+    });
+});
+
+describe("markKey", () => {
+    test("the item, type and time", () => {
+        assert.equal(markKey({ entity: { id: "a" }, type: "roam", x: 5000 }), "a|roam|5000");
+        assert.notEqual(markKey({ entity: { id: "a" }, type: "roam", x: 5000 }), markKey({ entity: { id: "b" }, type: "roam", x: 5000 }));
     });
 });

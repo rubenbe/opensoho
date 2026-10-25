@@ -520,6 +520,58 @@
             display: flex;
             align-items: center;
             gap: 6px;
+        }
+    }
+    /* an entry of the event list: selects its line on the charts */
+    .resource-event {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        width: 100%;
+        min-height: 36px;
+        padding: 4px 8px;
+        border: 0;
+        border-radius: var(--borderRadius);
+        background: none;
+        font: inherit;
+        color: inherit;
+        text-align: left;
+        cursor: pointer;
+        &:hover {
+            background: var(--surfaceAlt1Color);
+        }
+        &[aria-pressed="true"] {
+            background: var(--surfaceAlt2Color);
+            font-weight: 600;
+        }
+    }
+    /* names the selected events next to their line */
+    .resource-event-bubble {
+        position: absolute;
+        top: 0;
+        z-index: 3;
+        display: flex;
+        align-items: flex-start;
+        gap: 4px;
+        max-width: min(320px, 80%);
+        padding: 6px 4px 6px 10px;
+        border: 1px solid var(--surfaceAlt3Color);
+        border-radius: var(--borderRadius);
+        background: var(--surfaceColor);
+        box-shadow: var(--boxShadow);
+        font-size: var(--smFontSize);
+        &[hidden] {
+            display: none;
+        }
+        ul {
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+        li {
+            display: flex;
+            align-items: baseline;
+            gap: 6px;
             padding: 2px 0;
         }
     }

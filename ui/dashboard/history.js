@@ -1,6 +1,6 @@
 import { loader, loading } from "./charts.js";
 import { selectAllLabel, selectItems, setItem } from "./selection.js";
-import { eventMarks, groupRows, median, timeTicks } from "./timeseries.js";
+import { eventMarks, groupRows, markKey, marksNear, median, timeTicks } from "./timeseries.js";
 
 // A dashboard card charting the history of some items (devices, clients)
 // over time: one line per selected item and metric, one chart per unit.
@@ -115,8 +115,14 @@ function pickerMenu() {
     };
 }
 
+// Pixels from an event line that a tap still hits: about a fingertip.
+const TAP_TOLERANCE = 12;
+const HOVER_TOLERANCE = 5;
+
 // Draws the events (see eventMarks) as dashed vertical lines with a small
-// marker on top, and names them (options.label) on hover.
+// marker on top, the selected ones (options.selected, mark keys) bold and
+// solid. Names them (options.label) on hover, and reports a click or tap
+// near a line (options.onSelect, with the marks of that line, or none).
 const eventLinesPlugin = {
     id: "eventLines",
     afterDatasetsDraw(chart, _, options) {
@@ -124,19 +130,21 @@ const eventLinesPlugin = {
         for (const mark of options.marks || []) {
             const x = scales.x.getPixelForValue(mark.x);
             if (x < chartArea.left || x > chartArea.right) continue;
+            const selected = options.selected?.has(markKey(mark));
+            const size = selected ? 7 : 5;
             ctx.save();
             ctx.strokeStyle = mark.color;
             ctx.fillStyle = mark.color;
-            ctx.lineWidth = 1.5;
-            ctx.setLineDash([4, 3]);
+            ctx.lineWidth = selected ? 3 : 1.5;
+            ctx.setLineDash(selected ? [] : [4, 3]);
             ctx.beginPath();
             ctx.moveTo(x, chartArea.top);
             ctx.lineTo(x, chartArea.bottom);
             ctx.stroke();
             ctx.setLineDash([]);
             ctx.beginPath();
-            ctx.moveTo(x - 5, chartArea.top - 7);
-            ctx.lineTo(x + 5, chartArea.top - 7);
+            ctx.moveTo(x - size, chartArea.top - 7);
+            ctx.lineTo(x + size, chartArea.top - 7);
             ctx.lineTo(x, chartArea.top);
             ctx.closePath();
             ctx.fill();
@@ -145,10 +153,13 @@ const eventLinesPlugin = {
     },
     afterEvent(chart, args, options) {
         const event = args.event;
+        const pixelOf = (m) => chart.scales.x.getPixelForValue(m.x);
+        if (event.type === "click") {
+            options.onSelect?.(marksNear(options.marks || [], pixelOf, event.x, TAP_TOLERANCE));
+            return;
+        }
         if (event.type !== "mousemove" && event.type !== "mouseout") return;
-        const near = event.type === "mousemove"
-            ? (options.marks || []).filter((m) => Math.abs(chart.scales.x.getPixelForValue(m.x) - event.x) <= 5)
-            : [];
+        const near = event.type === "mousemove" ? marksNear(options.marks || [], pixelOf, event.x, HOVER_TOLERANCE) : [];
         chart.canvas.title = near.map((m) => options.label(m)).join("\n");
     },
 };
@@ -161,9 +172,13 @@ const eventLinesPlugin = {
  *
  * @param  {Object}   unit       { key, label, format(value), step?(max), beginAtZero? (default true) }
  * @param  {Function} eventLabel Mark -> text shown on hover.
- * @return {Element}  The canvas, with an update({ datasets, marks, from, to }) method.
+ * @param  {Function} onSelect   Called with the marks of a clicked or tapped event line, or [].
+ * @return {Element}  The canvas, with an update({ datasets, marks, from, to }) method,
+ *                    select(keys) to emphasize the marks with those keys,
+ *                    pixelFor(x) giving the position of a time and
+ *                    hideTooltip().
  */
-function lineCanvas(unit, eventLabel) {
+function lineCanvas(unit, eventLabel, onSelect) {
     let chart;
     let data = { datasets: [], marks: [], from: 0, to: 0 };
 
@@ -213,7 +228,7 @@ function lineCanvas(unit, eventLabel) {
                         },
                     },
                     plugins: {
-                        eventLines: { marks: [], label: eventLabel },
+                        eventLines: { marks: [], label: eventLabel, selected: new Set(), onSelect },
                         legend: {
                             position: "bottom",
                             labels: { usePointStyle: true, pointStyle: "line", boxWidth: 28, padding: 16 },
@@ -256,6 +271,22 @@ function lineCanvas(unit, eventLabel) {
 
         chart.options.plugins.eventLines.marks = data.marks;
         chart.data.datasets = data.datasets;
+        chart.update("none");
+    };
+
+    canvas.select = (keys) => {
+        if (!chart) return;
+        chart.options.plugins.eventLines.selected = keys;
+        chart.update("none");
+    };
+
+    canvas.pixelFor = (x) => chart?.scales.x.getPixelForValue(x) ?? null;
+
+    // A tap also shows the data tooltip, which would cover the event bubble.
+    canvas.hideTooltip = () => {
+        if (!chart) return;
+        chart.tooltip?.setActiveElements([], { x: 0, y: 0 });
+        chart.setActiveElements([]);
         chart.update("none");
     };
 
@@ -311,7 +342,13 @@ export function historyChart(config) {
     const chartsBlock = t.div(null, charts, summary);
     const content = t.div({ className: "resource-content" });
     let canvases = {};
+    let bubbles = {}; // unit key -> element naming the selected events
     let shownUnits = "";
+    // the selected (clicked or tapped) events: the chart they were picked on
+    // and their mark keys
+    let selection = null;
+    let shownMarks = [];
+    let eventButtons = new Map(); // mark key -> button in the event list
 
     let watcher;
 
@@ -323,6 +360,11 @@ export function historyChart(config) {
                 watcher = watch(() => app.store.activeColorScheme, render);
             },
             onunmount: () => watcher?.unwatch(),
+            onkeydown: (e) => {
+                if (e.key === "Escape" && selection) {
+                    select(null, []);
+                }
+            },
         },
         loader(state),
         t.div(
@@ -470,12 +512,14 @@ export function historyChart(config) {
         if (unitKeys !== shownUnits) {
             shownUnits = unitKeys;
             canvases = {};
+            bubbles = {};
             charts.replaceChildren(...units.map((u) => {
-                canvases[u.key] = lineCanvas(u, eventLabel);
+                canvases[u.key] = lineCanvas(u, eventLabel, (picked) => select(u.key, picked));
+                bubbles[u.key] = t.div({ className: "resource-event-bubble", role: "status", hidden: true });
                 return t.div(
                     { className: "resource-chart" },
                     units.length > 1 ? t.div({ className: "band-label" }, u.label) : null,
-                    t.div({ className: "resource-chart-wrap" }, canvases[u.key]),
+                    t.div({ className: "resource-chart-wrap" }, canvases[u.key], bubbles[u.key]),
                 );
             }));
         }
@@ -506,6 +550,7 @@ export function historyChart(config) {
             rows.push(...series.map((s) => ({ ...s, unit: u })));
         }
 
+        eventButtons = new Map();
         summary.replaceChildren(
             t.table(
                 { className: "net-table resource-summary" },
@@ -557,14 +602,92 @@ export function historyChart(config) {
                 ? [t.div(
                     { className: "resource-events" },
                     t.div({ className: "band-label" }, config.eventsTitle),
-                    t.ul(null, marks.map((m) => t.li(
-                        null,
-                        t.span({ className: "legend-swatch", style: `background:${m.color}` }),
-                        eventLabel(m),
-                    ))),
+                    t.ul(null, marks.map((m) => {
+                        const button = t.button(
+                            {
+                                type: "button",
+                                className: "resource-event",
+                                onclick: () => select(units[0].key, [m], true),
+                            },
+                            t.span({ className: "legend-swatch", style: `background:${m.color}` }),
+                            eventLabel(m),
+                        );
+                        eventButtons.set(markKey(m), button);
+                        return t.li(null, button);
+                    })),
                 )]
                 : []),
         );
+
+        shownMarks = marks;
+        showSelection();
+    }
+
+    /**
+     * Selects the events picked on the chart of unit, or none. Picking the
+     * selected events again deselects them.
+     *
+     * @param {string}  unit   Key of the chart to name the events on.
+     * @param {Array}   picked Marks, see eventMarks.
+     * @param {boolean} reveal Scroll the chart into view (when picked from the list).
+     */
+    function select(unit, picked, reveal = false) {
+        const keys = picked.map(markKey);
+        const same = selection && selection.keys.length === keys.length && keys.every((k) => selection.keys.includes(k));
+        selection = keys.length && !same ? { unit, keys } : null;
+        if (selection) {
+            canvases[unit]?.hideTooltip();
+        }
+        showSelection();
+        if (selection && reveal) {
+            canvases[unit]?.closest(".resource-chart")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        }
+    }
+
+    // Emphasizes the selected events on every chart and names them in a
+    // bubble on the chart they were picked on.
+    function showSelection() {
+        const selected = shownMarks.filter((m) => selection?.keys.includes(markKey(m)));
+        if (selection && !selected.length) {
+            // gone after a reload
+            selection = null;
+        }
+        const keys = new Set(selected.map(markKey));
+
+        for (const [unit, canvas] of Object.entries(canvases)) {
+            canvas.select(keys);
+            const bubble = bubbles[unit];
+            if (!selection || unit !== selection.unit) {
+                bubble.hidden = true;
+                continue;
+            }
+            bubble.replaceChildren(
+                t.ul(null, selected.map((m) => t.li(
+                    null,
+                    t.span({ className: "legend-swatch", style: `background:${m.color}` }),
+                    eventLabel(m),
+                ))),
+                t.button(
+                    {
+                        type: "button",
+                        className: "btn sm transparent circle",
+                        ariaLabel: "Close",
+                        onclick: () => select(null, []),
+                    },
+                    t.i({ className: "ri-close-line", ariaHidden: true }),
+                ),
+            );
+            bubble.hidden = false;
+            // next to the line, on the side with the most room
+            const x = canvas.pixelFor(selected[0].x) ?? 0;
+            const width = canvas.clientWidth;
+            bubble.style.left = x < width / 2 ? `${x + 8}px` : "auto";
+            bubble.style.right = x < width / 2 ? "auto" : `${width - x + 8}px`;
+        }
+
+        for (const [key, button] of eventButtons) {
+            button.ariaPressed = String(keys.has(key));
+        }
     }
 
     async function load() {

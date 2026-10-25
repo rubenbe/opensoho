@@ -150,3 +150,30 @@ export function groupRows(rows, items, metrics) {
         }))
         .filter((group) => group.rows.length);
 }
+
+// Identifies an event mark (see eventMarks).
+export function markKey(mark) {
+    return `${mark.entity.id}|${mark.type}|${mark.x}`;
+}
+
+/**
+ * The marks on the line nearest to a pointer or tap position, if that line is
+ * within tolerance pixels. Lines drawn at the same position (e.g. the reboot
+ * of an AP several clients used) are found together.
+ *
+ * @param  {Array}    marks     See eventMarks.
+ * @param  {Function} pixelOf   Mark -> its x position in pixels.
+ * @param  {number}   x         The pointer position in pixels.
+ * @param  {number}   tolerance Pixels.
+ * @return {Array}    The marks, or [].
+ */
+export function marksNear(marks, pixelOf, x, tolerance) {
+    let nearest = null;
+    for (const mark of marks) {
+        const distance = Math.abs(pixelOf(mark) - x);
+        if (distance <= tolerance && (nearest === null || distance < Math.abs(nearest - x))) {
+            nearest = pixelOf(mark);
+        }
+    }
+    return nearest === null ? [] : marks.filter((m) => Math.abs(pixelOf(m) - nearest) < 1);
+}

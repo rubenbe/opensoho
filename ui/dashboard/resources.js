@@ -1,4 +1,5 @@
 import { loader, loading } from "./charts.js";
+import { byteStep, formatBytes, formatNumber, median, timeTicks } from "./timeseries.js";
 
 // Remember the selected devices, columns and period across page loads.
 const STORAGE_KEY = "dashboard_resource_history";
@@ -14,31 +15,6 @@ const MAX_DEVICES = SERIES_COLORS.light.length;
 
 // The color tells the devices apart, the dash pattern the columns.
 const DASHES = [[], [6, 4], [2, 3], [10, 3, 2, 3], [14, 4]];
-
-function formatNumber(v) {
-    return v == null ? "—" : String(Math.round(v * 100) / 100);
-}
-
-function formatBytes(v) {
-    if (v == null) return "—";
-    const units = ["B", "KiB", "MiB", "GiB", "TiB"];
-    let i = 0;
-    while (Math.abs(v) >= 1024 && i < units.length - 1) {
-        v /= 1024;
-        i++;
-    }
-    return `${v.toFixed(i === 0 || v >= 100 ? 0 : 1)} ${units[i]}`;
-}
-
-// A round binary step (1, 2, 4, ... 512 KiB/MiB/GiB) giving at most 5 ticks.
-function byteStep(max) {
-    for (const base of [1, 1024, 1024 ** 2, 1024 ** 3, 1024 ** 4]) {
-        for (const m of [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]) {
-            if (max / (base * m) <= 5) return base * m;
-        }
-    }
-    return 1024 ** 5;
-}
 
 // Columns of one unit share a chart, so a chart never needs a second y axis.
 const UNITS = [
@@ -99,57 +75,10 @@ function themeColor(name) {
     return color;
 }
 
-function median(values) {
-    if (!values.length) return null;
-    const sorted = [...values].sort((a, b) => a - b);
-    const mid = Math.floor(sorted.length / 2);
-    return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-}
-
 function formatTime(ms, withDate) {
     return new Date(ms).toLocaleString(undefined, withDate
         ? { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }
         : { hour: "2-digit", minute: "2-digit" });
-}
-
-const HOUR = 3600 * 1000;
-const TICK_STEPS = [5, 15, 30, 60, 120, 180, 360, 720, 1440, 2880, 10080].map((m) => m * 60 * 1000);
-
-// Time axis ticks on round local times (e.g. every 3 hours at 00:00, 03:00, ...).
-function timeTicks(from, to, maxTicks = 8) {
-    const step = TICK_STEPS.find((s) => (to - from) / s <= maxTicks) || TICK_STEPS[TICK_STEPS.length - 1];
-    const ticks = [];
-
-    if (step < HOUR) {
-        // align to the local time, not UTC; a DST switch moves it by whole
-        // hours, which keeps sub-hour steps round
-        const offset = new Date(from).getTimezoneOffset() * 60 * 1000;
-        for (let v = Math.ceil((from - offset) / step) * step + offset; v <= to; v += step) {
-            ticks.push({ value: v });
-        }
-        return ticks;
-    }
-
-    // walk the wall clock, so the ticks stay on round hours across a DST switch
-    const hours = step / HOUR;
-    const advance = (d, n) => hours >= 24 ? d.setDate(d.getDate() + n / 24) : d.setHours(d.getHours() + n);
-    const d = new Date(from);
-    d.setMinutes(0, 0, 0);
-    if (hours >= 24) {
-        d.setHours(0);
-    }
-    while (d.getTime() < from || (hours < 24 && d.getHours() % hours !== 0)) {
-        advance(d, hours >= 24 ? 24 : 1);
-    }
-    while (d.getTime() <= to) {
-        ticks.push({ value: d.getTime() });
-        const previous = d.getTime();
-        advance(d, hours);
-        if (d.getTime() <= previous) {
-            d.setTime(previous + step);
-        }
-    }
-    return ticks;
 }
 
 function checkItem(label, checked, disabled, onchange) {

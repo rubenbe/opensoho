@@ -3696,6 +3696,8 @@ func main() {
 			e.Router.GET("/api/v1/wifi-versions", apiWifiVersions).Bind(apis.RequireAuth())
 			e.Router.GET("/api/v1/client-signal-quality", apiClientSignalQuality).Bind(apis.RequireAuth())
 			e.Router.GET("/api/v1/device-resources/{device}", apiDeviceResources).Bind(apis.RequireAuth())
+			e.Router.GET("/api/v1/client-resources/{client}", apiClientResources).Bind(apis.RequireAuth())
+			e.Router.GET("/api/v1/client-traffic", apiClientTraffic).Bind(apis.RequireAuth())
 
 			return e.Next()
 		},
@@ -4083,44 +4085,64 @@ func parseUnixParam(e *core.RequestEvent, name string, fallback time.Time) (time
 // apiDeviceResources returns a device's CPU load and memory history, averaged
 // per bucket. "from" and "to" are unix seconds (default: the last 24 hours),
 // "bucket" is the bucket size in seconds (default: about 300 points).
+// historyRange is the period and bucket size of a history request.
+type historyRange struct {
+	from, to     time.Time
+	fromDT, toDT types.DateTime
+	bucket       int64 // seconds
+}
+
+// parseHistoryRange reads the "from" and "to" (unix seconds, default: the
+// last 24 hours) and "bucket" (seconds, default: about 300 points) query
+// parameters of a history request.
+func parseHistoryRange(e *core.RequestEvent) (historyRange, error) {
+	r := historyRange{}
+	var err error
+	r.to, err = parseUnixParam(e, "to", time.Now().UTC())
+	if err != nil {
+		return r, e.BadRequestError("Invalid 'to'", err)
+	}
+	r.from, err = parseUnixParam(e, "from", r.to.Add(-24*time.Hour))
+	if err != nil {
+		return r, e.BadRequestError("Invalid 'from'", err)
+	}
+	if !r.from.Before(r.to) {
+		return r, e.BadRequestError("'from' must be before 'to'", nil)
+	}
+
+	span := int64(r.to.Sub(r.from).Seconds())
+	r.bucket = (span + resourceHistoryPoints - 1) / resourceHistoryPoints
+	if value := e.Request.URL.Query().Get("bucket"); value != "" {
+		r.bucket, err = strconv.ParseInt(value, 10, 64)
+		if err != nil || r.bucket < 1 {
+			return r, e.BadRequestError("Invalid 'bucket'", err)
+		}
+	}
+	// The agent reports every 30 seconds, smaller buckets are mostly empty.
+	r.bucket = max(r.bucket, 30)
+
+	r.fromDT, err = types.ParseDateTime(r.from)
+	if err != nil {
+		return r, e.BadRequestError("Invalid 'from'", err)
+	}
+	r.toDT, err = types.ParseDateTime(r.to)
+	if err != nil {
+		return r, e.BadRequestError("Invalid 'to'", err)
+	}
+	return r, nil
+}
+
 func apiDeviceResources(e *core.RequestEvent) error {
 	device, err := e.App.FindRecordById("devices", e.Request.PathValue("device"))
 	if err != nil {
 		return e.NotFoundError("Device not found", err)
 	}
 
-	now := time.Now().UTC()
-	to, err := parseUnixParam(e, "to", now)
+	r, err := parseHistoryRange(e)
 	if err != nil {
-		return e.BadRequestError("Invalid 'to'", err)
+		return err
 	}
-	from, err := parseUnixParam(e, "from", to.Add(-24*time.Hour))
-	if err != nil {
-		return e.BadRequestError("Invalid 'from'", err)
-	}
-	if !from.Before(to) {
-		return e.BadRequestError("'from' must be before 'to'", nil)
-	}
-
-	span := int64(to.Sub(from).Seconds())
-	bucket := (span + resourceHistoryPoints - 1) / resourceHistoryPoints
-	if value := e.Request.URL.Query().Get("bucket"); value != "" {
-		bucket, err = strconv.ParseInt(value, 10, 64)
-		if err != nil || bucket < 1 {
-			return e.BadRequestError("Invalid 'bucket'", err)
-		}
-	}
-	// The agent reports every 30 seconds, smaller buckets are mostly empty.
-	bucket = max(bucket, 30)
-
-	fromDT, err := types.ParseDateTime(from)
-	if err != nil {
-		return e.BadRequestError("Invalid 'from'", err)
-	}
-	toDT, err := types.ParseDateTime(to)
-	if err != nil {
-		return e.BadRequestError("Invalid 'to'", err)
-	}
+	from, to, bucket, fromDT, toDT := r.from, r.to, r.bucket, r.fromDT, r.toDT
 
 	points := []ResourceHistoryPoint{}
 	err = e.App.DB().NewQuery(`
@@ -4172,8 +4194,11 @@ func apiDeviceResources(e *core.RequestEvent) error {
 // ResourceEvent is something that happened to a device, derived from its
 // resource history when it is requested.
 type ResourceEvent struct {
-	Type string `json:"type"` // "reboot"
-	Time int64  `json:"t"`    // unix seconds
+	Type       string `json:"type"` // "reboot", "roam", "ssid" or "reconnect"
+	Time       int64  `json:"t"`    // unix seconds
+	Device     string `json:"device,omitempty"`
+	DeviceName string `json:"device_name,omitempty"`
+	SSID       string `json:"ssid,omitempty"`
 }
 
 // deviceRebootEvents finds the reboots of a device in [from, to). A sample
@@ -4233,6 +4258,277 @@ func deviceRebootEvents(app core.App, deviceId string, from time.Time, to time.T
 		}
 	}
 	return events, nil
+}
+
+// clientTrafficSQL selects the client samples of the period with the traffic
+// since the client's previous sample. The byte counters restart when the
+// client reconnects, roams to another AP or switches SSID; the traffic is then
+// the new counter value. download is what the AP sent to the client (tx),
+// upload what it received from it (rx). The %s is the client filter.
+//
+// The samples from {:start} on are read, so the first sample of the period
+// has the one before it.
+const clientTrafficSQL = `
+	WITH samples AS (
+		SELECT
+			[[client]] AS client,
+			[[device]] AS device,
+			[[ssid]] AS ssid,
+			CAST(strftime('%%s', [[time]]) AS INTEGER) AS t,
+			[[rx_bytes]] AS rx,
+			[[tx_bytes]] AS tx,
+			LAG(CAST(strftime('%%s', [[time]]) AS INTEGER)) OVER w AS prev_t,
+			LAG([[rx_bytes]]) OVER w AS prev_rx,
+			LAG([[tx_bytes]]) OVER w AS prev_tx,
+			LAG([[device]]) OVER w AS prev_device,
+			LAG([[ssid]]) OVER w AS prev_ssid
+		FROM {{client_resources}}
+		WHERE %s AND [[time]] < {:to} AND [[time]] >= {:start}
+		WINDOW w AS (PARTITION BY [[client]] ORDER BY [[time]])
+	),
+	deltas AS (
+		SELECT *, (device != prev_device OR ssid != prev_ssid OR rx < prev_rx OR tx < prev_tx) AS restarted
+		FROM samples
+		WHERE prev_t IS NOT NULL AND t > prev_t AND t >= {:from}
+	),
+	traffic AS (
+		SELECT *,
+			CASE WHEN restarted THEN tx ELSE tx - prev_tx END AS download_bytes,
+			CASE WHEN restarted THEN rx ELSE rx - prev_rx END AS upload_bytes
+		FROM deltas
+	)`
+
+// ClientTrafficPoint is the average traffic of a client in one time bucket,
+// in bytes per second while it was connected.
+type ClientTrafficPoint struct {
+	Time     int64   `db:"bucket_t" json:"t"`
+	Download float64 `db:"download" json:"download"`
+	Upload   float64 `db:"upload" json:"upload"`
+}
+
+// clientsCollection is the collection the client history refers to.
+func clientsCollection(app core.App) (*core.Collection, error) {
+	resources, err := app.FindCachedCollectionByNameOrId("client_resources")
+	if err != nil {
+		return nil, err
+	}
+	field, ok := resources.Fields.GetByName("client").(*core.RelationField)
+	if !ok {
+		return nil, errors.New("client_resources has no client relation")
+	}
+	return app.FindCachedCollectionByNameOrId(field.CollectionId)
+}
+
+func clientName(client *core.Record) string {
+	if alias := client.GetString("alias"); alias != "" {
+		return alias
+	}
+	return client.GetString("mac_address")
+}
+
+func deviceNames(app core.App, ids []string) map[string]string {
+	names := map[string]string{}
+	records, err := app.FindRecordsByIds("devices", ids)
+	if err != nil {
+		return names
+	}
+	for _, r := range records {
+		names[r.Id] = r.GetString("name")
+	}
+	return names
+}
+
+// apiClientResources returns the traffic of one client per bucket, and its
+// events: roaming to another AP, switching SSID, reconnecting and the reboots
+// of the APs it used. See parseHistoryRange for the parameters.
+func apiClientResources(e *core.RequestEvent) error {
+	collection, err := clientsCollection(e.App)
+	if err != nil {
+		return e.InternalServerError("Failed to find the clients", err)
+	}
+	client, err := e.App.FindRecordById(collection, e.Request.PathValue("client"))
+	if err != nil {
+		return e.NotFoundError("Client not found", err)
+	}
+	r, err := parseHistoryRange(e)
+	if err != nil {
+		return err
+	}
+
+	// the sample right before the period, so its first sample has traffic
+	start := r.fromDT.String()
+	var before struct {
+		Time string `db:"time"`
+	}
+	err = e.App.DB().NewQuery("SELECT MAX([[time]]) AS time FROM {{client_resources}} WHERE [[client]] = {:client} AND [[time]] < {:from}").
+		Bind(dbx.Params{"client": client.Id, "from": r.fromDT.String()}).One(&before)
+	if err == nil && before.Time != "" {
+		start = before.Time
+	}
+	params := dbx.Params{
+		"client": client.Id,
+		"start":  start,
+		"from":   r.from.Unix(),
+		"to":     r.toDT.String(),
+		"bucket": r.bucket,
+	}
+	query := fmt.Sprintf(clientTrafficSQL, "[[client]] = {:client}")
+
+	points := []ClientTrafficPoint{}
+	err = e.App.DB().NewQuery(query + `
+		SELECT
+			(t / {:bucket}) * {:bucket} AS bucket_t,
+			AVG(download_bytes * 1.0 / (t - prev_t)) AS download,
+			AVG(upload_bytes * 1.0 / (t - prev_t)) AS upload
+		FROM traffic
+		GROUP BY bucket_t
+		ORDER BY bucket_t`).Bind(params).All(&points)
+	if err != nil {
+		return e.InternalServerError("Failed to load client history", err)
+	}
+
+	var changes []struct {
+		Time       int64  `db:"t"`
+		Device     string `db:"device"`
+		SSID       string `db:"ssid"`
+		PrevDevice string `db:"prev_device"`
+		PrevSSID   string `db:"prev_ssid"`
+	}
+	err = e.App.DB().NewQuery(query + `
+		SELECT t, device, ssid, prev_device, prev_ssid FROM deltas WHERE restarted ORDER BY t`).Bind(params).All(&changes)
+	if err != nil {
+		return e.InternalServerError("Failed to load client events", err)
+	}
+
+	var used []struct {
+		Device string `db:"device"`
+	}
+	err = e.App.DB().NewQuery(`
+		SELECT DISTINCT [[device]] AS device FROM {{client_resources}}
+		WHERE [[client]] = {:client} AND [[time]] >= {:start} AND [[time]] < {:to}`).Bind(params).All(&used)
+	if err != nil {
+		return e.InternalServerError("Failed to load client events", err)
+	}
+	ids := []string{}
+	for _, u := range used {
+		ids = append(ids, u.Device)
+	}
+	names := deviceNames(e.App, ids)
+
+	events := []ResourceEvent{}
+	for _, c := range changes {
+		event := ResourceEvent{Type: "reconnect", Time: c.Time, Device: c.Device, DeviceName: names[c.Device], SSID: c.SSID}
+		if c.Device != c.PrevDevice {
+			event.Type = "roam"
+		} else if c.SSID != c.PrevSSID {
+			event.Type = "ssid"
+		}
+		events = append(events, event)
+	}
+	for _, id := range ids {
+		reboots, err := deviceRebootEvents(e.App, id, r.from, r.to)
+		if err != nil {
+			return e.InternalServerError("Failed to load client events", err)
+		}
+		for _, reboot := range reboots {
+			reboot.Device = id
+			reboot.DeviceName = names[id]
+			events = append(events, reboot)
+		}
+	}
+	sort.SliceStable(events, func(i, j int) bool { return events[i].Time < events[j].Time })
+
+	return e.JSON(http.StatusOK, map[string]any{
+		"client": client.Id,
+		"from":   r.from.Unix(),
+		"to":     r.to.Unix(),
+		"bucket": r.bucket,
+		"points": points,
+		"events": events,
+	})
+}
+
+// ClientTraffic is the total traffic of a client in a period, in bytes.
+type ClientTraffic struct {
+	Id       string `json:"id"`
+	Name     string `json:"name"`
+	MAC      string `json:"mac"`
+	Download int64  `json:"download"`
+	Upload   int64  `json:"upload"`
+}
+
+// apiClientTraffic lists the clients with history in the period ("from" and
+// "to", see parseHistoryRange), by name, with their total traffic.
+func apiClientTraffic(e *core.RequestEvent) error {
+	collection, err := clientsCollection(e.App)
+	if err != nil {
+		return e.InternalServerError("Failed to find the clients", err)
+	}
+	r, err := parseHistoryRange(e)
+	if err != nil {
+		return err
+	}
+
+	var totals []struct {
+		Client   string `db:"client"`
+		Download int64  `db:"download"`
+		Upload   int64  `db:"upload"`
+	}
+	// The samples of the 10 minutes before the period give the first samples
+	// of the period their traffic.
+	start, err := types.ParseDateTime(r.from.Add(-10 * time.Minute))
+	if err != nil {
+		return e.BadRequestError("Invalid 'from'", err)
+	}
+	err = e.App.DB().NewQuery(fmt.Sprintf(clientTrafficSQL, "1 = 1") + `
+		SELECT c.client AS client, COALESCE(SUM(traffic.download_bytes), 0) AS download, COALESCE(SUM(traffic.upload_bytes), 0) AS upload
+		FROM (SELECT DISTINCT client FROM samples WHERE t >= {:from}) c
+		LEFT JOIN traffic ON traffic.client = c.client
+		GROUP BY c.client`).Bind(dbx.Params{
+		"start": start.String(),
+		"from":  r.from.Unix(),
+		"to":    r.toDT.String(),
+	}).All(&totals)
+	if err != nil {
+		return e.InternalServerError("Failed to load client traffic", err)
+	}
+
+	ids := []string{}
+	for _, t := range totals {
+		ids = append(ids, t.Client)
+	}
+	records, err := e.App.FindRecordsByIds(collection, ids)
+	if err != nil {
+		return e.InternalServerError("Failed to load the clients", err)
+	}
+	byId := map[string]*core.Record{}
+	for _, record := range records {
+		byId[record.Id] = record
+	}
+
+	clients := []ClientTraffic{}
+	for _, t := range totals {
+		record, ok := byId[t.Client]
+		if !ok {
+			continue
+		}
+		clients = append(clients, ClientTraffic{
+			Id:       record.Id,
+			Name:     clientName(record),
+			MAC:      record.GetString("mac_address"),
+			Download: t.Download,
+			Upload:   t.Upload,
+		})
+	}
+	sort.Slice(clients, func(i, j int) bool {
+		return strings.ToLower(clients[i].Name) < strings.ToLower(clients[j].Name)
+	})
+
+	return e.JSON(http.StatusOK, map[string]any{
+		"from":    r.from.Unix(),
+		"to":      r.to.Unix(),
+		"clients": clients,
+	})
 }
 
 func apiGenerateDeviceStatus(e *core.RequestEvent) error {

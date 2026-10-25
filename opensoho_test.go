@@ -8852,6 +8852,171 @@ func TestDeviceRebootEvents(t *testing.T) {
 	assert.Equal(t, []ResourceEvent{}, events)
 }
 
+func callClientApi(t *testing.T, app core.App, handler func(*core.RequestEvent) error, client string, query string) (*httptest.ResponseRecorder, error) {
+	event := core.RequestEvent{}
+	var err error
+	event.Request, err = http.NewRequest("GET", "/api/v1/client?"+query, nil)
+	assert.Nil(t, err)
+	event.Request.SetPathValue("client", client)
+	event.App = app
+	rec := httptest.NewRecorder()
+	event.Response = rec
+	return rec, handler(&event)
+}
+
+func TestApiClientResources(t *testing.T) {
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	clientcollection := setupClientsCollection(t, app)
+	clientcollection.Fields.Add(&core.TextField{Name: "alias"})
+	assert.Nil(t, app.Save(clientcollection))
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	resourcescollection := setupDeviceResourcesCollection(t, app, devicecollection)
+	clientresourcescollection := setupClientResourcesCollection(t, app, clientcollection, devicecollection)
+
+	newDevice := func(name string) *core.Record {
+		d := core.NewRecord(devicecollection)
+		d.Set("name", name)
+		d.Set("health_status", "healthy")
+		assert.Nil(t, app.Save(d))
+		return d
+	}
+	ap1 := newDevice("Garage AP")
+	ap2 := newDevice("Living Room AP")
+	ap3 := newDevice("Office AP")
+	newClient := func(mac string, alias string) *core.Record {
+		c := core.NewRecord(clientcollection)
+		c.Set("mac_address", mac)
+		c.Set("alias", alias)
+		assert.Nil(t, app.Save(c))
+		return c
+	}
+	phone := newClient("11:22:33:44:55:66", "Phone")
+	laptop := newClient("66:55:44:33:22:11", "")
+	tv := newClient("aa:bb:cc:dd:ee:ff", "TV")
+	gone := newClient("ff:ee:dd:cc:bb:aa", "Gone")
+
+	start := time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
+	addSample := func(client *core.Record, offset time.Duration, device *core.Record, ssid string, rx int, tx int) {
+		r := core.NewRecord(clientresourcescollection)
+		r.Set("client", client.Id)
+		r.Set("device", device.Id)
+		r.Set("ssid", ssid)
+		r.Set("time", start.Add(offset))
+		r.Set("rx_bytes", rx)
+		r.Set("tx_bytes", tx)
+		assert.Nil(t, app.Save(r))
+	}
+	addUptime := func(device *core.Record, offset time.Duration, uptime int) {
+		r := core.NewRecord(resourcescollection)
+		r.Set("device", device.Id)
+		r.Set("time", start.Add(offset))
+		r.Set("uptime", uptime)
+		assert.Nil(t, app.Save(r))
+	}
+
+	// Before the period
+	addSample(phone, -30*time.Second, ap1, "Home", 1000, 5000)
+	// 20 B/s up, 100 B/s down
+	addSample(phone, 0, ap1, "Home", 1600, 8000)
+	addSample(phone, 30*time.Second, ap1, "Home", 2200, 11000)
+	// Reconnected: the counters restarted
+	addSample(phone, 60*time.Second, ap1, "Home", 100, 400)
+	// Roamed to the other AP
+	addSample(phone, 90*time.Second, ap2, "Home", 50, 60)
+	// Switched SSID on that AP
+	addSample(phone, 120*time.Second, ap2, "IoT", 30, 90)
+	// After a gap of a minute
+	addSample(phone, 180*time.Second, ap2, "IoT", 330, 690)
+	// After the period
+	addSample(phone, 10*time.Minute, ap2, "IoT", 1, 1)
+
+	// Other clients, interleaved
+	addSample(laptop, 0, ap1, "Home", 10, 10)
+	addSample(laptop, 30*time.Second, ap1, "Home", 40, 70)
+	addSample(tv, 60*time.Second, ap1, "Home", 5, 5)
+	addSample(gone, -5*time.Minute, ap1, "Home", 5, 5)
+
+	// The AP the phone roamed to rebooted at 12:02:20, one it never used too
+	addUptime(ap2, 100*time.Second, 5000)
+	addUptime(ap2, 150*time.Second, 10)
+	addUptime(ap3, 100*time.Second, 5000)
+	addUptime(ap3, 150*time.Second, 10)
+
+	period := fmt.Sprintf("from=%d&to=%d", start.Unix(), start.Add(5*time.Minute).Unix())
+
+	t.Run("traffic per bucket", func(t *testing.T) {
+		rec, err := callClientApi(t, app, apiClientResources, phone.Id, period+"&bucket=60")
+		assert.Nil(t, err)
+		var res struct {
+			Client string               `json:"client"`
+			Bucket int64                `json:"bucket"`
+			Points []ClientTrafficPoint `json:"points"`
+			Events []ResourceEvent      `json:"events"`
+		}
+		assert.Nil(t, json.Unmarshal(rec.Body.Bytes(), &res))
+		assert.Equal(t, phone.Id, res.Client)
+		assert.Equal(t, int64(60), res.Bucket)
+
+		expected := []ClientTrafficPoint{
+			{Time: start.Unix(), Download: 100, Upload: 20},
+			// reconnect (400 B, 100 B) and roam (60 B, 50 B), 30 s each
+			{Time: start.Unix() + 60, Download: (400.0/30 + 2) / 2, Upload: (100.0/30 + 50.0/30) / 2},
+			{Time: start.Unix() + 120, Download: 3, Upload: 1},
+			// 600 B down and 300 B up in a minute
+			{Time: start.Unix() + 180, Download: 10, Upload: 5},
+		}
+		assert.Equal(t, len(expected), len(res.Points))
+		for i := range expected {
+			if i >= len(res.Points) {
+				break
+			}
+			assert.Equal(t, expected[i].Time, res.Points[i].Time, i)
+			assert.InDelta(t, expected[i].Download, res.Points[i].Download, 1e-9, i)
+			assert.InDelta(t, expected[i].Upload, res.Points[i].Upload, 1e-9, i)
+		}
+
+		assert.Equal(t, []ResourceEvent{
+			{Type: "reconnect", Time: start.Unix() + 60, Device: ap1.Id, DeviceName: "Garage AP", SSID: "Home"},
+			{Type: "roam", Time: start.Unix() + 90, Device: ap2.Id, DeviceName: "Living Room AP", SSID: "Home"},
+			{Type: "ssid", Time: start.Unix() + 120, Device: ap2.Id, DeviceName: "Living Room AP", SSID: "IoT"},
+			{Type: "reboot", Time: start.Unix() + 140, Device: ap2.Id, DeviceName: "Living Room AP"},
+		}, res.Events)
+	})
+
+	t.Run("unknown client", func(t *testing.T) {
+		_, err := callClientApi(t, app, apiClientResources, "doesnotexist123", period)
+		var apiresponse *router.ApiError
+		assert.True(t, errors.As(err, &apiresponse))
+		assert.Equal(t, 404, apiresponse.Status)
+	})
+
+	t.Run("invalid period", func(t *testing.T) {
+		_, err := callClientApi(t, app, apiClientResources, phone.Id, "from=abc")
+		var apiresponse *router.ApiError
+		assert.True(t, errors.As(err, &apiresponse))
+		assert.Equal(t, 400, apiresponse.Status)
+	})
+
+	t.Run("total traffic per client", func(t *testing.T) {
+		rec, err := callClientApi(t, app, apiClientTraffic, "", period)
+		assert.Nil(t, err)
+		var res struct {
+			Clients []ClientTraffic `json:"clients"`
+		}
+		assert.Nil(t, json.Unmarshal(rec.Body.Bytes(), &res))
+		// by name, without the client that has no samples in the period
+		assert.Equal(t, []ClientTraffic{
+			{Id: laptop.Id, Name: "66:55:44:33:22:11", MAC: "66:55:44:33:22:11", Download: 60, Upload: 30},
+			{Id: phone.Id, Name: "Phone", MAC: "11:22:33:44:55:66", Download: 3000 + 3000 + 400 + 60 + 90 + 600, Upload: 600 + 600 + 100 + 50 + 30 + 300},
+			{Id: tv.Id, Name: "TV", MAC: "aa:bb:cc:dd:ee:ff", Download: 0, Upload: 0},
+		}, res.Clients)
+	})
+}
+
 func callApiDeviceResources(t *testing.T, app core.App, device string, query string) (*httptest.ResponseRecorder, error) {
 	event := core.RequestEvent{}
 	var err error

@@ -177,3 +177,8 @@ export function marksNear(marks, pixelOf, x, tolerance) {
     }
     return nearest === null ? [] : marks.filter((m) => Math.abs(pixelOf(m) - nearest) < 1);
 }
+
+// The newest n marks (see eventMarks), newest first.
+export function latestEvents(marks, n) {
+    return [...marks].sort((a, b) => b.x - a.x).slice(0, n);
+}

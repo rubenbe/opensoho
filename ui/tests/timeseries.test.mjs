@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, test } from "node:test";
 
-import { bandLabel, bitRateStep, byteStep, clientLocation, formatDbm, groupRows, markKey, marksNear, eventMarks, formatBitRate, formatBytes, formatNumber, median, timeTicks } from "../dashboard/timeseries.js";
+import { bandLabel, bitRateStep, byteStep, clientLocation, formatDbm, groupRows, latestEvents, markKey, marksNear, eventMarks, formatBitRate, formatBytes, formatNumber, median, timeTicks } from "../dashboard/timeseries.js";
 
 const originalTZ = process.env.TZ;
 afterEach(() => {
@@ -320,5 +320,23 @@ describe("markKey", () => {
     test("the item, type and time", () => {
         assert.equal(markKey({ entity: { id: "a" }, type: "roam", x: 5000 }), "a|roam|5000");
         assert.notEqual(markKey({ entity: { id: "a" }, type: "roam", x: 5000 }), markKey({ entity: { id: "b" }, type: "roam", x: 5000 }));
+    });
+});
+
+describe("latestEvents", () => {
+    const marks = [{ x: 100 }, { x: 300 }, { x: 200 }];
+
+    test("newest first", () => {
+        assert.deepEqual(latestEvents(marks, 10).map((m) => m.x), [300, 200, 100]);
+    });
+
+    test("at most n", () => {
+        assert.deepEqual(latestEvents(marks, 2).map((m) => m.x), [300, 200]);
+        assert.deepEqual(latestEvents([], 100), []);
+    });
+
+    test("leaves the marks alone", () => {
+        latestEvents(marks, 1);
+        assert.deepEqual(marks.map((m) => m.x), [100, 300, 200]);
     });
 });

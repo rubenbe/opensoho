@@ -1,6 +1,6 @@
 import { loader, loading } from "./charts.js";
 import { selectAllLabel, selectItems, setItem } from "./selection.js";
-import { eventMarks, groupRows, markKey, marksNear, median, timeTicks } from "./timeseries.js";
+import { eventMarks, groupRows, latestEvents, markKey, marksNear, median, timeTicks } from "./timeseries.js";
 
 // A dashboard card charting the history of some items (devices, clients)
 // over time: one line per selected item and metric, one chart per unit.
@@ -17,6 +17,9 @@ export const MAX_ITEMS = SERIES_COLORS.light.length;
 
 // The color tells the items apart, the dash pattern the metrics.
 const DASHES = [[], [6, 4], [2, 3], [10, 3, 2, 3], [14, 4]];
+
+// The events list shows the newest ones; the charts show them all.
+const MAX_LISTED_EVENTS = 100;
 
 const RANGES = [
     { key: "1h", label: "Last hour", seconds: 3600 },
@@ -602,7 +605,7 @@ export function historyChart(config) {
                 ? [t.div(
                     { className: "resource-events" },
                     t.div({ className: "band-label" }, config.eventsTitle),
-                    t.ul(null, marks.map((m) => {
+                    t.ul(null, latestEvents(marks, MAX_LISTED_EVENTS).map((m) => {
                         const button = t.button(
                             {
                                 type: "button",
@@ -615,6 +618,9 @@ export function historyChart(config) {
                         eventButtons.set(markKey(m), button);
                         return t.li(null, button);
                     })),
+                    marks.length > MAX_LISTED_EVENTS
+                        ? t.div({ className: "net-empty" }, `Showing the latest ${MAX_LISTED_EVENTS} of ${marks.length} events.`)
+                        : null,
                 )]
                 : []),
         );

@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, test } from "node:test";
 
-import { bitRateStep, byteStep, eventMarks, formatBitRate, formatBytes, formatNumber, median, timeTicks } from "../dashboard/timeseries.js";
+import { bandLabel, bitRateStep, byteStep, eventMarks, formatBitRate, formatBytes, formatNumber, median, timeTicks } from "../dashboard/timeseries.js";
 
 const originalTZ = process.env.TZ;
 afterEach(() => {
@@ -242,5 +242,16 @@ describe("bitRateStep", () => {
         assert.equal(bits(11), 5);
         assert.equal(bits(30e6), 10e6);
         assert.equal(bits(800e6), 200e6);
+    });
+});
+
+describe("bandLabel", () => {
+    test("in GHz", () => {
+        assert.equal(bandLabel("2.4"), "2.4 GHz");
+        assert.equal(bandLabel("5"), "5 GHz");
+    });
+    test("unknown", () => {
+        assert.equal(bandLabel(""), "");
+        assert.equal(bandLabel(undefined), "");
     });
 });

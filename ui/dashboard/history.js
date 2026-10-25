@@ -272,6 +272,7 @@ function lineCanvas(unit, eventLabel) {
  * @param  {Array}    config.defaultMetrics Metric keys shown at first.
  * @param  {Function} config.loadItems      async ({ from, to }) -> [{ id, ... }] in display order.
  * @param  {Function} config.itemName       Item -> name.
+ * @param  {Function} [config.itemDetail]   Item -> short text shown after its name in the table.
  * @param  {Function} config.defaultItems   Items -> ids shown at first.
  * @param  {Function} config.selectActions  Items -> [{ label, ids }], "select all ..." shortcuts.
  * @param  {Function} config.loadHistory    async (id, { from, to }) -> { bucket, points: [{ t, ... }], events: [{ type, t }] }
@@ -534,6 +535,9 @@ export function historyChart(config) {
                             },
                             nameOf(r.item),
                         ),
+                        config.itemDetail?.(r.item)
+                            ? t.span({ className: "resource-item-detail" }, ` · ${config.itemDetail(r.item)}`)
+                            : null,
                     ),
                     t.td(null, r.metric.label),
                     t.td({ className: "num" }, r.unit.format(r.latest)),

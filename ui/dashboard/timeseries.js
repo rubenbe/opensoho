@@ -114,3 +114,8 @@ export function bitRateStep(max) {
         }
     }
 }
+
+// "5" -> "5 GHz"; an unknown band is empty.
+export function bandLabel(band) {
+    return band ? `${band} GHz` : "";
+}

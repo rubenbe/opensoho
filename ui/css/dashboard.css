@@ -523,6 +523,9 @@
             padding: 2px 0;
         }
     }
+    .resource-item-detail {
+        color: var(--surfaceTxtHintColor);
+    }
     .resource-summary {
         .num {
             text-align: right;

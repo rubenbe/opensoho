@@ -1,7 +1,7 @@
 import { openRecords } from "./charts.js";
 import { formatTime, historyChart, MAX_ITEMS } from "./history.js";
 import { topByTraffic } from "./selection.js";
-import { bitRateStep, formatBitRate } from "./timeseries.js";
+import { bandLabel, bitRateStep, formatBitRate } from "./timeseries.js";
 
 const UNITS = [
     { key: "rate", label: "Traffic", format: formatBitRate, step: bitRateStep },
@@ -17,13 +17,17 @@ const METRICS = [
 function eventLabel(mark, name) {
     const at = formatTime(mark.x, true);
     const ap = mark.event.device_name || mark.event.device;
+    const band = bandLabel(mark.event.band);
+    const onBand = band ? ` (${band})` : "";
     switch (mark.type) {
         case "roam":
-            return `${name} roamed to ${ap} at ${at}`;
+            return `${name} roamed to ${ap}${onBand} at ${at}`;
         case "ssid":
-            return `${name} switched to SSID ${mark.event.ssid} at ${at}`;
+            return `${name} switched to SSID ${mark.event.ssid}${onBand} at ${at}`;
+        case "band":
+            return `${name} switched to ${band} on ${ap} at ${at}`;
         case "reconnect":
-            return `${name} reconnected to ${ap} at ${at}`;
+            return `${name} reconnected to ${ap}${onBand} at ${at}`;
         case "reboot":
             return `${ap}, used by ${name}, rebooted at ${at}`;
         default:
@@ -53,6 +57,8 @@ export function clientHistoryChart() {
             return res.clients || [];
         },
         itemName: (client) => client.name,
+        // the band of its last sample in the period
+        itemDetail: (client) => bandLabel(client.band),
         defaultItems: (clients) => topByTraffic(clients, MAX_ITEMS),
         selectActions: (clients) => [
             { label: `Top ${MAX_ITEMS} by traffic`, ids: topByTraffic(clients, MAX_ITEMS) },

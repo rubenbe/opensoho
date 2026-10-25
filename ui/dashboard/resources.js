@@ -381,7 +381,7 @@ export function resourceHistoryChart() {
                 : [t.div({ className: "dropdown-item" }, "No devices")],
         );
         columnPicker.update(
-            `Columns (${prefs.columns.length})`,
+            `Metrics (${prefs.columns.length})`,
             COLUMNS.map((c) => checkItem(c.label, prefs.columns.includes(c.key), false, (v) => setColumn(c.key, v))),
         );
         rangeSelect.value = prefs.range;
@@ -439,7 +439,7 @@ export function resourceHistoryChart() {
             return message("Select one or more devices.");
         }
         if (!columns.length) {
-            return message("Select one or more columns.");
+            return message("Select one or more metrics.");
         }
         if (!shownDevices.some((d) => histories[d.id]?.points?.length)) {
             return message("No samples in this period. Check that the history_retention_days setting is not 0.");
@@ -491,7 +491,7 @@ export function resourceHistoryChart() {
                 t.tr(
                     null,
                     t.th(null, "Device"),
-                    t.th(null, "Column"),
+                    t.th(null, "Metric"),
                     t.th({ className: "num" }, "Latest"),
                     t.th({ className: "num" }, "Average"),
                     t.th({ className: "num" }, "Peak"),

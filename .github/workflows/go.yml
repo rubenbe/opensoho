@@ -47,6 +47,19 @@ jobs:
     - name: Run ShellCheck
       run: shellcheck scripts/dump-poe.sh
 
+  ui-tests:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22.x'
+
+    - name: Run UI unit tests
+      run: node --test 'ui/tests/**/*.test.mjs'
+
   helm:
     runs-on: ubuntu-latest
     steps:

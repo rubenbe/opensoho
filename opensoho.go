@@ -4126,13 +4126,85 @@ func apiDeviceResources(e *core.RequestEvent) error {
 		return e.InternalServerError("Failed to load resource history", err)
 	}
 
+	events, err := deviceRebootEvents(e.App, device.Id, from, to)
+	if err != nil {
+		return e.InternalServerError("Failed to load resource events", err)
+	}
+
 	return e.JSON(http.StatusOK, map[string]any{
 		"device": device.Id,
 		"from":   from.Unix(),
 		"to":     to.Unix(),
 		"bucket": bucket,
 		"points": points,
+		"events": events,
 	})
+}
+
+// ResourceEvent is something that happened to a device, derived from its
+// resource history when it is requested.
+type ResourceEvent struct {
+	Type string `json:"type"` // "reboot"
+	Time int64  `json:"t"`    // unix seconds
+}
+
+// deviceRebootEvents finds the reboots of a device in [from, to). A sample
+// follows a reboot when its uptime is lower than the one of the sample before
+// it, or when it booted (its time minus its uptime) after the sample before
+// it was taken; the latter finds reboots during a long gap in the reports,
+// when the new uptime can exceed the old one. Samples without an uptime (0)
+// are skipped.
+func deviceRebootEvents(app core.App, deviceId string, from time.Time, to time.Time) ([]ResourceEvent, error) {
+	fromDT, err := types.ParseDateTime(from)
+	if err != nil {
+		return nil, err
+	}
+	toDT, err := types.ParseDateTime(to)
+	if err != nil {
+		return nil, err
+	}
+
+	var rows []struct {
+		Time       int64 `db:"t"`
+		Uptime     int64 `db:"uptime"`
+		PrevTime   int64 `db:"prev_t"`
+		PrevUptime int64 `db:"prev_uptime"`
+	}
+	// The last sample before the period is included, so a reboot right after
+	// the start is found too.
+	err = app.DB().NewQuery(`
+		SELECT t, uptime, prev_t, prev_uptime FROM (
+			SELECT
+				CAST(strftime('%s', [[time]]) AS INTEGER) AS t,
+				[[uptime]] AS uptime,
+				LAG(CAST(strftime('%s', [[time]]) AS INTEGER)) OVER (ORDER BY [[time]]) AS prev_t,
+				LAG([[uptime]]) OVER (ORDER BY [[time]]) AS prev_uptime
+			FROM {{device_resources}}
+			WHERE [[device]] = {:device} AND [[uptime]] > 0 AND [[time]] < {:to} AND [[time]] >= COALESCE(
+				(SELECT MAX([[time]]) FROM {{device_resources}}
+				WHERE [[device]] = {:device} AND [[uptime]] > 0 AND [[time]] < {:from}),
+				{:from})
+		)
+		WHERE prev_uptime IS NOT NULL AND (uptime < prev_uptime OR t - uptime > prev_t)
+		ORDER BY t`).Bind(dbx.Params{
+		"device": deviceId,
+		"from":   fromDT.String(),
+		"to":     toDT.String(),
+	}).All(&rows)
+	if err != nil {
+		return nil, err
+	}
+
+	events := []ResourceEvent{}
+	for _, r := range rows {
+		// The clock of a device without an RTC can be off right after a
+		// boot, so keep the boot time between the two samples.
+		boot := min(max(r.Time-r.Uptime, r.PrevTime+1), r.Time)
+		if boot >= from.Unix() && boot < to.Unix() {
+			events = append(events, ResourceEvent{Type: "reboot", Time: boot})
+		}
+	}
+	return events, nil
 }
 
 func apiGenerateDeviceStatus(e *core.RequestEvent) error {

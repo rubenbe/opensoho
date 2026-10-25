@@ -8599,6 +8599,96 @@ func TestMacClientSteering(t *testing.T) {
 	}
 }
 
+func TestDeviceRebootEvents(t *testing.T) {
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	resourcescollection := setupDeviceResourcesCollection(t, app, devicecollection)
+
+	newDevice := func(name string) *core.Record {
+		d := core.NewRecord(devicecollection)
+		d.Set("name", name)
+		d.Set("health_status", "healthy")
+		assert.Nil(t, app.Save(d))
+		return d
+	}
+	d := newDevice("ap1")
+	other := newDevice("ap2")
+
+	start := time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
+	end := start.Add(2 * time.Hour)
+	addSample := func(device *core.Record, offset time.Duration, uptime int) {
+		r := core.NewRecord(resourcescollection)
+		r.Set("device", device.Id)
+		r.Set("time", start.Add(offset))
+		r.Set("uptime", uptime)
+		assert.Nil(t, app.Save(r))
+	}
+
+	// Before the period, up for a while
+	addSample(d, -10*time.Minute, 5000)
+	// Rebooted 10s into the period
+	addSample(d, 30*time.Second, 20)
+	addSample(d, 60*time.Second, 50)
+	// No uptime known: not a reboot
+	addSample(d, 90*time.Second, 0)
+	addSample(d, 120*time.Second, 110)
+	// Rebooted during an hour without reports, at 12:50
+	addSample(d, time.Hour, 600)
+	addSample(d, time.Hour+30*time.Second, 630)
+	// The uptime dropped, but claims a boot before the previous sample: the
+	// boot is kept right after that sample
+	addSample(d, time.Hour+60*time.Second, 500)
+	addSample(d, time.Hour+90*time.Second, 530)
+	// After the period
+	addSample(d, 3*time.Hour, 10)
+
+	// Another device, booted just before the period
+	addSample(other, -5*time.Minute, 900)
+	addSample(other, 30*time.Second, 100)
+	addSample(other, 60*time.Second, 130)
+
+	events, err := deviceRebootEvents(app, d.Id, start, end)
+	assert.Nil(t, err)
+	assert.Equal(t, []ResourceEvent{
+		{Type: "reboot", Time: start.Add(10 * time.Second).Unix()},
+		{Type: "reboot", Time: start.Add(50 * time.Minute).Unix()},
+		{Type: "reboot", Time: start.Add(time.Hour + 31*time.Second).Unix()},
+	}, events)
+
+	// The other device's reboot was before the period
+	events, err = deviceRebootEvents(app, other.Id, start, end)
+	assert.Nil(t, err)
+	assert.Equal(t, []ResourceEvent{}, events)
+
+	// Without the samples before it, the first reboot can't be detected
+	events, err = deviceRebootEvents(app, d.Id, start.Add(20*time.Second), end)
+	assert.Nil(t, err)
+	assert.Equal(t, 2, len(events))
+
+	// A period with nothing in it
+	events, err = deviceRebootEvents(app, d.Id, end, end.Add(30*time.Minute))
+	assert.Nil(t, err)
+	assert.Equal(t, []ResourceEvent{}, events)
+
+	// Up all the time, with a second of jitter between the clock and the
+	// uptime, and a gap in the reports: no reboots
+	steady := newDevice("ap3")
+	for i, jitter := range []int{0, 1, -1, 0, 1, 1, -1, 0} {
+		offset := time.Duration(i) * 30 * time.Second
+		if i >= 4 {
+			offset += time.Hour
+		}
+		addSample(steady, offset, 7200+int(offset.Seconds())+jitter)
+	}
+	events, err = deviceRebootEvents(app, steady.Id, start, end)
+	assert.Nil(t, err)
+	assert.Equal(t, []ResourceEvent{}, events)
+}
+
 func callApiDeviceResources(t *testing.T, app core.App, device string, query string) (*httptest.ResponseRecorder, error) {
 	event := core.RequestEvent{}
 	var err error
@@ -8693,11 +8783,25 @@ func TestApiDeviceResources(t *testing.T) {
 		}, r.Points)
 	}
 
-	// No samples gives an empty list, not null
+	// No samples gives empty lists, not null
 	{
 		rec, err := callApiDeviceResources(t, app, other.Id, fmt.Sprintf("from=%d&to=%d", start.Add(time.Hour).Unix(), start.Add(2*time.Hour).Unix()))
 		assert.Nil(t, err)
 		assert.Contains(t, rec.Body.String(), `"points":[]`)
+		assert.Contains(t, rec.Body.String(), `"events":[]`)
+	}
+
+	// A reboot is reported as an event
+	addSample(d, 90*time.Second, 0.1, 900)
+	{
+		r := core.NewRecord(resourcescollection)
+		r.Set("device", d.Id)
+		r.Set("time", start.Add(100*time.Second))
+		r.Set("uptime", 5)
+		assert.Nil(t, app.Save(r))
+		rec, err := callApiDeviceResources(t, app, d.Id, query)
+		assert.Nil(t, err)
+		assert.Contains(t, rec.Body.String(), fmt.Sprintf(`"events":[{"type":"reboot","t":%d}]`, start.Unix()+95))
 	}
 
 	for _, bad := range []string{"from=abc", "to=abc", "bucket=0", "bucket=abc",

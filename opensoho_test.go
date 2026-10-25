@@ -3432,7 +3432,7 @@ func TestHandleMonitoringStoresResourceSamples(t *testing.T) {
 	d.Set("health_status", "healthy")
 	assert.Nil(t, app.Save(d))
 
-	body := `{"type": "DeviceMonitoring", "interfaces": [], "resources": {
+	body := `{"type": "DeviceMonitoring", "interfaces": [], "general": {"local_time": 1790795592, "uptime": 2359397}, "resources": {
   "memory": {"total": 1000, "free": 400, "cached": 100, "available": 600, "buffered": 50},
   "cpus": 2, "load": [0.5, 0.25, 0.125], "swap": {"total": 10, "free": 4}}}`
 
@@ -3460,6 +3460,7 @@ func TestHandleMonitoringStoresResourceSamples(t *testing.T) {
 	assert.Equal(t, 50, s.GetInt("mem_buffered"))
 	assert.Equal(t, 10, s.GetInt("swap_total"))
 	assert.Equal(t, 4, s.GetInt("swap_free"))
+	assert.Equal(t, 2359397, s.GetInt("uptime"))
 
 	// Without a time the sample is stamped on arrival
 	assert.True(t, samples[1].GetDateTime("time").Time().After(before))
@@ -3469,6 +3470,13 @@ func TestHandleMonitoringStoresResourceSamples(t *testing.T) {
 	samples, err = app.FindAllRecords("device_resources")
 	assert.Nil(t, err)
 	assert.Equal(t, 2, len(samples))
+
+	// The uptime alone is still worth a sample
+	postResourcesMonitoring(t, app, d, clientcollection, "time=01-10-2026_09:00:00.000000", `{"type": "DeviceMonitoring", "interfaces": [], "general": {"uptime": 42}}`)
+	uptimeOnly, err := app.FindFirstRecordByFilter("device_resources", "time = {:time}", dbx.Params{"time": "2026-10-01 09:00:00.000Z"})
+	assert.Nil(t, err)
+	assert.Equal(t, 42, uptimeOnly.GetInt("uptime"))
+	assert.Equal(t, 0, uptimeOnly.GetInt("mem_total"))
 }
 
 func TestHandleMonitoringStoresNoResourcesWithZeroRetention(t *testing.T) {
@@ -6925,7 +6933,7 @@ func setupDeviceResourcesCollection(t *testing.T, app core.App, devicecollection
 	for _, name := range []string{"load1", "load5", "load15"} {
 		col.Fields.Add(&core.NumberField{Name: name})
 	}
-	for _, name := range []string{"cpus", "mem_total", "mem_available", "mem_free", "mem_cached", "mem_buffered", "swap_total", "swap_free"} {
+	for _, name := range []string{"cpus", "mem_total", "mem_available", "mem_free", "mem_cached", "mem_buffered", "swap_total", "swap_free", "uptime"} {
 		col.Fields.Add(&core.NumberField{Name: name, OnlyInt: true})
 	}
 	col.AddIndex("idx_device_resources_device_time", false, "device, time", "")
@@ -8635,6 +8643,7 @@ func TestApiDeviceResources(t *testing.T) {
 		r.Set("mem_available", memAvailable)
 		r.Set("swap_total", 100)
 		r.Set("swap_free", 40)
+		r.Set("uptime", 1000+int(offset.Seconds()))
 		assert.Nil(t, app.Save(r))
 	}
 	// Two samples in the first minute, one in the second
@@ -8679,8 +8688,8 @@ func TestApiDeviceResources(t *testing.T) {
 		assert.Nil(t, json.Unmarshal(rec.Body.Bytes(), &r))
 		assert.Equal(t, int64(60), r.Bucket)
 		assert.Equal(t, []ResourceHistoryPoint{
-			{Time: start.Unix(), Load1: 2.0, Load5: 1.0, Load15: 0.5, Load1Max: 3.0, Cpus: 2, MemTotal: 1000, MemAvailable: 500, MemUsed: 500, SwapTotal: 100, SwapFree: 40, SwapUsed: 60},
-			{Time: start.Unix() + 60, Load1: 0.5, Load5: 0.25, Load15: 0.125, Load1Max: 0.5, Cpus: 2, MemTotal: 1000, MemAvailable: 900, MemUsed: 100, SwapTotal: 100, SwapFree: 40, SwapUsed: 60},
+			{Time: start.Unix(), Load1: 2.0, Load5: 1.0, Load15: 0.5, Load1Max: 3.0, Cpus: 2, MemTotal: 1000, MemAvailable: 500, MemUsed: 500, SwapTotal: 100, SwapFree: 40, SwapUsed: 60, Uptime: 1030},
+			{Time: start.Unix() + 60, Load1: 0.5, Load5: 0.25, Load15: 0.125, Load1Max: 0.5, Cpus: 2, MemTotal: 1000, MemAvailable: 900, MemUsed: 100, SwapTotal: 100, SwapFree: 40, SwapUsed: 60, Uptime: 1060},
 		}, r.Points)
 	}
 

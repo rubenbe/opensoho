@@ -3096,7 +3096,7 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 	if !ok {
 		sampleTime = time.Now().UTC()
 	}
-	storeResourceSample(app, device, payload.Resources, sampleTime)
+	storeResourceSample(app, device, payload.Resources, payload.General.Uptime, sampleTime)
 
 	//current := e.Request.URL.Query().Get("current")
 	fmt.Println(payload.Type, "@", agentTime)
@@ -3119,10 +3119,10 @@ func parseAgentTime(value string) (time.Time, bool) {
 	return t.UTC(), true
 }
 
-// storeResourceSample appends one CPU load/memory sample to the device's
-// resource history.
-func storeResourceSample(app core.App, device *core.Record, resources Resources, sampleTime time.Time) {
-	if len(resources.Load) < 3 && resources.Memory.Total == 0 {
+// storeResourceSample appends one CPU load/memory/uptime sample to the
+// device's resource history. uptime is in seconds.
+func storeResourceSample(app core.App, device *core.Record, resources Resources, uptime int, sampleTime time.Time) {
+	if len(resources.Load) < 3 && resources.Memory.Total == 0 && uptime <= 0 {
 		return
 	}
 	if historyRetentionDays(app) == 0 {
@@ -3148,6 +3148,9 @@ func storeResourceSample(app core.App, device *core.Record, resources Resources,
 	record.Set("mem_buffered", resources.Memory.Buffered)
 	record.Set("swap_total", resources.Swap.Total)
 	record.Set("swap_free", resources.Swap.Free)
+	if uptime > 0 {
+		record.Set("uptime", uptime)
+	}
 	if err := app.Save(record); err != nil {
 		app.Logger().Error("Failed to store resource sample", "device", device.Id, "error", err)
 	}
@@ -4033,6 +4036,7 @@ type ResourceHistoryPoint struct {
 	SwapTotal    float64 `db:"swap_total" json:"swap_total"`
 	SwapFree     float64 `db:"swap_free" json:"swap_free"`
 	SwapUsed     float64 `db:"swap_used" json:"swap_used"`
+	Uptime       int64   `db:"uptime" json:"uptime"`
 }
 
 // parseUnixParam reads an optional query parameter holding unix seconds.
@@ -4107,7 +4111,8 @@ func apiDeviceResources(e *core.RequestEvent) error {
 			AVG([[mem_total]] - [[mem_available]]) AS mem_used,
 			AVG([[swap_total]]) AS swap_total,
 			AVG([[swap_free]]) AS swap_free,
-			AVG([[swap_total]] - [[swap_free]]) AS swap_used
+			AVG([[swap_total]] - [[swap_free]]) AS swap_used,
+			MAX([[uptime]]) AS uptime
 		FROM {{device_resources}}
 		WHERE [[device]] = {:device} AND [[time]] >= {:from} AND [[time]] < {:to}
 		GROUP BY t

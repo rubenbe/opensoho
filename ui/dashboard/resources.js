@@ -112,16 +112,42 @@ function formatTime(ms, withDate) {
         : { hour: "2-digit", minute: "2-digit" });
 }
 
+const HOUR = 3600 * 1000;
 const TICK_STEPS = [5, 15, 30, 60, 120, 180, 360, 720, 1440, 2880, 10080].map((m) => m * 60 * 1000);
 
 // Time axis ticks on round local times (e.g. every 3 hours at 00:00, 03:00, ...).
 function timeTicks(from, to, maxTicks = 8) {
     const step = TICK_STEPS.find((s) => (to - from) / s <= maxTicks) || TICK_STEPS[TICK_STEPS.length - 1];
-    // align to local midnight, not UTC
-    const offset = new Date(from).getTimezoneOffset() * 60 * 1000;
     const ticks = [];
-    for (let v = Math.ceil((from - offset) / step) * step + offset; v <= to; v += step) {
-        ticks.push({ value: v });
+
+    if (step < HOUR) {
+        // align to the local time, not UTC; a DST switch moves it by whole
+        // hours, which keeps sub-hour steps round
+        const offset = new Date(from).getTimezoneOffset() * 60 * 1000;
+        for (let v = Math.ceil((from - offset) / step) * step + offset; v <= to; v += step) {
+            ticks.push({ value: v });
+        }
+        return ticks;
+    }
+
+    // walk the wall clock, so the ticks stay on round hours across a DST switch
+    const hours = step / HOUR;
+    const advance = (d, n) => hours >= 24 ? d.setDate(d.getDate() + n / 24) : d.setHours(d.getHours() + n);
+    const d = new Date(from);
+    d.setMinutes(0, 0, 0);
+    if (hours >= 24) {
+        d.setHours(0);
+    }
+    while (d.getTime() < from || (hours < 24 && d.getHours() % hours !== 0)) {
+        advance(d, hours >= 24 ? 24 : 1);
+    }
+    while (d.getTime() <= to) {
+        ticks.push({ value: d.getTime() });
+        const previous = d.getTime();
+        advance(d, hours);
+        if (d.getTime() <= previous) {
+            d.setTime(previous + step);
+        }
     }
     return ticks;
 }

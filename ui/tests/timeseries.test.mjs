@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, test } from "node:test";
 
-import { byteStep, formatBytes, formatNumber, median, timeTicks } from "../dashboard/timeseries.js";
+import { byteStep, eventMarks, formatBytes, formatNumber, median, timeTicks } from "../dashboard/timeseries.js";
 
 const originalTZ = process.env.TZ;
 afterEach(() => {
@@ -185,5 +185,37 @@ describe("formatNumber", () => {
         assert.equal(formatNumber(0.333333), "0.33");
         assert.equal(formatNumber(2), "2");
         assert.equal(formatNumber(0.8), "0.8");
+    });
+});
+
+describe("eventMarks", () => {
+    const a = { id: "a", name: "AP A" };
+    const b = { id: "b", name: "AP B" };
+    const colors = { a: "#111111", b: "#222222" };
+    const colorOf = (d) => colors[d.id];
+
+    test("the events of all devices, in time order, in milliseconds", () => {
+        const histories = {
+            a: { events: [{ type: "reboot", t: 300 }, { type: "reboot", t: 100 }] },
+            b: { events: [{ type: "reboot", t: 200 }] },
+        };
+        assert.deepEqual(eventMarks([a, b], histories, colorOf), [
+            { x: 100000, color: "#111111", device: a, type: "reboot" },
+            { x: 200000, color: "#222222", device: b, type: "reboot" },
+            { x: 300000, color: "#111111", device: a, type: "reboot" },
+        ]);
+    });
+
+    test("only the shown devices", () => {
+        const histories = {
+            a: { events: [{ type: "reboot", t: 100 }] },
+            b: { events: [{ type: "reboot", t: 200 }] },
+        };
+        assert.deepEqual(eventMarks([b], histories, colorOf).map((m) => m.device.id), ["b"]);
+    });
+
+    test("devices without history or events", () => {
+        assert.deepEqual(eventMarks([a, b], { a: { points: [] } }, colorOf), []);
+        assert.deepEqual(eventMarks([], {}, colorOf), []);
     });
 });

@@ -505,6 +505,24 @@
         width: 100%;
         height: var(--chartHeight);
     }
+    .resource-events {
+        margin-top: var(--smSpacing);
+        .band-label {
+            text-align: left;
+        }
+        ul {
+            margin: 0;
+            padding: 0;
+            list-style: none;
+            font-size: var(--smFontSize);
+        }
+        li {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 2px 0;
+        }
+    }
     .resource-summary {
         .num {
             text-align: right;

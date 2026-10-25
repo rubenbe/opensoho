@@ -1,6 +1,6 @@
 import { loader, loading } from "./charts.js";
 import { healthyDeviceIds, selectAllLabel, selectDevices, setDevice } from "./selection.js";
-import { byteStep, formatBytes, formatNumber, median, timeTicks } from "./timeseries.js";
+import { byteStep, eventMarks, formatBytes, formatNumber, median, timeTicks } from "./timeseries.js";
 
 // Remember the selected devices, columns and period across page loads.
 const STORAGE_KEY = "dashboard_resource_history";
@@ -134,6 +134,50 @@ function pickerMenu() {
     };
 }
 
+const EVENT_LABELS = { reboot: "rebooted" };
+
+function eventLabel(mark) {
+    return `${mark.device.name || mark.device.id} ${EVENT_LABELS[mark.type] || mark.type} at ${formatTime(mark.x, true)}`;
+}
+
+// Draws the events (see eventMarks) as dashed vertical lines with a small
+// marker on top, and names them on hover.
+const eventLinesPlugin = {
+    id: "eventLines",
+    afterDatasetsDraw(chart, _, options) {
+        const { ctx, chartArea, scales } = chart;
+        for (const mark of options.marks || []) {
+            const x = scales.x.getPixelForValue(mark.x);
+            if (x < chartArea.left || x > chartArea.right) continue;
+            ctx.save();
+            ctx.strokeStyle = mark.color;
+            ctx.fillStyle = mark.color;
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([4, 3]);
+            ctx.beginPath();
+            ctx.moveTo(x, chartArea.top);
+            ctx.lineTo(x, chartArea.bottom);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.beginPath();
+            ctx.moveTo(x - 5, chartArea.top - 7);
+            ctx.lineTo(x + 5, chartArea.top - 7);
+            ctx.lineTo(x, chartArea.top);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+        }
+    },
+    afterEvent(chart, args, options) {
+        const event = args.event;
+        if (event.type !== "mousemove" && event.type !== "mouseout") return;
+        const near = event.type === "mousemove"
+            ? (options.marks || []).filter((m) => Math.abs(chart.scales.x.getPixelForValue(m.x) - event.x) <= 5)
+            : [];
+        chart.canvas.title = near.map(eventLabel).join("\n");
+    },
+};
+
 /**
  * Creates a line chart canvas for the columns of one unit.
  *
@@ -141,11 +185,11 @@ function pickerMenu() {
  * it is unmounted.
  *
  * @param  {Object}  unit See UNITS.
- * @return {Element} The canvas, with an update({ labels, datasets, from, to }) method.
+ * @return {Element} The canvas, with an update({ datasets, marks, from, to }) method.
  */
 function lineCanvas(unit) {
     let chart;
-    let data = { labels: [], datasets: [], from: 0, to: 0 };
+    let data = { datasets: [], marks: [], from: 0, to: 0 };
 
     const canvas = t.canvas({
         className: "resource-chart-canvas",
@@ -155,6 +199,7 @@ function lineCanvas(unit) {
             chart = new Chart(el, {
                 type: "line",
                 data: { labels: [], datasets: [] },
+                plugins: [eventLinesPlugin],
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
@@ -162,6 +207,8 @@ function lineCanvas(unit) {
                     parsing: false,
                     spanGaps: false,
                     interaction: { mode: "index", intersect: false },
+                    // room for the event markers
+                    layout: { padding: { top: 8 } },
                     elements: {
                         point: { radius: 0, hoverRadius: 4, hitRadius: 8 },
                         line: { borderWidth: 2, tension: 0 },
@@ -190,6 +237,7 @@ function lineCanvas(unit) {
                         },
                     },
                     plugins: {
+                        eventLines: { marks: [] },
                         legend: {
                             position: "bottom",
                             labels: { usePointStyle: true, pointStyle: "line", boxWidth: 28, padding: 16 },
@@ -230,6 +278,7 @@ function lineCanvas(unit) {
         y.grid = { color: grid };
         chart.options.plugins.legend.labels.color = hint;
 
+        chart.options.plugins.eventLines.marks = data.marks;
         chart.data.datasets = data.datasets;
         chart.update("none");
     };
@@ -361,6 +410,10 @@ export function resourceHistoryChart() {
         content.replaceChildren(t.div({ className: "net-empty" }, text));
     }
 
+    function deviceColor(device, scheme) {
+        return SERIES_COLORS[scheme][prefs.slots[device.id] ?? 0];
+    }
+
     // One series per device and column, on the union of all bucket times so
     // the tooltip lists all series at the hovered time. Missing buckets are
     // null, which breaks the line instead of drawing across the gap.
@@ -383,7 +436,7 @@ export function resourceHistoryChart() {
         const series = [];
         for (const d of shownDevices) {
             const byTime = new Map((histories[d.id]?.points || []).map((p) => [p.t, p]));
-            const color = SERIES_COLORS[scheme][prefs.slots[d.id] ?? 0];
+            const color = deviceColor(d, scheme);
             columns.forEach((c) => {
                 const values = (histories[d.id]?.points || []).map((p) => p[c.key]);
                 series.push({
@@ -436,6 +489,7 @@ export function resourceHistoryChart() {
 
         const scheme = app.store.activeColorScheme === "dark" ? "dark" : "light";
         const bucket = Math.max(...shownDevices.map((d) => histories[d.id]?.bucket || 0), 30);
+        const marks = eventMarks(shownDevices, histories, (d) => deviceColor(d, scheme));
         const rows = [];
 
         for (const u of units) {
@@ -444,6 +498,7 @@ export function resourceHistoryChart() {
             canvases[u.key].update({
                 from: period.from * 1000,
                 to: period.to * 1000,
+                marks,
                 datasets: series.map((s) => ({
                     label: `${s.device.name || s.device.id} · ${s.column.label}`,
                     data: s.data,
@@ -455,34 +510,48 @@ export function resourceHistoryChart() {
             rows.push(...series.map((s) => ({ ...s, unit: u })));
         }
 
-        summary.replaceChildren(t.table(
-            { className: "net-table resource-summary" },
-            t.thead(
-                null,
-                t.tr(
+        summary.replaceChildren(
+            t.table(
+                { className: "net-table resource-summary" },
+                t.thead(
                     null,
-                    t.th(null, "Device"),
-                    t.th(null, "Metric"),
-                    t.th({ className: "num" }, "Latest"),
-                    t.th({ className: "num" }, "Average"),
-                    t.th({ className: "num" }, "Median"),
-                    t.th({ className: "num" }, "Peak"),
+                    t.tr(
+                        null,
+                        t.th(null, "Device"),
+                        t.th(null, "Metric"),
+                        t.th({ className: "num" }, "Latest"),
+                        t.th({ className: "num" }, "Average"),
+                        t.th({ className: "num" }, "Median"),
+                        t.th({ className: "num" }, "Peak"),
+                    ),
                 ),
+                t.tbody(null, rows.map((r) => t.tr(
+                    null,
+                    t.td(
+                        null,
+                        t.span({ className: "legend-swatch", style: `background:${r.color}` }),
+                        r.device.name || r.device.id,
+                    ),
+                    t.td(null, r.column.label),
+                    t.td({ className: "num" }, r.unit.format(r.latest)),
+                    t.td({ className: "num" }, r.unit.format(r.average)),
+                    t.td({ className: "num" }, r.unit.format(r.median)),
+                    t.td({ className: "num" }, r.unit.format(r.peak)),
+                ))),
             ),
-            t.tbody(null, rows.map((r) => t.tr(
-                null,
-                t.td(
-                    null,
-                    t.span({ className: "legend-swatch", style: `background:${r.color}` }),
-                    r.device.name || r.device.id,
-                ),
-                t.td(null, r.column.label),
-                t.td({ className: "num" }, r.unit.format(r.latest)),
-                t.td({ className: "num" }, r.unit.format(r.average)),
-                t.td({ className: "num" }, r.unit.format(r.median)),
-                t.td({ className: "num" }, r.unit.format(r.peak)),
-            ))),
-        ));
+            // native replaceChildren() would render a null as text
+            ...(marks.length
+                ? [t.div(
+                    { className: "resource-events" },
+                    t.div({ className: "band-label" }, "Reboots"),
+                    t.ul(null, marks.map((m) => t.li(
+                        null,
+                        t.span({ className: "legend-swatch", style: `background:${m.color}` }),
+                        eventLabel(m),
+                    ))),
+                )]
+                : []),
+        );
     }
 
     async function load() {

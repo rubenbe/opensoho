@@ -321,6 +321,39 @@ export function resourceHistoryChart() {
         load();
     }
 
+    // Replaces the selection, the devices that stay selected keep their color.
+    function selectDevices(ids) {
+        const wanted = ids.slice(0, MAX_DEVICES);
+        prefs.devices = prefs.devices.filter((id) => wanted.includes(id));
+        for (const id of Object.keys(prefs.slots)) {
+            if (!prefs.devices.includes(id)) {
+                delete prefs.slots[id];
+            }
+        }
+        for (const id of wanted) {
+            if (!prefs.devices.includes(id)) {
+                prefs.slots[id] = freeSlot();
+                prefs.devices.push(id);
+            }
+        }
+        savePrefs(prefs);
+        renderPickers();
+        load();
+    }
+
+    function selectAction(label, ids) {
+        const text = ids.length > MAX_DEVICES ? `First ${MAX_DEVICES} ${label.replace(/^All /, "")}` : label;
+        return t.button(
+            {
+                type: "button",
+                className: "dropdown-item",
+                disabled: !ids.length,
+                onclick: () => selectDevices(ids),
+            },
+            t.span({ className: "txt" }, text),
+        );
+    }
+
     function setColumn(key, on) {
         prefs.columns = prefs.columns.filter((c) => c !== key);
         if (on) {
@@ -337,10 +370,18 @@ export function resourceHistoryChart() {
         devicePicker.update(
             `Devices (${prefs.devices.length})`,
             devices.length
-                ? devices.map((d) => {
-                    const on = prefs.devices.includes(d.id);
-                    return checkItem(d.name || d.id, on, !on && full, (v) => setDevice(d.id, v));
-                })
+                ? [
+                    selectAction("All devices", devices.map((d) => d.id)),
+                    selectAction(
+                        "All healthy devices",
+                        devices.filter((d) => d.health_status === "healthy").map((d) => d.id),
+                    ),
+                    t.hr(),
+                    ...devices.map((d) => {
+                        const on = prefs.devices.includes(d.id);
+                        return checkItem(d.name || d.id, on, !on && full, (v) => setDevice(d.id, v));
+                    }),
+                ]
                 : [t.div({ className: "dropdown-item" }, "No devices")],
         );
         columnPicker.update(
@@ -481,7 +522,7 @@ export function resourceHistoryChart() {
     async function load() {
         await loading(state, async () => {
             devices = await app.pb.collection("devices").getFullList({
-                fields: "id,name",
+                fields: "id,name,health_status",
                 sort: "name",
                 requestKey: "resource_history_devices",
             });

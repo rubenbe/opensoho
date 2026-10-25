@@ -8940,11 +8940,12 @@ func TestApiClientResources(t *testing.T) {
 	addSample(tv, 60*time.Second, ap1, "Home", 5, 5)
 	addSample(gone, -5*time.Minute, ap1, "Home", 5, 5)
 
-	// The AP the phone roamed to rebooted at 12:02:20, one it never used too
-	addUptime(ap2, 100*time.Second, 5000)
-	addUptime(ap2, 150*time.Second, 10)
-	addUptime(ap3, 100*time.Second, 5000)
-	addUptime(ap3, 150*time.Second, 10)
+	// The AP the phone roamed to rebooted at 12:02:20, while the phone was on
+	// it. The AP it left and one it never used rebooted then too.
+	for _, ap := range []*core.Record{ap1, ap2, ap3} {
+		addUptime(ap, 100*time.Second, 5000)
+		addUptime(ap, 150*time.Second, 10)
+	}
 
 	period := fmt.Sprintf("from=%d&to=%d", start.Unix(), start.Add(5*time.Minute).Unix())
 

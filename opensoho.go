@@ -4340,7 +4340,7 @@ func deviceNames(app core.App, ids []string) map[string]string {
 
 // apiClientResources returns the traffic of one client per bucket, and its
 // events: roaming to another AP, switching SSID, reconnecting and the reboots
-// of the APs it used. See parseHistoryRange for the parameters.
+// of the AP it was connected to. See parseHistoryRange for the parameters.
 func apiClientResources(e *core.RequestEvent) error {
 	collection, err := clientsCollection(e.App)
 	if err != nil {
@@ -4400,20 +4400,29 @@ func apiClientResources(e *core.RequestEvent) error {
 		return e.InternalServerError("Failed to load client events", err)
 	}
 
-	var used []struct {
+	// where the client was when
+	var presence []struct {
+		Time   int64  `db:"t"`
 		Device string `db:"device"`
 	}
-	err = e.App.DB().NewQuery(`
-		SELECT DISTINCT [[device]] AS device FROM {{client_resources}}
-		WHERE [[client]] = {:client} AND [[time]] >= {:start} AND [[time]] < {:to}`).Bind(params).All(&used)
+	err = e.App.DB().NewQuery(query + `
+		SELECT t, device FROM samples ORDER BY t`).Bind(params).All(&presence)
 	if err != nil {
 		return e.InternalServerError("Failed to load client events", err)
 	}
 	ids := []string{}
-	for _, u := range used {
-		ids = append(ids, u.Device)
+	for _, p := range presence {
+		if !slices.Contains(ids, p.Device) {
+			ids = append(ids, p.Device)
+		}
 	}
 	names := deviceNames(e.App, ids)
+	// connectedTo tells whether the client was on the device around time t:
+	// its sample right before or right after t was.
+	connectedTo := func(device string, t int64) bool {
+		i := sort.Search(len(presence), func(i int) bool { return presence[i].Time > t })
+		return (i > 0 && presence[i-1].Device == device) || (i < len(presence) && presence[i].Device == device)
+	}
 
 	events := []ResourceEvent{}
 	for _, c := range changes {
@@ -4431,6 +4440,9 @@ func apiClientResources(e *core.RequestEvent) error {
 			return e.InternalServerError("Failed to load client events", err)
 		}
 		for _, reboot := range reboots {
+			if !connectedTo(id, reboot.Time) {
+				continue
+			}
 			reboot.Device = id
 			reboot.DeviceName = names[id]
 			events = append(events, reboot)

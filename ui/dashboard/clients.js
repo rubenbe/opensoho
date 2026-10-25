@@ -32,6 +32,8 @@ function eventLabel(mark, name) {
             return `${name} switched to ${band} on ${ap} at ${at}`;
         case "reconnect":
             return `${name} reconnected to ${ap}${onBand} at ${at}`;
+        case "disconnect":
+            return `${name} disconnected from ${ap}${onBand} at ${at}`;
         case "reboot":
             return `${ap}, used by ${name}, rebooted at ${at}`;
         default:

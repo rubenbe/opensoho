@@ -200,9 +200,9 @@ describe("eventMarks", () => {
             b: { events: [{ type: "reboot", t: 200 }] },
         };
         assert.deepEqual(eventMarks([a, b], histories, colorOf), [
-            { x: 100000, color: "#111111", device: a, type: "reboot" },
-            { x: 200000, color: "#222222", device: b, type: "reboot" },
-            { x: 300000, color: "#111111", device: a, type: "reboot" },
+            { x: 100000, color: "#111111", entity: a, type: "reboot", event: histories.a.events[1] },
+            { x: 200000, color: "#222222", entity: b, type: "reboot", event: histories.b.events[0] },
+            { x: 300000, color: "#111111", entity: a, type: "reboot", event: histories.a.events[0] },
         ]);
     });
 
@@ -211,7 +211,7 @@ describe("eventMarks", () => {
             a: { events: [{ type: "reboot", t: 100 }] },
             b: { events: [{ type: "reboot", t: 200 }] },
         };
-        assert.deepEqual(eventMarks([b], histories, colorOf).map((m) => m.device.id), ["b"]);
+        assert.deepEqual(eventMarks([b], histories, colorOf).map((m) => m.entity.id), ["b"]);
     });
 
     test("devices without history or events", () => {

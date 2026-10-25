@@ -74,18 +74,18 @@ export function timeTicks(from, to, maxTicks = 8) {
 }
 
 /**
- * The events (reboots) of the shown devices, as marks for the charts.
+ * The events (reboots, roams, ...) of the shown items, as marks for the charts.
  *
- * @param  {Array}    devices   [{ id, name }] in display order.
- * @param  {Object}   histories Device id -> API response with events [{ type, t }].
- * @param  {Function} colorOf   Device -> color.
- * @return {Array}    [{ x, color, device, type }] sorted by time; x in milliseconds.
+ * @param  {Array}    items     [{ id, ... }] in display order.
+ * @param  {Object}   histories Item id -> API response with events [{ type, t, ... }].
+ * @param  {Function} colorOf   Item -> color.
+ * @return {Array}    [{ x, color, entity, type, event }] sorted by time; x in milliseconds.
  */
-export function eventMarks(devices, histories, colorOf) {
+export function eventMarks(items, histories, colorOf) {
     const marks = [];
-    for (const device of devices) {
-        for (const event of histories[device.id]?.events || []) {
-            marks.push({ x: event.t * 1000, color: colorOf(device), device, type: event.type });
+    for (const entity of items) {
+        for (const event of histories[entity.id]?.events || []) {
+            marks.push({ x: event.t * 1000, color: colorOf(entity), entity, type: event.type, event });
         }
     }
     return marks.sort((a, b) => a.x - b.x);

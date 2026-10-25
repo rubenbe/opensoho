@@ -119,3 +119,8 @@ export function bitRateStep(max) {
 export function bandLabel(band) {
     return band ? `${band} GHz` : "";
 }
+
+// Where a client was last: "Living Room AP · 5 GHz", or whichever is known.
+export function clientLocation(client) {
+    return [client.device_name, bandLabel(client.band)].filter(Boolean).join(" · ");
+}

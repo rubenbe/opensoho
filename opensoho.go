@@ -4475,18 +4475,21 @@ func apiClientResources(e *core.RequestEvent) error {
 }
 
 // ClientTraffic is the total traffic of a client in a period, in bytes, and
-// the band (GHz) of its last sample in the period.
+// the AP and band (GHz) of its last sample in the period.
 type ClientTraffic struct {
-	Id       string `json:"id"`
-	Name     string `json:"name"`
-	MAC      string `json:"mac"`
-	Band     string `json:"band"`
-	Download int64  `json:"download"`
-	Upload   int64  `json:"upload"`
+	Id         string `json:"id"`
+	Name       string `json:"name"`
+	MAC        string `json:"mac"`
+	Device     string `json:"device"`
+	DeviceName string `json:"device_name"`
+	Band       string `json:"band"`
+	Download   int64  `json:"download"`
+	Upload     int64  `json:"upload"`
 }
 
 // apiClientTraffic lists the clients with history in the period ("from" and
-// "to", see parseHistoryRange), by name, with their total traffic.
+// "to", see parseHistoryRange), by name, with their total traffic and the AP
+// and band they were last on.
 func apiClientTraffic(e *core.RequestEvent) error {
 	collection, err := clientsCollection(e.App)
 	if err != nil {
@@ -4499,6 +4502,7 @@ func apiClientTraffic(e *core.RequestEvent) error {
 
 	var totals []struct {
 		Client   string `db:"client"`
+		Device   string `db:"device"`
 		Band     string `db:"band"`
 		Download int64  `db:"download"`
 		Upload   int64  `db:"upload"`
@@ -4512,6 +4516,7 @@ func apiClientTraffic(e *core.RequestEvent) error {
 	err = e.App.DB().NewQuery(fmt.Sprintf(clientTrafficSQL, "1 = 1") + `
 		SELECT
 			c.client AS client,
+			(SELECT device FROM samples last WHERE last.client = c.client ORDER BY last.t DESC LIMIT 1) AS device,
 			(SELECT band FROM samples last WHERE last.client = c.client ORDER BY last.t DESC LIMIT 1) AS band,
 			COALESCE(SUM(traffic.download_bytes), 0) AS download,
 			COALESCE(SUM(traffic.upload_bytes), 0) AS upload
@@ -4527,9 +4532,14 @@ func apiClientTraffic(e *core.RequestEvent) error {
 	}
 
 	ids := []string{}
+	deviceIds := []string{}
 	for _, t := range totals {
 		ids = append(ids, t.Client)
+		if !slices.Contains(deviceIds, t.Device) {
+			deviceIds = append(deviceIds, t.Device)
+		}
 	}
+	names := deviceNames(e.App, deviceIds)
 	records, err := e.App.FindRecordsByIds(collection, ids)
 	if err != nil {
 		return e.InternalServerError("Failed to load the clients", err)
@@ -4546,12 +4556,14 @@ func apiClientTraffic(e *core.RequestEvent) error {
 			continue
 		}
 		clients = append(clients, ClientTraffic{
-			Id:       record.Id,
-			Name:     clientName(record),
-			MAC:      record.GetString("mac_address"),
-			Band:     t.Band,
-			Download: t.Download,
-			Upload:   t.Upload,
+			Id:         record.Id,
+			Name:       clientName(record),
+			MAC:        record.GetString("mac_address"),
+			Device:     t.Device,
+			DeviceName: names[t.Device],
+			Band:       t.Band,
+			Download:   t.Download,
+			Upload:     t.Upload,
 		})
 	}
 	sort.Slice(clients, func(i, j int) bool {

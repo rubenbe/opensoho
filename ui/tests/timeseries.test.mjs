@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, test } from "node:test";
 
-import { bandLabel, bitRateStep, byteStep, eventMarks, formatBitRate, formatBytes, formatNumber, median, timeTicks } from "../dashboard/timeseries.js";
+import { bandLabel, bitRateStep, byteStep, clientLocation, eventMarks, formatBitRate, formatBytes, formatNumber, median, timeTicks } from "../dashboard/timeseries.js";
 
 const originalTZ = process.env.TZ;
 afterEach(() => {
@@ -253,5 +253,16 @@ describe("bandLabel", () => {
     test("unknown", () => {
         assert.equal(bandLabel(""), "");
         assert.equal(bandLabel(undefined), "");
+    });
+});
+
+describe("clientLocation", () => {
+    test("AP and band", () => {
+        assert.equal(clientLocation({ device_name: "Living Room AP", band: "5" }), "Living Room AP · 5 GHz");
+    });
+    test("whichever is known", () => {
+        assert.equal(clientLocation({ device_name: "Garage AP", band: "" }), "Garage AP");
+        assert.equal(clientLocation({ device_name: "", band: "2.4" }), "2.4 GHz");
+        assert.equal(clientLocation({}), "");
     });
 });

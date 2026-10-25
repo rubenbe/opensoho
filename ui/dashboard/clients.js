@@ -1,7 +1,7 @@
 import { openRecords } from "./charts.js";
 import { formatTime, historyChart, MAX_ITEMS } from "./history.js";
 import { topByTraffic } from "./selection.js";
-import { bandLabel, bitRateStep, formatBitRate } from "./timeseries.js";
+import { bandLabel, bitRateStep, clientLocation, formatBitRate } from "./timeseries.js";
 
 const UNITS = [
     { key: "rate", label: "Traffic", format: formatBitRate, step: bitRateStep },
@@ -57,8 +57,8 @@ export function clientHistoryChart() {
             return res.clients || [];
         },
         itemName: (client) => client.name,
-        // the band of its last sample in the period
-        itemDetail: (client) => bandLabel(client.band),
+        // the AP and band of its last sample in the period
+        itemDetail: clientLocation,
         defaultItems: (clients) => topByTraffic(clients, MAX_ITEMS),
         selectActions: (clients) => [
             { label: `Top ${MAX_ITEMS} by traffic`, ids: topByTraffic(clients, MAX_ITEMS) },

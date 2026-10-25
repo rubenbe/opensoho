@@ -9018,11 +9018,11 @@ func TestApiClientResources(t *testing.T) {
 		}
 		assert.Nil(t, json.Unmarshal(rec.Body.Bytes(), &res))
 		// by name, without the client that has no samples in the period
-		// with the band of their last sample in the period
+		// with the AP and band of their last sample in the period
 		assert.Equal(t, []ClientTraffic{
-			{Id: laptop.Id, Name: "66:55:44:33:22:11", MAC: "66:55:44:33:22:11", Band: "2.4", Download: 60, Upload: 30},
-			{Id: phone.Id, Name: "Phone", MAC: "11:22:33:44:55:66", Band: "5", Download: 3000 + 3000 + 400 + 60 + 90 + 600 + 40, Upload: 600 + 600 + 100 + 50 + 30 + 300 + 20},
-			{Id: tv.Id, Name: "TV", MAC: "aa:bb:cc:dd:ee:ff", Band: "6", Download: 0, Upload: 0},
+			{Id: laptop.Id, Name: "66:55:44:33:22:11", MAC: "66:55:44:33:22:11", Device: ap1.Id, DeviceName: "Garage AP", Band: "2.4", Download: 60, Upload: 30},
+			{Id: phone.Id, Name: "Phone", MAC: "11:22:33:44:55:66", Device: ap2.Id, DeviceName: "Living Room AP", Band: "5", Download: 3000 + 3000 + 400 + 60 + 90 + 600 + 40, Upload: 600 + 600 + 100 + 50 + 30 + 300 + 20},
+			{Id: tv.Id, Name: "TV", MAC: "aa:bb:cc:dd:ee:ff", Device: ap1.Id, DeviceName: "Garage AP", Band: "6", Download: 0, Upload: 0},
 		}, res.Clients)
 	})
 }

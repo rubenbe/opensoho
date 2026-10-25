@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1590,23 +1591,22 @@ func TestPruneResourceHistory(t *testing.T) {
 	pruneResourceHistory(app, now)
 	assert.Equal(t, 3, remaining())
 
-	// An invalid value falls back to the default of 1 day
-	setting.Set("value", "abc")
+	setting.Set("value", "1")
 	assert.Nil(t, app.Save(setting))
 	assert.Equal(t, 1, historyRetentionDays(app))
 	pruneResourceHistory(app, now)
 	assert.Equal(t, 2, remaining())
 
-	// 0 drops the whole history
-	setting.Set("value", "0")
+	// An invalid value falls back to the default of 0: no history
+	setting.Set("value", "abc")
 	assert.Nil(t, app.Save(setting))
 	assert.Equal(t, 0, historyRetentionDays(app))
 	pruneResourceHistory(app, now)
 	assert.Equal(t, 0, remaining())
 
-	// A missing setting falls back to the default too
+	// As does a missing setting
 	assert.Nil(t, app.Delete(setting))
-	assert.Equal(t, 1, historyRetentionDays(app))
+	assert.Equal(t, 0, historyRetentionDays(app))
 }
 
 func TestValidateVlan(t *testing.T) {
@@ -3441,6 +3441,7 @@ func TestHandleMonitoringStoresResourceSamples(t *testing.T) {
 	clientcollection := setupClientsCollection(t, app)
 	devicecollection := setupDeviceCollection(t, app, wificollection)
 	setupDeviceResourcesCollection(t, app, devicecollection)
+	enableHistory(t, app, 1)
 
 	d := core.NewRecord(devicecollection)
 	d.Set("name", "ap1")
@@ -3512,6 +3513,7 @@ func TestHandleMonitoringStoresClientSamples(t *testing.T) {
 	clientcollection := setupClientsCollection(t, app)
 	devicecollection := setupDeviceCollection(t, app, wificollection)
 	setupClientResourcesCollection(t, app, clientcollection, devicecollection)
+	enableHistory(t, app, 1)
 
 	newDevice := func(name string) *core.Record {
 		d := core.NewRecord(devicecollection)
@@ -7092,6 +7094,15 @@ func setupClientResourcesCollection(t *testing.T, app core.App, clientcollection
 	err := app.Save(col)
 	assert.Nil(t, err)
 	return col
+}
+
+// enableHistory sets history_retention_days, which is 0 (no history) by default.
+func enableHistory(t *testing.T, app core.App, days int) {
+	settingscollection := setupSettingsCollection(t, app)
+	setting := core.NewRecord(settingscollection)
+	setting.Set("name", "history_retention_days")
+	setting.Set("value", strconv.Itoa(days))
+	assert.Nil(t, app.Save(setting))
 }
 
 func setupSettingsCollection(t *testing.T, app core.App) *core.Collection {

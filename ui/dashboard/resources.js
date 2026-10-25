@@ -466,7 +466,7 @@ export function resourceHistoryChart() {
             return message("Select one or more metrics.");
         }
         if (!shownDevices.some((d) => histories[d.id]?.points?.length)) {
-            return message("No samples in this period. Check that the history_retention_days setting is not 0.");
+            return message("No samples in this period. History is only kept when the history_retention_days setting is above 0, which it is not by default.");
         }
 
         const units = UNITS.filter((u) => columns.some((c) => c.unit === u.key));

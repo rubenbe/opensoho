@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, test } from "node:test";
 
-import { bandLabel, bitRateStep, byteStep, clientLocation, eventMarks, formatBitRate, formatBytes, formatNumber, median, timeTicks } from "../dashboard/timeseries.js";
+import { bandLabel, bitRateStep, byteStep, clientLocation, formatDbm, eventMarks, formatBitRate, formatBytes, formatNumber, median, timeTicks } from "../dashboard/timeseries.js";
 
 const originalTZ = process.env.TZ;
 afterEach(() => {
@@ -264,5 +264,14 @@ describe("clientLocation", () => {
         assert.equal(clientLocation({ device_name: "Garage AP", band: "" }), "Garage AP");
         assert.equal(clientLocation({ device_name: "", band: "2.4" }), "2.4 GHz");
         assert.equal(clientLocation({}), "");
+    });
+});
+
+describe("formatDbm", () => {
+    test("missing value", () => assert.equal(formatDbm(null), "—"));
+    test("whole dBm", () => {
+        assert.equal(formatDbm(-62), "-62 dBm");
+        assert.equal(formatDbm(-42.5), "-42 dBm");
+        assert.equal(formatDbm(-42.6), "-43 dBm");
     });
 });

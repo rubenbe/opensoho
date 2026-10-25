@@ -159,7 +159,7 @@ const eventLinesPlugin = {
  * The chart itself is created when the canvas is mounted and destroyed when
  * it is unmounted.
  *
- * @param  {Object}   unit       { key, label, format(value), step?(max) }
+ * @param  {Object}   unit       { key, label, format(value), step?(max), beginAtZero? (default true) }
  * @param  {Function} eventLabel Mark -> text shown on hover.
  * @return {Element}  The canvas, with an update({ datasets, marks, from, to }) method.
  */
@@ -198,7 +198,7 @@ function lineCanvas(unit, eventLabel) {
                             },
                         },
                         y: {
-                            beginAtZero: true,
+                            beginAtZero: unit.beginAtZero ?? true,
                             ticks: { maxTicksLimit: 6, callback: (v) => unit.format(v) },
                             afterDataLimits: (axis) => {
                                 if (!unit.step) return;
@@ -267,7 +267,7 @@ function lineCanvas(unit, eventLabel) {
  * @param  {string}   config.storageKey     localStorage key of the view preferences.
  * @param  {string}   config.requestKey     Prefix of the request keys.
  * @param  {Object}   config.names          { item: "Device", items: "Devices", none: "No devices" }
- * @param  {Array}    config.units          [{ key, label, format(value), step?(max) }]
+ * @param  {Array}    config.units          [{ key, label, format(value), step?(max), beginAtZero? }]
  * @param  {Array}    config.metrics        [{ key, label, unit }], the keys of the history points.
  * @param  {Array}    config.defaultMetrics Metric keys shown at first.
  * @param  {Function} config.loadItems      async ({ from, to }) -> [{ id, ... }] in display order.

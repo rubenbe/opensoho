@@ -124,3 +124,8 @@ export function bandLabel(band) {
 export function clientLocation(client) {
     return [client.device_name, bandLabel(client.band)].filter(Boolean).join(" · ");
 }
+
+// A signal strength (RSSI), rounded to whole dBm.
+export function formatDbm(v) {
+    return v == null ? "—" : `${Math.round(v)} dBm`;
+}

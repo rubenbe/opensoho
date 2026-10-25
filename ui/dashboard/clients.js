@@ -1,17 +1,21 @@
 import { openRecords } from "./charts.js";
 import { formatTime, historyChart, MAX_ITEMS } from "./history.js";
 import { topByTraffic } from "./selection.js";
-import { bandLabel, bitRateStep, clientLocation, formatBitRate } from "./timeseries.js";
+import { bandLabel, bitRateStep, clientLocation, formatBitRate, formatDbm } from "./timeseries.js";
 
 const UNITS = [
     { key: "rate", label: "Traffic", format: formatBitRate, step: bitRateStep },
+    // negative, so the axis follows the values instead of starting at 0
+    { key: "dbm", label: "Signal", format: formatDbm, beginAtZero: false },
 ];
 
-// The values of /api/v1/client-resources (apiClientResources in opensoho.go),
-// in bytes per second, from the client's point of view.
+// The values of /api/v1/client-resources (apiClientResources in opensoho.go):
+// the traffic in bytes per second, from the client's point of view, and the
+// average signal (RSSI).
 const METRICS = [
     { key: "download", label: "Download", unit: "rate" },
     { key: "upload", label: "Upload", unit: "rate" },
+    { key: "signal", label: "Signal", unit: "dbm" },
 ];
 
 function eventLabel(mark, name) {

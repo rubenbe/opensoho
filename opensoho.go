@@ -4198,7 +4198,7 @@ func apiDeviceResources(e *core.RequestEvent) error {
 // ResourceEvent is something that happened to a device, derived from its
 // resource history when it is requested.
 type ResourceEvent struct {
-	Type       string `json:"type"` // "reboot", "roam", "ssid", "band" or "reconnect"
+	Type       string `json:"type"` // "reboot", "roam", "ssid", "band", "reconnect" or "disconnect"
 	Time       int64  `json:"t"`    // unix seconds
 	Device     string `json:"device,omitempty"`
 	DeviceName string `json:"device_name,omitempty"`
@@ -4353,10 +4353,62 @@ func deviceNames(app core.App, ids []string) map[string]string {
 	return names
 }
 
+// clientDisconnectEvents finds when the client disconnected in the period:
+// the AP it was last seen on reported twice without it, before it showed up
+// again anywhere. Every report of an AP lists all its associated clients, so
+// a report without the client means it was gone. One report is not enough:
+// APs report out of step, so a roaming client can miss one report of its old
+// AP before the new AP reports it. While the AP itself did not report, it is
+// unknown whether the client was connected, so that is no disconnect.
+//
+// The event is at the first report without the client. start is where the
+// client samples are read from (see clientTrafficSQL).
+func clientDisconnectEvents(app core.App, clientId string, start string, r historyRange) ([]ResourceEvent, error) {
+	var rows []struct {
+		Time   int64  `db:"t"`
+		Device string `db:"device"`
+		SSID   string `db:"ssid"`
+		Band   string `db:"band"`
+	}
+	err := app.DB().NewQuery(`
+		WITH samples AS (
+			SELECT [[device]] AS device, [[ssid]] AS ssid, [[band]] AS band, [[time]] AS time,
+				LEAD([[time]]) OVER (ORDER BY [[time]]) AS next_time
+			FROM {{client_resources}}
+			WHERE [[client]] = {:client} AND [[time]] >= {:start} AND [[time]] < {:to}
+		)
+		SELECT
+			CAST(strftime('%s', MIN(reports.[[time]])) AS INTEGER) AS t,
+			samples.device AS device, samples.ssid AS ssid, samples.band AS band
+		FROM samples
+		JOIN {{device_resources}} reports
+			ON reports.[[device]] = samples.device
+			AND reports.[[time]] > samples.time
+			AND reports.[[time]] < COALESCE(samples.next_time, {:to})
+		GROUP BY samples.time
+		HAVING COUNT(*) >= 2
+		ORDER BY t`).Bind(dbx.Params{
+		"client": clientId,
+		"start":  start,
+		"to":     r.toDT.String(),
+	}).All(&rows)
+	if err != nil {
+		return nil, err
+	}
+
+	events := []ResourceEvent{}
+	for _, row := range rows {
+		if row.Time >= r.from.Unix() {
+			events = append(events, ResourceEvent{Type: "disconnect", Time: row.Time, Device: row.Device, SSID: row.SSID, Band: row.Band})
+		}
+	}
+	return events, nil
+}
+
 // apiClientResources returns the traffic of one client per bucket, and its
-// events: roaming to another AP, switching SSID, reconnecting and the reboots
-// of the AP it was connected to. Switching band on the same AP and SSID is an
-// event of its own. See parseHistoryRange for the parameters.
+// events: roaming to another AP, switching SSID or band, reconnecting,
+// disconnecting and the reboots of the AP it was connected to. See
+// parseHistoryRange for the parameters.
 func apiClientResources(e *core.RequestEvent) error {
 	collection, err := clientsCollection(e.App)
 	if err != nil {
@@ -4436,14 +4488,31 @@ func apiClientResources(e *core.RequestEvent) error {
 		}
 	}
 	names := deviceNames(e.App, ids)
-	// connectedTo tells whether the client was on the device around time t:
-	// its sample right before or right after t was.
+
+	disconnects, err := clientDisconnectEvents(e.App, client.Id, start, r)
+	if err != nil {
+		return e.InternalServerError("Failed to load client events", err)
+	}
+	// connectedTo tells whether the client was on the device at time t: its
+	// last sample before t was, and it did not disconnect since.
 	connectedTo := func(device string, t int64) bool {
 		i := sort.Search(len(presence), func(i int) bool { return presence[i].Time > t })
-		return (i > 0 && presence[i-1].Device == device) || (i < len(presence) && presence[i].Device == device)
+		if i == 0 || presence[i-1].Device != device {
+			return false
+		}
+		for _, d := range disconnects {
+			if d.Time > presence[i-1].Time && d.Time <= t {
+				return false
+			}
+		}
+		return true
 	}
 
 	events := []ResourceEvent{}
+	for _, d := range disconnects {
+		d.DeviceName = names[d.Device]
+		events = append(events, d)
+	}
 	for _, c := range changes {
 		event := ResourceEvent{Type: "reconnect", Time: c.Time, Device: c.Device, DeviceName: names[c.Device], SSID: c.SSID, Band: c.Band}
 		if c.Device != c.PrevDevice {

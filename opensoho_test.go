@@ -8892,6 +8892,8 @@ func TestApiClientResources(t *testing.T) {
 	ap1 := newDevice("Garage AP")
 	ap2 := newDevice("Living Room AP")
 	ap3 := newDevice("Office AP")
+	// never reports itself
+	ap4 := newDevice("Shed AP")
 	newClient := func(mac string, alias string) *core.Record {
 		c := core.NewRecord(clientcollection)
 		c.Set("mac_address", mac)
@@ -8903,6 +8905,8 @@ func TestApiClientResources(t *testing.T) {
 	laptop := newClient("66:55:44:33:22:11", "")
 	tv := newClient("aa:bb:cc:dd:ee:ff", "TV")
 	gone := newClient("ff:ee:dd:cc:bb:aa", "Gone")
+	watch := newClient("12:34:56:78:9a:bc", "Watch")
+	lamp := newClient("cb:a9:87:65:43:21", "Lamp")
 
 	start := time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
 	addSample := func(client *core.Record, offset time.Duration, device *core.Record, ssid string, band string, rx int, tx int) {
@@ -8956,6 +8960,11 @@ func TestApiClientResources(t *testing.T) {
 	addSample(laptop, 30*time.Second, ap1, "Home", "2.4", 40, 70)
 	addSample(tv, 60*time.Second, ap1, "Home", "6", 5, 5)
 	addSample(gone, -5*time.Minute, ap1, "Home", "5", 5, 5)
+	// Gone while its AP reported, back later with restarted counters
+	addSample(watch, 0, ap3, "Home", "5", 100, 100)
+	addSample(watch, 200*time.Second, ap3, "Home", "5", 10, 20)
+	// On an AP that does not report
+	addSample(lamp, 0, ap4, "Home", "2.4", 5, 5)
 
 	// The AP the phone roamed to rebooted at 12:02:20, while the phone was on
 	// it. The AP it left and one it never used rebooted then too.
@@ -9013,6 +9022,35 @@ func TestApiClientResources(t *testing.T) {
 		}, res.Events)
 	})
 
+	clientEvents := func(t *testing.T, client *core.Record) []ResourceEvent {
+		rec, err := callClientApi(t, app, apiClientResources, client.Id, period)
+		assert.Nil(t, err)
+		var res struct {
+			Events []ResourceEvent `json:"events"`
+		}
+		assert.Nil(t, json.Unmarshal(rec.Body.Bytes(), &res))
+		return res.Events
+	}
+
+	// The phone's gaps hold one report of its AP at most: no disconnects
+	// there. The APs report at 100 s and 150 s.
+	t.Run("disconnects", func(t *testing.T) {
+		// Gone from the Garage AP before it rebooted, so that reboot is not
+		// the laptop's
+		assert.Equal(t, []ResourceEvent{
+			{Type: "disconnect", Time: start.Unix() + 100, Device: ap1.Id, DeviceName: "Garage AP", SSID: "Home", Band: "2.4"},
+		}, clientEvents(t, laptop))
+		assert.Equal(t, []ResourceEvent{
+			{Type: "disconnect", Time: start.Unix() + 100, Device: ap1.Id, DeviceName: "Garage AP", SSID: "Home", Band: "6"},
+		}, clientEvents(t, tv))
+		assert.Equal(t, []ResourceEvent{
+			{Type: "disconnect", Time: start.Unix() + 100, Device: ap3.Id, DeviceName: "Office AP", SSID: "Home", Band: "5"},
+			{Type: "reconnect", Time: start.Unix() + 200, Device: ap3.Id, DeviceName: "Office AP", SSID: "Home", Band: "5"},
+		}, clientEvents(t, watch))
+		// Unknown while the AP does not report
+		assert.Equal(t, []ResourceEvent{}, clientEvents(t, lamp))
+	})
+
 	t.Run("unknown client", func(t *testing.T) {
 		_, err := callClientApi(t, app, apiClientResources, "doesnotexist123", period)
 		var apiresponse *router.ApiError
@@ -9038,8 +9076,11 @@ func TestApiClientResources(t *testing.T) {
 		// with the AP and band of their last sample in the period
 		assert.Equal(t, []ClientTraffic{
 			{Id: laptop.Id, Name: "66:55:44:33:22:11", MAC: "66:55:44:33:22:11", Device: ap1.Id, DeviceName: "Garage AP", Band: "2.4", Download: 60, Upload: 30},
+			{Id: lamp.Id, Name: "Lamp", MAC: "cb:a9:87:65:43:21", Device: ap4.Id, DeviceName: "Shed AP", Band: "2.4", Download: 0, Upload: 0},
 			{Id: phone.Id, Name: "Phone", MAC: "11:22:33:44:55:66", Device: ap2.Id, DeviceName: "Living Room AP", Band: "5", Download: 3000 + 3000 + 400 + 60 + 90 + 600 + 40, Upload: 600 + 600 + 100 + 50 + 30 + 300 + 20},
 			{Id: tv.Id, Name: "TV", MAC: "aa:bb:cc:dd:ee:ff", Device: ap1.Id, DeviceName: "Garage AP", Band: "6", Download: 0, Upload: 0},
+			// the counters restarted when it came back
+			{Id: watch.Id, Name: "Watch", MAC: "12:34:56:78:9a:bc", Device: ap3.Id, DeviceName: "Office AP", Band: "5", Download: 20, Upload: 10},
 		}, res.Clients)
 	})
 }

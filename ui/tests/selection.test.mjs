@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { freeSlot, healthyDeviceIds, selectAllLabel, selectItems, setItem } from "../dashboard/selection.js";
+import { freeSlot, healthyDeviceIds, selectAllLabel, selectItems, setItem, topByTraffic } from "../dashboard/selection.js";
 
 const MAX = 8;
 
@@ -165,4 +165,27 @@ test("toggling devices and selecting all keeps every color stable", () => {
     }
     // d4 had lost its slot when it was deselected, it gets the lowest free one
     assert.equal(s.slots.d4, 0);
+});
+
+describe("topByTraffic", () => {
+    const clients = [
+        { id: "a", download: 10, upload: 0 },
+        { id: "b", download: 0, upload: 0 },
+        { id: "c", download: 500, upload: 500 },
+        { id: "d", download: 20, upload: 30 },
+    ];
+
+    test("most traffic first, without the idle clients", () => {
+        assert.deepEqual(topByTraffic(clients, 8), ["c", "d", "a"]);
+    });
+
+    test("at most n", () => {
+        assert.deepEqual(topByTraffic(clients, 2), ["c", "d"]);
+    });
+
+    test("leaves the list alone", () => {
+        const copy = structuredClone(clients);
+        topByTraffic(clients, 8);
+        assert.deepEqual(clients, copy);
+    });
 });

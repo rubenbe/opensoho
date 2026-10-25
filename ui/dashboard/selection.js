@@ -56,3 +56,13 @@ export function healthyDeviceIds(devices) {
 export function selectAllLabel(label, count, max) {
     return count > max ? `First ${max} ${label.replace(/^All /, "")}` : label;
 }
+
+// The ids of the n clients with the most traffic (download + upload), most
+// first; clients without traffic are left out.
+export function topByTraffic(clients, n) {
+    return clients
+        .filter((c) => c.download + c.upload > 0)
+        .sort((a, b) => (b.download + b.upload) - (a.download + a.upload))
+        .slice(0, n)
+        .map((c) => c.id);
+}

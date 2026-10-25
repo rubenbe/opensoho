@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, test } from "node:test";
 
-import { byteStep, eventMarks, formatBytes, formatNumber, median, timeTicks } from "../dashboard/timeseries.js";
+import { bitRateStep, byteStep, eventMarks, formatBitRate, formatBytes, formatNumber, median, timeTicks } from "../dashboard/timeseries.js";
 
 const originalTZ = process.env.TZ;
 afterEach(() => {
@@ -217,5 +217,30 @@ describe("eventMarks", () => {
     test("devices without history or events", () => {
         assert.deepEqual(eventMarks([a, b], { a: { points: [] } }, colorOf), []);
         assert.deepEqual(eventMarks([], {}, colorOf), []);
+    });
+});
+
+describe("formatBitRate", () => {
+    test("missing value", () => assert.equal(formatBitRate(null), "—"));
+    test("bytes per second shown as bits per second", () => {
+        assert.equal(formatBitRate(0), "0 bit/s");
+        assert.equal(formatBitRate(100), "800 bit/s");
+        assert.equal(formatBitRate(125), "1.0 kbit/s");
+        assert.equal(formatBitRate(1250000), "10.0 Mbit/s");
+        assert.equal(formatBitRate(12500000), "100 Mbit/s");
+        assert.equal(formatBitRate(125000000), "1.0 Gbit/s");
+    });
+});
+
+describe("bitRateStep", () => {
+    // the steps in bit/s
+    const bits = (max) => bitRateStep(max / 8) * 8;
+    test("1, 2 or 5 times a power of ten, at most 5 ticks", () => {
+        assert.equal(bits(0), 1);
+        assert.equal(bits(5), 1);
+        assert.equal(bits(6), 2);
+        assert.equal(bits(11), 5);
+        assert.equal(bits(30e6), 10e6);
+        assert.equal(bits(800e6), 200e6);
     });
 });

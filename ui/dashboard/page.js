@@ -1,4 +1,5 @@
 import { loadChartJs } from "./charts.js";
+import { clientHistoryChart } from "./clients.js";
 import { frequencyOverview } from "./frequency.js";
 import { networkOverview } from "./network.js";
 import { resourceHistoryChart } from "./resources.js";
@@ -93,6 +94,7 @@ export async function pageDashboard() {
     const frequencies = frequencyOverview();
     const network = networkOverview();
     const resources = resourceHistoryChart();
+    const clientHistory = clientHistoryChart();
 
     const cards = [
         deviceHealth,
@@ -103,6 +105,7 @@ export async function pageDashboard() {
         frequencies,
         network,
         resources,
+        clientHistory,
     ];
 
     function refreshAll() {
@@ -153,6 +156,7 @@ export async function pageDashboard() {
                 card("Frequency Overview", frequencies.el, { wide: true }),
                 card("Network Overview", network.el, { wide: true }),
                 card("Resource History", resources.el, { wide: true }),
+                card("Client History", clientHistory.el, { wide: true }),
             ),
             t.footer({ className: "page-footer" }, app.components.credits()),
         ),

@@ -90,3 +90,27 @@ export function eventMarks(items, histories, colorOf) {
     }
     return marks.sort((a, b) => a.x - b.x);
 }
+
+// Formats bytes per second as bits per second (network rates are in bits).
+export function formatBitRate(bytesPerSecond) {
+    if (bytesPerSecond == null) return "—";
+    const units = ["bit/s", "kbit/s", "Mbit/s", "Gbit/s"];
+    let v = bytesPerSecond * 8;
+    let i = 0;
+    while (Math.abs(v) >= 1000 && i < units.length - 1) {
+        v /= 1000;
+        i++;
+    }
+    return `${v.toFixed(i === 0 || v >= 100 ? 0 : 1)} ${units[i]}`;
+}
+
+// A round step (1, 2 or 5 times a power of 10 bit/s) giving at most 5 ticks
+// up to max, in bytes per second like the values.
+export function bitRateStep(max) {
+    const bits = max * 8;
+    for (let power = 1; ; power *= 10) {
+        for (const m of [1, 2, 5]) {
+            if (bits / (m * power) <= 5) return (m * power) / 8;
+        }
+    }
+}

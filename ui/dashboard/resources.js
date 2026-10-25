@@ -120,11 +120,12 @@ function pickerMenu() {
         },
         text,
         t.i({ className: "ri-arrow-down-s-line", ariaHidden: true }),
-        dropdown,
     );
 
     return {
-        el: button,
+        // the dropdown is not inside the button, where a click on an item
+        // label would also toggle (close) the dropdown
+        el: t.div({ className: "inline-flex" }, button, dropdown),
         update(label, items) {
             text.textContent = label;
             dropdown.replaceChildren(...items);

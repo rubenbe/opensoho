@@ -1,4 +1,4 @@
-import { loader, loading } from "./charts.js";
+import { loader, loading, openRecords } from "./charts.js";
 import { healthyDeviceIds, selectAllLabel, selectDevices, setDevice } from "./selection.js";
 import { byteStep, eventMarks, formatBytes, formatNumber, median, timeTicks } from "./timeseries.js";
 
@@ -530,7 +530,15 @@ export function resourceHistoryChart() {
                     t.td(
                         null,
                         t.span({ className: "legend-swatch", style: `background:${r.color}` }),
-                        r.device.name || r.device.id,
+                        t.button(
+                            {
+                                type: "button",
+                                className: "device-link",
+                                title: "Show this device",
+                                onclick: () => openRecords("devices", `id = "${r.device.id}"`),
+                            },
+                            r.device.name || r.device.id,
+                        ),
                     ),
                     t.td(null, r.column.label),
                     t.td({ className: "num" }, r.unit.format(r.latest)),

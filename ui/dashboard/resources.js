@@ -1,4 +1,5 @@
 import { loader, loading } from "./charts.js";
+import { healthyDeviceIds, selectAllLabel, selectDevices, setDevice } from "./selection.js";
 import { byteStep, formatBytes, formatNumber, median, timeTicks } from "./timeseries.js";
 
 // Remember the selected devices, columns and period across page loads.
@@ -301,56 +302,22 @@ export function resourceHistoryChart() {
         return COLUMNS.filter((c) => prefs.columns.includes(c.key));
     }
 
-    function freeSlot() {
-        const used = new Set(prefs.devices.map((id) => prefs.slots[id]));
-        for (let slot = 0; slot < MAX_DEVICES; slot++) {
-            if (!used.has(slot)) return slot;
-        }
-        return 0;
-    }
-
-    function setDevice(id, on) {
-        prefs.devices = prefs.devices.filter((d) => d !== id);
-        delete prefs.slots[id];
-        if (on) {
-            prefs.slots[id] = freeSlot();
-            prefs.devices.push(id);
-        }
-        savePrefs(prefs);
-        renderPickers();
-        load();
-    }
-
-    // Replaces the selection, the devices that stay selected keep their color.
-    function selectDevices(ids) {
-        const wanted = ids.slice(0, MAX_DEVICES);
-        prefs.devices = prefs.devices.filter((id) => wanted.includes(id));
-        for (const id of Object.keys(prefs.slots)) {
-            if (!prefs.devices.includes(id)) {
-                delete prefs.slots[id];
-            }
-        }
-        for (const id of wanted) {
-            if (!prefs.devices.includes(id)) {
-                prefs.slots[id] = freeSlot();
-                prefs.devices.push(id);
-            }
-        }
+    function changeDevices(change) {
+        change();
         savePrefs(prefs);
         renderPickers();
         load();
     }
 
     function selectAction(label, ids) {
-        const text = ids.length > MAX_DEVICES ? `First ${MAX_DEVICES} ${label.replace(/^All /, "")}` : label;
         return t.button(
             {
                 type: "button",
                 className: "dropdown-item",
                 disabled: !ids.length,
-                onclick: () => selectDevices(ids),
+                onclick: () => changeDevices(() => selectDevices(prefs, ids, MAX_DEVICES)),
             },
-            t.span({ className: "txt" }, text),
+            t.span({ className: "txt" }, selectAllLabel(label, ids.length, MAX_DEVICES)),
         );
     }
 
@@ -372,14 +339,13 @@ export function resourceHistoryChart() {
             devices.length
                 ? [
                     selectAction("All devices", devices.map((d) => d.id)),
-                    selectAction(
-                        "All healthy devices",
-                        devices.filter((d) => d.health_status === "healthy").map((d) => d.id),
-                    ),
+                    selectAction("All healthy devices", healthyDeviceIds(devices)),
                     t.hr(),
                     ...devices.map((d) => {
                         const on = prefs.devices.includes(d.id);
-                        return checkItem(d.name || d.id, on, !on && full, (v) => setDevice(d.id, v));
+                        return checkItem(d.name || d.id, on, !on && full, (v) => {
+                            changeDevices(() => setDevice(prefs, d.id, v, MAX_DEVICES));
+                        });
                     }),
                 ]
                 : [t.div({ className: "dropdown-item" }, "No devices")],
@@ -529,10 +495,7 @@ export function resourceHistoryChart() {
 
             if (!prefs) {
                 prefs = { devices: [], columns: ["load1"], range: "24h", slots: {} };
-                devices.slice(0, MAX_DEVICES).forEach((d, i) => {
-                    prefs.devices.push(d.id);
-                    prefs.slots[d.id] = i;
-                });
+                selectDevices(prefs, devices.map((d) => d.id), MAX_DEVICES);
                 savePrefs(prefs);
             }
             // forget devices that were deleted

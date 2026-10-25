@@ -110,7 +110,7 @@ function checkItem(label, checked, disabled, onchange) {
 // A toolbar button opening a list of check items.
 function pickerMenu() {
     const text = t.span();
-    const dropdown = t.div({ className: "dropdown sm nowrap gap-0 resource-picker", popover: "auto" });
+    const dropdown = t.div({ className: "dropdown sm nowrap gap-0 left resource-picker", popover: "auto" });
 
     const button = t.button(
         {

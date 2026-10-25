@@ -3494,9 +3494,13 @@ func TestHandleMonitoringStoresResourceSamples(t *testing.T) {
 	assert.Equal(t, 0, uptimeOnly.GetInt("mem_total"))
 }
 
-func clientMonitoringPayload(clients string) string {
-	return `{"type": "DeviceMonitoring", "interfaces": [{"type": "wireless", "name": "phy1-ap0", "mac": "aa:bb:cc:dd:ee:ff",
-  "wireless": {"ssid": "OpenWRT", "frequency": 5180, "channel": 36, "htmode": "HE80", "clients": [` + clients + `]}}]}`
+func clientInterface(name string, ssid string, clients string) string {
+	return `{"type": "wireless", "name": "` + name + `", "mac": "aa:bb:cc:dd:ee:ff",
+  "wireless": {"ssid": "` + ssid + `", "frequency": 5180, "channel": 36, "htmode": "HE80", "clients": [` + clients + `]}}`
+}
+
+func clientMonitoringPayload(interfaces ...string) string {
+	return `{"type": "DeviceMonitoring", "interfaces": [` + strings.Join(interfaces, ",") + `]}`
 }
 
 func TestHandleMonitoringStoresClientSamples(t *testing.T) {
@@ -3519,14 +3523,17 @@ func TestHandleMonitoringStoresClientSamples(t *testing.T) {
 	ap1 := newDevice("ap1")
 	ap2 := newDevice("ap2")
 
-	clients := `
+	// Two SSIDs on the same AP, each with its own clients
+	postResourcesMonitoring(t, app, ap1, clientcollection, "time=01-10-2026_08:00:00.000000", clientMonitoringPayload(
+		clientInterface("phy1-ap0", "Home", `
     {"mac": "11:22:33:44:55:66", "assoc": true, "signal": -60, "bytes": {"rx": 1000, "tx": 2000}},
-    {"mac": "66:55:44:33:22:11", "assoc": true, "signal": -70, "bytes": {"rx": 30, "tx": 40}},
-    {"mac": "aa:aa:aa:aa:aa:aa", "assoc": false, "signal": -90, "bytes": {"rx": 5, "tx": 6}}`
-	postResourcesMonitoring(t, app, ap1, clientcollection, "time=01-10-2026_08:00:00.000000", clientMonitoringPayload(clients))
+    {"mac": "aa:aa:aa:aa:aa:aa", "assoc": false, "signal": -90, "bytes": {"rx": 5, "tx": 6}}`),
+		clientInterface("phy1-ap1", "IoT", `
+    {"mac": "66:55:44:33:22:11", "assoc": true, "signal": -70, "bytes": {"rx": 30, "tx": 40}}`),
+	))
 	// The first client roamed to the other AP, with restarted counters
 	postResourcesMonitoring(t, app, ap2, clientcollection, "time=01-10-2026_08:00:30.000000", clientMonitoringPayload(
-		`{"mac": "11:22:33:44:55:66", "assoc": true, "signal": -55, "bytes": {"rx": 10, "tx": 20}}`))
+		clientInterface("phy1-ap0", "Home", `{"mac": "11:22:33:44:55:66", "assoc": true, "signal": -55, "bytes": {"rx": 10, "tx": 20}}`)))
 
 	samples, err := app.FindRecordsByFilter("client_resources", "", "time,rx_bytes", 0, 0)
 	assert.Nil(t, err)
@@ -3538,19 +3545,19 @@ func TestHandleMonitoringStoresClientSamples(t *testing.T) {
 	assert.Nil(t, err)
 
 	type sample struct {
-		client, device string
-		time           time.Time
-		rx, tx         int
+		client, device, ssid string
+		time                 time.Time
+		rx, tx               int
 	}
 	got := []sample{}
 	for _, s := range samples {
-		got = append(got, sample{s.GetString("client"), s.GetString("device"), s.GetDateTime("time").Time(), s.GetInt("rx_bytes"), s.GetInt("tx_bytes")})
+		got = append(got, sample{s.GetString("client"), s.GetString("device"), s.GetString("ssid"), s.GetDateTime("time").Time(), s.GetInt("rx_bytes"), s.GetInt("tx_bytes")})
 	}
 	at := func(sec int) time.Time { return time.Date(2026, 10, 1, 8, 0, sec, 0, time.UTC) }
 	assert.Equal(t, []sample{
-		{other.Id, ap1.Id, at(0), 30, 40},
-		{roamer.Id, ap1.Id, at(0), 1000, 2000},
-		{roamer.Id, ap2.Id, at(30), 10, 20},
+		{other.Id, ap1.Id, "IoT", at(0), 30, 40},
+		{roamer.Id, ap1.Id, "Home", at(0), 1000, 2000},
+		{roamer.Id, ap2.Id, "Home", at(30), 10, 20},
 	}, got)
 
 	// A client that is not associated has no record and no history
@@ -3586,7 +3593,7 @@ func TestHandleMonitoringStoresNoClientSamplesWithZeroRetention(t *testing.T) {
 	assert.Nil(t, app.Save(d))
 
 	postResourcesMonitoring(t, app, d, clientcollection, "current=true", clientMonitoringPayload(
-		`{"mac": "11:22:33:44:55:66", "assoc": true, "signal": -60, "bytes": {"rx": 1000, "tx": 2000}}`))
+		clientInterface("phy1-ap0", "Home", `{"mac": "11:22:33:44:55:66", "assoc": true, "signal": -60, "bytes": {"rx": 1000, "tx": 2000}}`)))
 
 	// The client itself is still updated, only its history is not kept
 	_, err := app.FindFirstRecordByData(clientcollection, "mac_address", "11:22:33:44:55:66")
@@ -7075,6 +7082,7 @@ func setupClientResourcesCollection(t *testing.T, app core.App, clientcollection
 		CollectionId:  devicecollection.Id,
 		CascadeDelete: true,
 	})
+	col.Fields.Add(&core.TextField{Name: "ssid"})
 	col.Fields.Add(&core.DateField{
 		Name:     "time",
 		Required: true,

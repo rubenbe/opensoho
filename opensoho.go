@@ -3077,7 +3077,7 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 						return e.InternalServerError("Could not store entry", err), report
 					}
 					if keepClientHistory {
-						storeClientSample(app, cliententry, device, client, sampleTime)
+						storeClientSample(app, cliententry, device, iface.Wireless.SSID, client, sampleTime)
 					}
 				}
 			}
@@ -3109,10 +3109,10 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 }
 
 // storeClientSample appends the byte counters of one associated client to its
-// history. The counters are cumulative, as reported by the AP: rx is what the
-// AP received from the client, tx what it sent to it. They restart when the
-// client reconnects.
-func storeClientSample(app core.App, clientRecord *core.Record, device *core.Record, client Client, sampleTime time.Time) {
+// history, with the device and SSID it was connected to. The counters are
+// cumulative, as reported by the AP: rx is what the AP received from the
+// client, tx what it sent to it. They restart when the client reconnects.
+func storeClientSample(app core.App, clientRecord *core.Record, device *core.Record, ssid string, client Client, sampleTime time.Time) {
 	collection, err := app.FindCachedCollectionByNameOrId("client_resources")
 	if err != nil {
 		return
@@ -3120,6 +3120,7 @@ func storeClientSample(app core.App, clientRecord *core.Record, device *core.Rec
 	record := core.NewRecord(collection)
 	record.Set("client", clientRecord.Id)
 	record.Set("device", device.Id)
+	record.Set("ssid", ssid)
 	record.Set("time", sampleTime)
 	record.Set("rx_bytes", client.Bytes.Rx)
 	record.Set("tx_bytes", client.Bytes.Tx)

@@ -1,6 +1,6 @@
 import { loader, loading } from "./charts.js";
 import { selectAllLabel, selectItems, setItem } from "./selection.js";
-import { eventMarks, groupRows, latestEvents, markKey, marksNear, median, timeTicks } from "./timeseries.js";
+import { adjacentEvents, eventMarks, groupRows, latestEvents, markKey, marksNear, median, timeTicks } from "./timeseries.js";
 
 // A dashboard card charting the history of some items (devices, clients)
 // over time: one line per selected item and metric, one chart per unit.
@@ -667,20 +667,45 @@ export function historyChart(config) {
                 bubble.hidden = true;
                 continue;
             }
+            // the previous or next events, from the same chart; the focus
+            // stays on the arrows, as the bubble is rebuilt
+            const step = (direction, label, icon) => {
+                const events = adjacentEvents(shownMarks, selected, direction);
+                return t.button(
+                    {
+                        type: "button",
+                        className: "btn sm transparent circle",
+                        ariaLabel: label,
+                        title: label,
+                        disabled: !events.length,
+                        onclick: () => {
+                            select(unit, events);
+                            const arrows = [...bubble.querySelectorAll(".resource-event-nav [title]:not(:disabled)")];
+                            (arrows.find((b) => b.title === label) || arrows[0])?.focus();
+                        },
+                    },
+                    t.i({ className: icon, ariaHidden: true }),
+                );
+            };
             bubble.replaceChildren(
                 t.ul(null, selected.map((m) => t.li(
                     null,
                     t.span({ className: "legend-swatch", style: `background:${m.color}` }),
                     eventLabel(m),
                 ))),
-                t.button(
-                    {
-                        type: "button",
-                        className: "btn sm transparent circle",
-                        ariaLabel: "Close",
-                        onclick: () => select(null, []),
-                    },
-                    t.i({ className: "ri-close-line", ariaHidden: true }),
+                t.div(
+                    { className: "resource-event-nav" },
+                    step(-1, "Previous event", "ri-arrow-left-s-line"),
+                    step(1, "Next event", "ri-arrow-right-s-line"),
+                    t.button(
+                        {
+                            type: "button",
+                            className: "btn sm transparent circle",
+                            ariaLabel: "Close",
+                            onclick: () => select(null, []),
+                        },
+                        t.i({ className: "ri-close-line", ariaHidden: true }),
+                    ),
                 ),
             );
             bubble.hidden = false;

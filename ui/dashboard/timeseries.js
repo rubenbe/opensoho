@@ -182,3 +182,28 @@ export function marksNear(marks, pixelOf, x, tolerance) {
 export function latestEvents(marks, n) {
     return [...marks].sort((a, b) => b.x - a.x).slice(0, n);
 }
+
+/**
+ * The events next to the selected ones in time: those at the nearest time
+ * after (direction 1) or before (direction -1) them. Events at the same time
+ * (e.g. the reboot of an AP several clients used) come together, as they are
+ * drawn as one line.
+ *
+ * @param  {Array}  marks     See eventMarks.
+ * @param  {Array}  selected  The selected marks.
+ * @param  {number} direction 1 for the next events, -1 for the previous ones.
+ * @return {Array}  The marks, or [] when there are none.
+ */
+export function adjacentEvents(marks, selected, direction) {
+    if (!selected.length) {
+        return [];
+    }
+    const from = direction > 0 ? Math.max(...selected.map((m) => m.x)) : Math.min(...selected.map((m) => m.x));
+    let nearest = null;
+    for (const mark of marks) {
+        if ((mark.x - from) * direction > 0 && (nearest === null || Math.abs(mark.x - from) < Math.abs(nearest - from))) {
+            nearest = mark.x;
+        }
+    }
+    return nearest === null ? [] : marks.filter((m) => m.x === nearest);
+}

@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, test } from "node:test";
 
-import { bandLabel, bitRateStep, byteStep, clientLocation, formatDbm, groupRows, latestEvents, markKey, marksNear, eventMarks, formatBitRate, formatBytes, formatNumber, median, timeTicks } from "../dashboard/timeseries.js";
+import { adjacentEvents, bandLabel, bitRateStep, byteStep, clientLocation, formatDbm, groupRows, latestEvents, markKey, marksNear, eventMarks, formatBitRate, formatBytes, formatNumber, median, timeTicks } from "../dashboard/timeseries.js";
 
 const originalTZ = process.env.TZ;
 afterEach(() => {
@@ -338,5 +338,33 @@ describe("latestEvents", () => {
     test("leaves the marks alone", () => {
         latestEvents(marks, 1);
         assert.deepEqual(marks.map((m) => m.x), [100, 300, 200]);
+    });
+});
+
+describe("adjacentEvents", () => {
+    const a = { x: 100, id: "a" };
+    const b1 = { x: 200, id: "b1" };
+    const b2 = { x: 200, id: "b2" };
+    const c = { x: 300, id: "c" };
+    // not in time order, like the marks of several items
+    const marks = [c, a, b1, b2];
+    const ids = (ms) => ms.map((m) => m.id);
+
+    test("the next and previous event", () => {
+        assert.deepEqual(ids(adjacentEvents(marks, [a], 1)), ["b1", "b2"]);
+        assert.deepEqual(ids(adjacentEvents(marks, [c], -1)), ["b1", "b2"]);
+        assert.deepEqual(ids(adjacentEvents(marks, [b1, b2], 1)), ["c"]);
+        assert.deepEqual(ids(adjacentEvents(marks, [b1, b2], -1)), ["a"]);
+    });
+
+    test("events at the same time come together, past one of them", () => {
+        assert.deepEqual(ids(adjacentEvents(marks, [b1], 1)), ["c"]);
+        assert.deepEqual(ids(adjacentEvents(marks, [b2], -1)), ["a"]);
+    });
+
+    test("none past the first and last event", () => {
+        assert.deepEqual(adjacentEvents(marks, [c], 1), []);
+        assert.deepEqual(adjacentEvents(marks, [a], -1), []);
+        assert.deepEqual(adjacentEvents(marks, [], 1), []);
     });
 });

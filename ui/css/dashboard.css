@@ -575,6 +575,11 @@
             padding: 2px 0;
         }
     }
+    .resource-event-nav {
+        display: flex;
+        flex-shrink: 0;
+        gap: 2px;
+    }
     .resource-item-detail {
         color: var(--surfaceTxtHintColor);
     }

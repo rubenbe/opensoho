@@ -5,12 +5,12 @@ go 1.27.0
 require (
 	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/endobit/oui v0.7.0
-	github.com/go-ozzo/ozzo-validation/v4 v4.3.0
 	github.com/google/uuid v1.6.0
 	github.com/liyue201/goqr v0.0.0-20200803022322-df443203d4ea
 	github.com/maruel/natural v1.3.0
 	github.com/mozillazg/go-unidecode v0.2.0
 	github.com/pocketbase/dbx v1.12.0
+	github.com/pocketbase/ozzo-validation/v4 v4.3.0
 	github.com/pocketbase/pocketbase v0.40.5
 	github.com/reugn/wifiqr v0.3.3
 	github.com/stretchr/testify v1.8.0
@@ -40,7 +40,6 @@ require (
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/ncruces/go-strftime v1.1.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/pocketbase/ozzo-validation/v4 v4.3.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e // indirect
 	github.com/spf13/cast v1.10.0 // indirect

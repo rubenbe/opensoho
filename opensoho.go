@@ -30,9 +30,9 @@ import (
 	"time"
 
 	"github.com/endobit/oui"
-	"github.com/go-ozzo/ozzo-validation/v4"
 	"github.com/google/uuid"
 	"github.com/pocketbase/dbx"
+	validation "github.com/pocketbase/ozzo-validation/v4"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"

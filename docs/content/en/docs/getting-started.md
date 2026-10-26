@@ -103,7 +103,7 @@ Connected OpenWRT devices.
 Create an entry with a hostname, MAC address, IPv4 address, and one or more
 DHCP servers. OpenSOHO adds the same static `config host` section to
 `/etc/config/dhcp` on every selected server. Clear the DHCP server selection to
-disable the reservation without deleting it. Reservation names, MAC addresses,
+disable the reservation without deleting it. Reservation hostnames, MAC addresses,
 and IP addresses must be unique.
 
 ### Radios

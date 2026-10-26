@@ -155,7 +155,7 @@ These are the connected devices.
 Create a reservation with a hostname, MAC address, IPv4 address, and one or
 more DHCP servers. OpenSOHO adds the same named `config host` section to
 `/etc/config/dhcp` on every selected server. Clear the DHCP server selection to
-disable the reservation without deleting it. Names, MAC addresses, and IP
+disable the reservation without deleting it. Hostnames, MAC addresses, and IP
 addresses are unique across the reservation list.
 
 ### Leds

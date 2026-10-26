@@ -2532,7 +2532,7 @@ func TestGenerateStaticDhcpReservations(t *testing.T) {
 
 	shared := core.NewRecord(reservationcollection)
 	shared.Id = "aaaaabbbbbccccc"
-	shared.Set("name", "NAS-Server")
+	shared.Set("hostname", "NAS-Server")
 	shared.Set("mac_address", "aa:bb:cc:dd:ee:ff")
 	shared.Set("ip_address", "192.168.10.20")
 	shared.Set("dhcp_server", []string{d1.Id, d2.Id})
@@ -2541,7 +2541,7 @@ func TestGenerateStaticDhcpReservations(t *testing.T) {
 
 	secondRouterOnly := core.NewRecord(reservationcollection)
 	secondRouterOnly.Id = "dddddeeeeefffff"
-	secondRouterOnly.Set("name", "printer")
+	secondRouterOnly.Set("hostname", "printer")
 	secondRouterOnly.Set("mac_address", "02:11:22:33:44:55")
 	secondRouterOnly.Set("ip_address", "192.168.10.30")
 	secondRouterOnly.Set("dhcp_server", []string{d2.Id})
@@ -2550,7 +2550,7 @@ func TestGenerateStaticDhcpReservations(t *testing.T) {
 
 	inactive := core.NewRecord(reservationcollection)
 	inactive.Id = "ggggghhhhhiiiii"
-	inactive.Set("name", "inactive-host")
+	inactive.Set("hostname", "inactive-host")
 	inactive.Set("mac_address", "02:11:22:33:44:66")
 	inactive.Set("ip_address", "192.168.10.40")
 	assert.Nil(t, validateDhcpReservation(inactive))
@@ -2586,11 +2586,11 @@ func TestValidateDhcpReservation(t *testing.T) {
 	reservationcollection := setupDhcpReservationCollection(t, app, devicecollection)
 
 	valid := core.NewRecord(reservationcollection)
-	valid.Set("name", "NAS-01")
+	valid.Set("hostname", "NAS-01")
 	valid.Set("mac_address", "aa:bb:cc:dd:ee:ff")
 	valid.Set("ip_address", "192.168.1.10")
 	assert.Nil(t, validateDhcpReservation(valid))
-	assert.Equal(t, "nas-01", valid.GetString("name"))
+	assert.Equal(t, "nas-01", valid.GetString("hostname"))
 	assert.Equal(t, "AA:BB:CC:DD:EE:FF", valid.GetString("mac_address"))
 	assert.Equal(t, "192.168.1.10", valid.GetString("ip_address"))
 
@@ -2598,7 +2598,7 @@ func TestValidateDhcpReservation(t *testing.T) {
 		field string
 		value string
 	}{
-		{"name", "not a hostname"},
+		{"hostname", "not a hostname"},
 		{"mac_address", "01:00:5E:00:00:01"},
 		{"mac_address", "00:00:00:00:00:00"},
 		{"ip_address", "::1"},
@@ -2608,7 +2608,7 @@ func TestValidateDhcpReservation(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.field+"/"+tc.value, func(t *testing.T) {
 			record := core.NewRecord(reservationcollection)
-			record.Set("name", "host")
+			record.Set("hostname", "host")
 			record.Set("mac_address", "02:11:22:33:44:55")
 			record.Set("ip_address", "192.168.1.10")
 			record.Set(tc.field, tc.value)
@@ -7222,7 +7222,7 @@ func setupDhcpLeaseCollection(t *testing.T, app core.App) *core.Collection {
 
 func setupDhcpReservationCollection(t *testing.T, app core.App, devicecollection *core.Collection) *core.Collection {
 	collection := core.NewBaseCollection("dhcp_reservations")
-	collection.Fields.Add(&core.TextField{Name: "name", Required: true})
+	collection.Fields.Add(&core.TextField{Name: "hostname", Required: true})
 	collection.Fields.Add(&core.TextField{Name: "mac_address", Required: true})
 	collection.Fields.Add(&core.TextField{Name: "ip_address", Required: true})
 	collection.Fields.Add(&core.RelationField{

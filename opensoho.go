@@ -2076,10 +2076,10 @@ func generateDhcpConfigForDevice(app core.App, device *core.Record, vlan *core.R
 	return generateDhcpConfigForDeviceVLAN(vlanname, prefixsize)
 }
 
-func normalizeDhcpReservationName(value string) (string, error) {
+func normalizeDhcpReservationHostname(value string) (string, error) {
 	value = strings.TrimSpace(value)
 	if len(value) == 0 || len(value) > 63 || !validHostnameLabelRegexp.MatchString(value) {
-		return "", errors.New("name must be a valid single-label hostname")
+		return "", errors.New("hostname must be a valid single-label hostname")
 	}
 	return strings.ToLower(value), nil
 }
@@ -2109,7 +2109,7 @@ func normalizeDhcpReservationIP(value string) (string, error) {
 }
 
 func generateStaticDhcpReservation(reservation *core.Record) string {
-	name, nameErr := normalizeDhcpReservationName(reservation.GetString("name"))
+	name, nameErr := normalizeDhcpReservationHostname(reservation.GetString("hostname"))
 	mac, macErr := normalizeDhcpReservationMAC(reservation.GetString("mac_address"))
 	ip, ipErr := normalizeDhcpReservationIP(reservation.GetString("ip_address"))
 	if nameErr != nil || macErr != nil || ipErr != nil {
@@ -2130,7 +2130,7 @@ func generateStaticDhcpReservations(app core.App, device *core.Record) string {
 	reservations, err := app.FindRecordsByFilter(
 		"dhcp_reservations",
 		"dhcp_server ~ {:dhcpServer}",
-		"name", 0, 0,
+		"hostname", 0, 0,
 		dbx.Params{"dhcpServer": device.Id},
 	)
 	if err != nil {
@@ -3932,11 +3932,11 @@ func validateGatewayIPConfig(cidr string) error {
 func validateDhcpReservation(record *core.Record) error {
 	errs := validation.Errors{}
 
-	name, err := normalizeDhcpReservationName(record.GetString("name"))
+	hostname, err := normalizeDhcpReservationHostname(record.GetString("hostname"))
 	if err != nil {
-		errs["name"] = validation.NewError("validation_invalid_hostname", "Set a valid hostname containing only letters, digits, and hyphens.")
+		errs["hostname"] = validation.NewError("validation_invalid_hostname", "Set a valid hostname containing only letters, digits, and hyphens.")
 	} else {
-		record.Set("name", name)
+		record.Set("hostname", hostname)
 	}
 
 	mac, err := normalizeDhcpReservationMAC(record.GetString("mac_address"))

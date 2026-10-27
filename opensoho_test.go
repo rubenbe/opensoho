@@ -8348,6 +8348,29 @@ func TestDhcpClientUpdate(t *testing.T) {
 	assert.Equal(t, 2, len(records))
 }
 
+// A device with a stale leases file must not wipe the live lease another
+// device reported for the same MAC.
+func TestDhcpStaleLeaseIgnored(t *testing.T) {
+	app, err := tests.NewTestApp()
+	assert.Equal(t, nil, err)
+	defer app.Cleanup()
+	setupDhcpLeaseCollection(t, app)
+
+	now, err := types.ParseDateTime("2026-10-27 22:00:00.000Z")
+	assert.Equal(t, nil, err)
+	live := []DHCPLease{{MACAddress: "00:1A:2B:3C:4D:5E", IPAddress: "10.17.0.117", Hostname: "phone", Expiry: 1793182910}}
+	stale := []DHCPLease{{MACAddress: "00:1A:2B:3C:4D:5E", IPAddress: "10.17.0.204", Hostname: "phone", Expiry: 1792816698}}
+
+	storeDHCPLeases(app, live, now)
+	storeDHCPLeases(app, stale, now)
+
+	records, err := app.FindAllRecords("dhcp_leases")
+	assert.Equal(t, nil, err)
+	assert.Equal(t, 1, len(records))
+	assert.Equal(t, "10.17.0.117", records[0].GetString("ip_address"))
+	assert.Equal(t, "2026-10-28 10:21:50.000Z", records[0].GetString("expiry"))
+}
+
 func TestSsidClientSteering(t *testing.T) {
 	app, err := tests.NewTestApp()
 	defer app.Cleanup()

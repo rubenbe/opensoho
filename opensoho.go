@@ -3231,6 +3231,12 @@ func storeDHCPLeases(app core.App, leaseslist []DHCPLease, expirytime types.Date
 	//var leasesmap map[string]DHCPLease
 	for _, lease := range leaseslist {
 		fmt.Println("DHCPLEASE", lease.MACAddress, lease.ClientID, lease.IPAddress, lease.Hostname, lease.Expiry)
+		// An already expired lease would only overwrite the live one another
+		// device reported for the same MAC, and be deleted right after. Stale
+		// leases files on access points do this every monitoring cycle.
+		if int64(lease.Expiry) < expirytime.Time().Unix() {
+			continue
+		}
 		record := findFirstOrNew(app, collection, "mac_address", lease.MACAddress)
 		record.Set("mac_address", lease.MACAddress)
 		record.Set("ip_address", lease.IPAddress)

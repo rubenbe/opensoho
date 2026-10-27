@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { freeSlot, healthyDeviceIds, selectAllLabel, selectItems, setItem, topByTraffic } from "../dashboard/selection.js";
+import { freeSlot, healthyDeviceIds, limitWarning, selectAllLabel, selectItems, setItem, topByTraffic } from "../dashboard/selection.js";
 
 const MAX = 8;
 
@@ -187,5 +187,12 @@ describe("topByTraffic", () => {
         const copy = structuredClone(clients);
         topByTraffic(clients, 8);
         assert.deepEqual(clients, copy);
+    });
+});
+
+describe("limitWarning", () => {
+    test("names the limit and the items", () => {
+        assert.equal(limitWarning("Devices", MAX), "At most 8 devices can be shown at once. Deselect one first.");
+        assert.equal(limitWarning("Clients", MAX), "At most 8 clients can be shown at once. Deselect one first.");
     });
 });

@@ -1,5 +1,5 @@
 import { loader, loading } from "./charts.js";
-import { selectAllLabel, selectItems, setItem } from "./selection.js";
+import { limitWarning, selectAllLabel, selectItems, setItem } from "./selection.js";
 import { adjacentEvents, eventMarks, groupRows, latestEvents, markKey, marksNear, median, timeTicks } from "./timeseries.js";
 
 // A dashboard card charting the history of some items (devices, clients)
@@ -85,7 +85,7 @@ function checkItem(label, checked, disabled, onchange) {
                 id,
                 checked,
                 disabled,
-                onchange: (e) => onchange(e.target.checked),
+                onchange: (e) => onchange(e.target.checked, e.target),
             }),
             t.label({ htmlFor: id }, label),
         ),
@@ -327,6 +327,8 @@ export function historyChart(config) {
     let period = { from: 0, to: 0 };
 
     const itemPicker = pickerMenu();
+    // shown in the item picker when one more item is picked than fit
+    const fullWarning = t.div({ className: "alert warning resource-picker-warning", role: "alert", hidden: true });
     const metricPicker = pickerMenu();
 
     const rangeSelect = t.select(
@@ -422,17 +424,26 @@ export function historyChart(config) {
     }
 
     function renderPickers() {
-        const full = prefs.selected.length >= MAX_ITEMS;
         const actions = config.selectActions(items);
+        fullWarning.hidden = true;
         itemPicker.update(
             `${config.names.items} (${prefs.selected.length})`,
             items.length
                 ? [
+                    fullWarning,
                     ...actions.map((a) => selectAction(a.label, a.ids)),
                     ...(actions.length ? [t.hr()] : []),
                     ...items.map((i) => {
                         const on = prefs.selected.includes(i.id);
-                        return checkItem(nameOf(i), on, !on && full, (v) => {
+                        // not disabled when full: picking one explains why
+                        // it is not shown
+                        return checkItem(nameOf(i), on, false, (v, input) => {
+                            if (v && prefs.selected.length >= MAX_ITEMS) {
+                                input.checked = false;
+                                fullWarning.textContent = limitWarning(config.names.items, MAX_ITEMS);
+                                fullWarning.hidden = false;
+                                return;
+                            }
                             changeItems(() => setItem(prefs, i.id, v, MAX_ITEMS));
                         });
                     }),

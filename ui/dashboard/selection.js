@@ -57,6 +57,12 @@ export function selectAllLabel(label, count, max) {
     return count > max ? `First ${max} ${label.replace(/^All /, "")}` : label;
 }
 
+// The warning when one more item is picked than the max that can be shown;
+// items is their plural name, e.g. "Devices".
+export function limitWarning(items, max) {
+    return `At most ${max} ${items.toLowerCase()} can be shown at once. Deselect one first.`;
+}
+
 // The ids of the n clients with the most traffic (download + upload), most
 // first; clients without traffic are left out.
 export function topByTraffic(clients, n) {

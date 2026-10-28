@@ -3576,6 +3576,73 @@ func TestHandleMonitoringStoresClientSamples(t *testing.T) {
 	assert.Equal(t, 2, len(samples))
 }
 
+func TestHandleMonitoringIgnoresStaleClients(t *testing.T) {
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	clientcollection := setupClientsCollection(t, app)
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	setupClientResourcesCollection(t, app, clientcollection, devicecollection)
+	enableHistory(t, app, 1)
+
+	newDevice := func(name string) *core.Record {
+		d := core.NewRecord(devicecollection)
+		d.Set("name", name)
+		d.Set("health_status", "healthy")
+		assert.Nil(t, app.Save(d))
+		return d
+	}
+	ap1 := newDevice("ap1")
+	ap2 := newDevice("ap2")
+
+	report := func(ap *core.Record, sec int, rx int) {
+		clients := ""
+		if rx >= 0 {
+			clients = `{"mac": "11:22:33:44:55:66", "assoc": true, "signal": -60, "bytes": {"rx": ` + strconv.Itoa(rx) + `, "tx": ` + strconv.Itoa(rx) + `}}`
+		}
+		postResourcesMonitoring(t, app, ap, clientcollection, fmt.Sprintf("time=01-10-2026_08:%02d:%02d.000000", sec/60, sec%60),
+			clientMonitoringPayload(clientInterface("phy1-ap0", "Home", 5180, clients)))
+	}
+	const absent = -1
+	report(ap1, 0, 1000)
+	report(ap1, 15, 1100)
+	// roamed to ap2, ap1 keeps listing it with frozen counters
+	report(ap2, 20, 10)
+	report(ap1, 30, 1100)
+	report(ap2, 35, 50)
+	report(ap1, 45, 1100)
+	// roamed back to ap1 with restarted counters, ap2 keeps listing it
+	report(ap1, 60, 5)
+	report(ap2, 65, 50)
+	report(ap1, 75, 30)
+	// ap1 expired its entry while ap2 still lists it: ap2 takes over
+	report(ap1, 90, absent)
+	report(ap2, 95, 50)
+
+	samples, err := app.FindRecordsByFilter("client_resources", "", "time", 0, 0)
+	assert.Nil(t, err)
+	type sample struct {
+		device string
+		sec    int
+	}
+	got := []sample{}
+	for _, s := range samples {
+		got = append(got, sample{s.GetString("device"), int(s.GetDateTime("time").Time().Sub(time.Date(2026, 10, 1, 8, 0, 0, 0, time.UTC)).Seconds())})
+	}
+	assert.Equal(t, []sample{
+		{ap1.Id, 0}, {ap1.Id, 15},
+		{ap2.Id, 20}, {ap2.Id, 35},
+		{ap1.Id, 60}, {ap1.Id, 75},
+		{ap2.Id, 95},
+	}, got)
+
+	client, err := app.FindFirstRecordByData(clientcollection, "mac_address", "11:22:33:44:55:66")
+	assert.Nil(t, err)
+	assert.Equal(t, ap2.Id, client.GetString("device"))
+}
+
 func TestHandleMonitoringStoresNoClientSamplesWithZeroRetention(t *testing.T) {
 	app, _ := tests.NewTestApp()
 	defer app.Cleanup()

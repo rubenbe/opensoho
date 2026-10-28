@@ -3035,6 +3035,7 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 		sampleTime = time.Now().UTC()
 	}
 	keepClientHistory := historyRetentionDays(app) > 0
+	reportedClients := map[string]reportedCounters{}
 
 	for _, iface := range payload.Interfaces {
 		if iface.Type == "wireless" && iface.Wireless != nil {
@@ -3054,11 +3055,16 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 
 			for _, client := range iface.Wireless.Clients {
 				if client.Assoc {
-					fmt.Printf("Associated client on %s: %s %s\n", iface.Name, client.MAC, device.GetString("id"))
+					reportedClients[client.MAC] = reportedCounters{rx: client.Bytes.Rx, tx: client.Bytes.Tx}
 					cliententry, err := app.FindFirstRecordByData(collection, "mac_address", client.MAC)
 					if err != nil {
 						cliententry = core.NewRecord(collection)
 					}
+					if stations.isStale(device.Id, cliententry.GetString("device"), client, sampleTime) {
+						fmt.Printf("Ignored stale client on %s: %s %s\n", iface.Name, client.MAC, device.GetString("id"))
+						continue
+					}
+					fmt.Printf("Associated client on %s: %s %s\n", iface.Name, client.MAC, device.GetString("id"))
 					cliententry.Set("mac_address", client.MAC)
 					cliententry.Set("vendor", lookupVendor(client.MAC))
 					cliententry.Set("connected_to_hostname", iface.Name)
@@ -3094,6 +3100,8 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 			handleBridgeMonitoring(app, iface, device, bridgescollection, interfacecollection, ethernetcollection)
 		}
 	}
+
+	stations.record(device.Id, reportedClients, sampleTime)
 
 	// After the bridges, so their member lists are rebuilt before the rows they
 	// referenced go away.
@@ -3131,6 +3139,76 @@ func storeClientSample(app core.App, clientRecord *core.Record, device *core.Rec
 	if err := app.Save(record); err != nil {
 		app.Logger().Error("Failed to store client sample", "client", clientRecord.Id, "device", device.Id, "error", err)
 	}
+}
+
+// staleStationWindow is how long the last report of a device counts as
+// current when deciding whether another device lists a client stale. Devices
+// report about every 15s.
+const staleStationWindow = time.Minute
+
+type reportedCounters struct {
+	rx, tx uint64
+}
+
+type reportedStations struct {
+	time    time.Time
+	clients map[string]reportedCounters // mac -> byte counters
+}
+
+// stationTracker remembers the associated clients of the last monitoring
+// report of each device, to recognize stale station entries. An AP only
+// notices that a client roamed away when its inactivity timer expires (5
+// minutes by default, 802.11r roams don't tell it), and keeps listing the
+// client with frozen counters and signal until then. Both APs then report the
+// client, and alternating between them shows as roams and traffic peaks.
+type stationTracker struct {
+	mu      sync.Mutex
+	devices map[string]reportedStations // device id -> last report
+}
+
+var stations stationTracker
+
+// isStale tells whether the client listed by device is a stale entry: the
+// client is attributed to another device (owner) that listed it in its last
+// report, while device already listed it in its previous report without the
+// counters restarting. A client that is new on device, or whose owner stopped
+// listing it or reporting, moves to device. Without a previous report, as
+// after a restart or for backfilled reports, nothing is stale.
+func (s *stationTracker) isStale(deviceId string, ownerId string, client Client, sampleTime time.Time) bool {
+	if ownerId == "" || ownerId == deviceId {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	previous, ok := s.devices[deviceId]
+	if !ok || sampleTime.Before(previous.time) {
+		return false
+	}
+	counters, ok := previous.clients[client.MAC]
+	if !ok || client.Bytes.Rx < counters.rx || client.Bytes.Tx < counters.tx {
+		// (re)associated here
+		return false
+	}
+	owner, ok := s.devices[ownerId]
+	if !ok || sampleTime.Sub(owner.time) > staleStationWindow {
+		return false
+	}
+	_, listed := owner.clients[client.MAC]
+	return listed
+}
+
+// record stores the associated clients of a report of device, unless it is
+// older than the last one (backfilled).
+func (s *stationTracker) record(deviceId string, clients map[string]reportedCounters, sampleTime time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.devices == nil {
+		s.devices = map[string]reportedStations{}
+	}
+	if previous, ok := s.devices[deviceId]; ok && sampleTime.Before(previous.time) {
+		return
+	}
+	s.devices[deviceId] = reportedStations{time: sampleTime, clients: clients}
 }
 
 // agentTimeLayout is the UTC timestamp the openwisp agent puts in the "time"

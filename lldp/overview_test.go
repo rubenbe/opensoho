@@ -7,7 +7,7 @@ import (
 
 func TestBuildPortOverview(t *testing.T) {
 	ports := []EthernetPort{
-		{Id: "eth_lan2", Name: "lan2", Speed: "1000F", Bridge: "br-lan", PortTaggingName: "trunk"},
+		{Id: "eth_lan2", Name: "lan2", Speed: "1000F", Bridge: "br-lan", PortTaggingName: "trunk", UntaggedVlan: "lan"},
 		{Id: "eth_lan1", Name: "lan1", Speed: "1000F", Bridge: "br-lan"},
 		{Id: "eth_wan", Name: "wan", Speed: "", Bridge: ""},
 	}
@@ -37,7 +37,7 @@ func TestBuildPortOverview(t *testing.T) {
 			{Name: "printer", Mac: "11:22:33:44:55:66", KnownDeviceId: ""},
 			{Name: "sw-core", Mac: "AA:BB:CC:DD:EE:01", KnownDeviceId: "dev_core"},
 		}},
-		{Port: "lan2", Speed: "1000F", Bridge: "br-lan", EthernetId: "eth_lan2", PortTaggingName: "trunk", Poe: &w0, Neighbors: nil},
+		{Port: "lan2", Speed: "1000F", Bridge: "br-lan", EthernetId: "eth_lan2", PortTaggingName: "trunk", UntaggedVlan: "lan", Poe: &w0, Neighbors: nil},
 		{Port: "wan", Speed: "", Bridge: "", EthernetId: "eth_wan", Neighbors: nil},
 	}
 	if !reflect.DeepEqual(got, want) {

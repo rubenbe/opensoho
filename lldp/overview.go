@@ -18,13 +18,14 @@ type Row struct {
 // EthernetPort is a physical port opensoho knows about for a device (from the
 // ethernet collection), annotated with the bridge it is a member of (from bridges,
 // "" when it belongs to no bridge) and its VLAN config (the port_tagging record of
-// ethernet.config, "" when it has none).
+// ethernet.config, "" when it has none) with the name of its untagged VLAN.
 type EthernetPort struct {
 	Id              string
 	Name            string
 	Speed           string
 	Bridge          string
 	PortTaggingName string
+	UntaggedVlan    string
 }
 
 // OverviewNeighbor is the render model for one LLDP neighbour seen on a port.
@@ -39,7 +40,8 @@ type OverviewNeighbor struct {
 
 // Port is the render model for one known port: its name, link speed, the bridge it
 // belongs to (or ""), its VLAN config, any LLDP neighbours seen on it, and its PoE
-// draw in watts. EthernetId is "" for ports only known from LLDP.
+// draw in watts. EthernetId is "" for ports only known from LLDP. UntaggedVlan
+// names the VLAN the UI colors the VLAN config with.
 // Poe is nil when the port has no PoE record (the UI then omits the PoE cell); a
 // PoE-capable port drawing 0W still carries a non-nil pointer so the column renders.
 type Port struct {
@@ -48,6 +50,7 @@ type Port struct {
 	Bridge          string             `json:"bridge"`
 	EthernetId      string             `json:"ethernetId"`
 	PortTaggingName string             `json:"portTaggingName"`
+	UntaggedVlan    string             `json:"untaggedVlan"`
 	Neighbors       []OverviewNeighbor `json:"neighbors"`
 	Poe             *float64           `json:"poe,omitempty"`
 }
@@ -95,6 +98,7 @@ func BuildPortOverview(ports []EthernetPort, rows []Row, macOwners map[string]st
 			Bridge:          p.Bridge,
 			EthernetId:      p.Id,
 			PortTaggingName: p.PortTaggingName,
+			UntaggedVlan:    p.UntaggedVlan,
 			Neighbors:       sortNeighbors(byPort[p.Name]),
 			Poe:             poe(p.Name),
 		})

@@ -5197,14 +5197,23 @@ func apiNetworkOverview(e *core.RequestEvent) error {
 			bridgeOfEth[ethId] = b.GetString("name")
 		}
 	}
-	// The VLAN config of a port is the port_tagging record of ethernet.config.
+	// The VLAN config of a port is the port_tagging record of ethernet.config,
+	// colored in the UI by its untagged VLAN.
+	vlanRecords, err := e.App.FindAllRecords("vlan")
+	if err != nil {
+		return e.InternalServerError("Failed to load vlans", err)
+	}
+	vlanNames := map[string]string{} // vlan record id -> name
+	for _, v := range vlanRecords {
+		vlanNames[v.Id] = v.GetString("name")
+	}
 	portTaggingRecords, err := e.App.FindAllRecords("port_tagging")
 	if err != nil {
 		return e.InternalServerError("Failed to load port tagging", err)
 	}
-	portTaggingNames := map[string]string{} // port_tagging record id -> name
+	portTaggings := map[string]*core.Record{} // port_tagging record id -> record
 	for _, pt := range portTaggingRecords {
-		portTaggingNames[pt.Id] = pt.GetString("name")
+		portTaggings[pt.Id] = pt
 	}
 	ethernetRecords, err := e.App.FindAllRecords("ethernet")
 	if err != nil {
@@ -5215,13 +5224,17 @@ func apiNetworkOverview(e *core.RequestEvent) error {
 		if et.GetString("device") != scope {
 			continue
 		}
-		ports = append(ports, lldp.EthernetPort{
-			Id:              et.Id,
-			Name:            et.GetString("name"),
-			Speed:           et.GetString("speed"),
-			Bridge:          bridgeOfEth[et.Id],
-			PortTaggingName: portTaggingNames[et.GetString("config")],
-		})
+		port := lldp.EthernetPort{
+			Id:     et.Id,
+			Name:   et.GetString("name"),
+			Speed:  et.GetString("speed"),
+			Bridge: bridgeOfEth[et.Id],
+		}
+		if pt := portTaggings[et.GetString("config")]; pt != nil {
+			port.PortTaggingName = pt.GetString("name")
+			port.UntaggedVlan = vlanNames[pt.GetString("untagged")]
+		}
+		ports = append(ports, port)
 	}
 
 	// PoE draw per port (watts). A port present here is PoE-capable, so the UI

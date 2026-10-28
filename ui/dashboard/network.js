@@ -48,7 +48,14 @@ export function networkOverview() {
             null,
             p.portTaggingName
                 ? t.button(
-                    { type: "button", className: "device-link", onclick: () => editPort(p) },
+                    {
+                        type: "button",
+                        className: "label vlan-label net-vlan",
+                        // the color of its untagged VLAN, as in the collections
+                        style: `background-color: ${app.opensoho.getNetworkColor(p.untaggedVlan || null)}; color: #1a1a24;`,
+                        title: p.untaggedVlan ? `Untagged VLAN: ${p.untaggedVlan}` : "No untagged VLAN",
+                        onclick: () => editPort(p),
+                    },
                     p.portTaggingName,
                 )
                 : t.button(

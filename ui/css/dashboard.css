@@ -473,6 +473,10 @@
     a.net-warning:hover {
         text-decoration: underline;
     }
+    .net-vlan {
+        border-width: 0;
+        cursor: pointer;
+    }
     .net-neighbour + .net-neighbour {
         margin-top: 2px;
     }

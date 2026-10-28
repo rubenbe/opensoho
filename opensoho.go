@@ -5197,6 +5197,15 @@ func apiNetworkOverview(e *core.RequestEvent) error {
 			bridgeOfEth[ethId] = b.GetString("name")
 		}
 	}
+	// The VLAN config of a port is the port_tagging record of ethernet.config.
+	portTaggingRecords, err := e.App.FindAllRecords("port_tagging")
+	if err != nil {
+		return e.InternalServerError("Failed to load port tagging", err)
+	}
+	portTaggingNames := map[string]string{} // port_tagging record id -> name
+	for _, pt := range portTaggingRecords {
+		portTaggingNames[pt.Id] = pt.GetString("name")
+	}
 	ethernetRecords, err := e.App.FindAllRecords("ethernet")
 	if err != nil {
 		return e.InternalServerError("Failed to load ethernet ports", err)
@@ -5207,9 +5216,11 @@ func apiNetworkOverview(e *core.RequestEvent) error {
 			continue
 		}
 		ports = append(ports, lldp.EthernetPort{
-			Name:   et.GetString("name"),
-			Speed:  et.GetString("speed"),
-			Bridge: bridgeOfEth[et.Id],
+			Id:              et.Id,
+			Name:            et.GetString("name"),
+			Speed:           et.GetString("speed"),
+			Bridge:          bridgeOfEth[et.Id],
+			PortTaggingName: portTaggingNames[et.GetString("config")],
 		})
 	}
 

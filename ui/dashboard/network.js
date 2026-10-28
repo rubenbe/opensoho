@@ -6,8 +6,8 @@ const STORAGE_KEY = "network_overview_device";
 const LLDP_WARNING = "⚠️ No LLDP data, verify whether lldpd is installed on this device.";
 
 /**
- * Network overview card: the ports of one device, their link, PoE, bridge
- * and LLDP neighbours (see /api/v1/network-overview).
+ * Network overview card: the ports of one device, their link, PoE, bridge,
+ * VLAN config and LLDP neighbours (see /api/v1/network-overview).
  *
  * @return {{el: Element, load: Function}}
  */
@@ -32,6 +32,32 @@ export function networkOverview() {
         load();
     }
 
+    // Opens the port's ethernet record, where its VLAN config is picked.
+    function editPort(p) {
+        app.modals.openRecordUpsert(app.store.collections.find((c) => c.name == "ethernet"), p.ethernetId, {
+            onsave: () => load(),
+        });
+    }
+
+    function vlanCell(p) {
+        // ports only seen through LLDP have no ethernet record to edit
+        if (!p.ethernetId) {
+            return t.td({ className: "net-muted" }, "—");
+        }
+        return t.td(
+            null,
+            p.portTaggingName
+                ? t.button(
+                    { type: "button", className: "device-link", onclick: () => editPort(p) },
+                    p.portTaggingName,
+                )
+                : t.button(
+                    { type: "button", className: "device-link net-muted", title: "Add a VLAN config to this port", onclick: () => editPort(p) },
+                    "+ Add",
+                ),
+        );
+    }
+
     function portRow(p, hasPoe) {
         let poe;
         if (p.poe) {
@@ -50,6 +76,7 @@ export function networkOverview() {
                 : t.td({ className: "net-muted" }, t.span({ className: "net-dot" }), "no link"),
             hasPoe ? t.td({ className: "net-muted" }, poe) : null,
             t.td({ className: "net-muted" }, p.bridge || "—"),
+            vlanCell(p),
             t.td(
                 null,
                 p.neighbors?.length
@@ -122,6 +149,7 @@ export function networkOverview() {
                         t.th(null, "Link"),
                         hasPoe ? t.th(null, "PoE") : null,
                         t.th(null, "Bridge"),
+                        t.th(null, "VLAN"),
                         t.th(null, "Neighbours"),
                     ),
                 ),

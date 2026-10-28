@@ -7,9 +7,9 @@ import (
 
 func TestBuildPortOverview(t *testing.T) {
 	ports := []EthernetPort{
-		{Name: "lan2", Speed: "1000F", Bridge: "br-lan"},
-		{Name: "lan1", Speed: "1000F", Bridge: "br-lan"},
-		{Name: "wan", Speed: "", Bridge: ""},
+		{Id: "eth_lan2", Name: "lan2", Speed: "1000F", Bridge: "br-lan", PortTaggingName: "trunk"},
+		{Id: "eth_lan1", Name: "lan1", Speed: "1000F", Bridge: "br-lan"},
+		{Id: "eth_wan", Name: "wan", Speed: "", Bridge: ""},
 	}
 	rows := []Row{
 		{Port: "lan1", Name: "sw-core", Mac: "AA:BB:CC:DD:EE:01"}, // known via devices, upper-case
@@ -33,12 +33,12 @@ func TestBuildPortOverview(t *testing.T) {
 		{Port: "eth9", Speed: "", Bridge: "", Neighbors: []OverviewNeighbor{
 			{Name: "sw-edge", Mac: "aa:bb:cc:dd:ee:02", KnownDeviceId: "dev_edge"},
 		}},
-		{Port: "lan1", Speed: "1000F", Bridge: "br-lan", Poe: &w32, Neighbors: []OverviewNeighbor{
+		{Port: "lan1", Speed: "1000F", Bridge: "br-lan", EthernetId: "eth_lan1", Poe: &w32, Neighbors: []OverviewNeighbor{
 			{Name: "printer", Mac: "11:22:33:44:55:66", KnownDeviceId: ""},
 			{Name: "sw-core", Mac: "AA:BB:CC:DD:EE:01", KnownDeviceId: "dev_core"},
 		}},
-		{Port: "lan2", Speed: "1000F", Bridge: "br-lan", Poe: &w0, Neighbors: nil},
-		{Port: "wan", Speed: "", Bridge: "", Neighbors: nil},
+		{Port: "lan2", Speed: "1000F", Bridge: "br-lan", EthernetId: "eth_lan2", PortTaggingName: "trunk", Poe: &w0, Neighbors: nil},
+		{Port: "wan", Speed: "", Bridge: "", EthernetId: "eth_wan", Neighbors: nil},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("BuildPortOverview mismatch:\n got: %+v\nwant: %+v", got, want)

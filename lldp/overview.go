@@ -17,11 +17,14 @@ type Row struct {
 
 // EthernetPort is a physical port opensoho knows about for a device (from the
 // ethernet collection), annotated with the bridge it is a member of (from bridges,
-// "" when it belongs to no bridge).
+// "" when it belongs to no bridge) and its VLAN config (the port_tagging record of
+// ethernet.config, "" when it has none).
 type EthernetPort struct {
-	Name   string
-	Speed  string
-	Bridge string
+	Id              string
+	Name            string
+	Speed           string
+	Bridge          string
+	PortTaggingName string
 }
 
 // OverviewNeighbor is the render model for one LLDP neighbour seen on a port.
@@ -35,15 +38,18 @@ type OverviewNeighbor struct {
 }
 
 // Port is the render model for one known port: its name, link speed, the bridge it
-// belongs to (or ""), any LLDP neighbours seen on it, and its PoE draw in watts.
+// belongs to (or ""), its VLAN config, any LLDP neighbours seen on it, and its PoE
+// draw in watts. EthernetId is "" for ports only known from LLDP.
 // Poe is nil when the port has no PoE record (the UI then omits the PoE cell); a
 // PoE-capable port drawing 0W still carries a non-nil pointer so the column renders.
 type Port struct {
-	Port      string             `json:"port"`
-	Speed     string             `json:"speed"`
-	Bridge    string             `json:"bridge"`
-	Neighbors []OverviewNeighbor `json:"neighbors"`
-	Poe       *float64           `json:"poe,omitempty"`
+	Port            string             `json:"port"`
+	Speed           string             `json:"speed"`
+	Bridge          string             `json:"bridge"`
+	EthernetId      string             `json:"ethernetId"`
+	PortTaggingName string             `json:"portTaggingName"`
+	Neighbors       []OverviewNeighbor `json:"neighbors"`
+	Poe             *float64           `json:"poe,omitempty"`
 }
 
 // BuildPortOverview lists every known port of a device (sourced from the ethernet +
@@ -84,11 +90,13 @@ func BuildPortOverview(ports []EthernetPort, rows []Row, macOwners map[string]st
 	for _, p := range ports {
 		known[p.Name] = true
 		out = append(out, Port{
-			Port:      p.Name,
-			Speed:     p.Speed,
-			Bridge:    p.Bridge,
-			Neighbors: sortNeighbors(byPort[p.Name]),
-			Poe:       poe(p.Name),
+			Port:            p.Name,
+			Speed:           p.Speed,
+			Bridge:          p.Bridge,
+			EthernetId:      p.Id,
+			PortTaggingName: p.PortTaggingName,
+			Neighbors:       sortNeighbors(byPort[p.Name]),
+			Poe:             poe(p.Name),
 		})
 	}
 	// LLDP neighbours seen on ports we don't otherwise know about.

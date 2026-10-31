@@ -15,6 +15,12 @@ app.store.mainLogo = app.opensoho.baseURL + "images/logo.svg";
 app.store.headerLogo = app.opensoho.baseURL + "images/logo.svg";
 app.store.favicon = app.opensoho.baseURL + "images/favicon.png";
 
+for (const link of app.store.headerLinks) {
+    if (link.href == "#/collections") {
+        link.label = "Configuration";
+    }
+}
+
 app.store.creditLinks = [
     {
         href: "https://opensoho.github.io/docs/",

@@ -2924,7 +2924,8 @@ func updateInterface(app core.App, iface Interface, deviceId string, interfaceCo
 	band := frequencyToBand(iface.Wireless.Frequency)
 	if band == "unknown" { // Todo add another frequencyToBand function that returns an error
 		err := fmt.Errorf("Uknown Band %d", iface.Wireless.Frequency)
-		fmt.Println(err)
+		app.Logger().Error("Wireless interface reports a frequency outside the known bands",
+			"device", deviceId, "interface", iface.Name, "frequency", iface.Wireless.Frequency)
 		return err
 	}
 
@@ -2934,12 +2935,19 @@ func updateInterface(app core.App, iface Interface, deviceId string, interfaceCo
 		"device = {:device} && interface = {:interface}", "", 0, 0,
 		dbx.Params{"device": deviceId, "interface": iface.Name})
 	if err != nil {
-		fmt.Println(err)
+		app.Logger().Error("Failed to look up wireless interface",
+			"device", deviceId, "interface", iface.Name, "error", err)
 		return err
 	}
 	wifirecord, err := getWifiRecord(app, iface.Wireless.SSID)
 	if err != nil {
-		fmt.Println(err)
+		if errors.Is(err, sql.ErrNoRows) {
+			app.Logger().Warn("Wireless interface broadcasts an SSID that is not managed by OpenSOHO",
+				"device", deviceId, "interface", iface.Name, "ssid", iface.Wireless.SSID)
+		} else {
+			app.Logger().Error("Failed to look up the SSID of a wireless interface",
+				"device", deviceId, "interface", iface.Name, "ssid", iface.Wireless.SSID, "error", err)
+		}
 		return err
 	}
 
@@ -2951,7 +2959,12 @@ func updateInterface(app core.App, iface Interface, deviceId string, interfaceCo
 		record.Set("band", band)
 		record.Set("mac_address", iface.MAC)
 		record.Set("interface", iface.Name)
-		app.Save(record)
+		if err := app.Save(record); err != nil {
+			app.Logger().Error("Failed to store wireless interface",
+				"device", deviceId, "interface", iface.Name, "ssid", iface.Wireless.SSID,
+				"band", band, "mac", iface.MAC, "error", err)
+			return err
+		}
 	} else {
 		record := ifacerecords[0]
 		if wifirecord.Id != record.Get("wifi") ||
@@ -2962,7 +2975,12 @@ func updateInterface(app core.App, iface Interface, deviceId string, interfaceCo
 			record.Set("band", band)
 			record.Set("mac_address", iface.MAC)
 			record.Set("interface", iface.Name)
-			app.Save(record)
+			if err := app.Save(record); err != nil {
+				app.Logger().Error("Failed to update wireless interface",
+					"device", deviceId, "interface", iface.Name, "ssid", iface.Wireless.SSID,
+					"band", band, "mac", iface.MAC, "error", err)
+				return err
+			}
 			fmt.Println(ifacerecords)
 		}
 	}

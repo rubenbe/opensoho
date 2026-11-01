@@ -261,6 +261,82 @@ document.addEventListener("mount:recordsListTable", (e) => {
 });
 
 // -------------------------------------------------------------------
+// Bulk enable/disable of devices
+// -------------------------------------------------------------------
+
+/**
+ * Returns the ids of the records selected in the records list.
+ * The row checkboxes have the id of the "select all" checkbox
+ * (without its "all_" prefix) followed by the record id.
+ *
+ * @param  {Element} list
+ * @return {Array<string>}
+ */
+function selectedRecordIds(list) {
+    const all = list.querySelector("thead .col-bulk-select input[type=checkbox]");
+    if (!all) {
+        return [];
+    }
+
+    const prefix = all.id.replace(/^all_/, "");
+    const ids = [];
+    for (const input of list.querySelectorAll("tbody .col-bulk-select input[type=checkbox]:checked")) {
+        if (input.id.startsWith(prefix)) {
+            ids.push(input.id.substring(prefix.length));
+        }
+    }
+
+    return ids;
+}
+
+async function setDevicesEnabled(list, enabled) {
+    const ids = selectedRecordIds(list);
+    if (!ids.length) {
+        return;
+    }
+
+    try {
+        await Promise.all(ids.map((id) => app.pb.collection("devices").update(id, { enabled })));
+        app.toasts.success(
+            `Successfully ${enabled ? "enabled" : "disabled"} ${ids.length} ${ids.length == 1 ? "device" : "devices"}.`,
+        );
+    } catch (err) {
+        app.checkApiError(err);
+    }
+
+    // clear the selection with the bulkbar "Reset" button
+    list.querySelector(".records-bulkbar > button")?.click();
+}
+
+const originalRecordsList = app.components.recordsList;
+app.components.recordsList = function(propsArg = {}) {
+    const el = originalRecordsList(propsArg);
+
+    // the last button of the bulkbar is "JSON", the buttons go before it (after "Delete")
+    const jsonButton = el.querySelector(".records-bulkbar > button:last-of-type");
+    if (!jsonButton) {
+        return el;
+    }
+
+    const isDevices = () => app.store.activeCollection?.name == "devices";
+
+    for (const enabled of [true, false]) {
+        jsonButton.before(t.button(
+            {
+                type: "button",
+                hidden: () => !isDevices(),
+                className: "btn sm pill outline opensoho-bulk-enable",
+                onclick: () => setDevicesEnabled(el, enabled),
+            },
+            t.i({ className: enabled ? "ri-checkbox-circle-line" : "ri-forbid-line", ariaHidden: true }),
+            t.span({ className: "txt" }, enabled ? "Enable" : "Disable"),
+        ));
+    }
+
+    return el;
+};
+
+// -------------------------------------------------------------------
 // Auto refresh
 // -------------------------------------------------------------------
 //

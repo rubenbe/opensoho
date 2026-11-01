@@ -60,3 +60,8 @@ th.sort-handle > .inline-flex > .txt {
     padding: 0 var(--inputPadding) var(--inputPadding);
     overflow: auto;
 }
+
+/* room for the device Enable/Disable buttons (see main/records.js) */
+.records-bulkbar:has(> .opensoho-bulk-enable:not([hidden])) {
+    width: 640px;
+}

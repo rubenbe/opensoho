@@ -325,7 +325,7 @@ app.components.recordsList = function(propsArg = {}) {
             {
                 type: "button",
                 hidden: () => !isDevices(),
-                className: "btn sm pill outline opensoho-bulk-enable",
+                className: "btn sm pill outline",
                 onclick: () => setDevicesEnabled(el, enabled),
             },
             t.i({ className: enabled ? "ri-checkbox-circle-line" : "ri-forbid-line", ariaHidden: true }),

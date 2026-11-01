@@ -1055,17 +1055,17 @@ func radioHtModes(radio OpenSohoRadio) []string {
 // It persists each radio's advertised frequency list into the
 // radio_frequencies collection, keyed by (device, radio index).
 func handleOpenSohoMonitoring(app core.App, device *core.Record, data OpenSohoData, current bool) {
-	coll, err := app.FindCollectionByNameOrId("radio_frequencies")
+	coll, err := app.FindCachedCollectionByNameOrId("radio_frequencies")
 	if err != nil {
 		app.Logger().Error("Failed to find radio_frequencies collection", "error", err)
 		return
 	}
-	txColl, err := app.FindCollectionByNameOrId("radio_tx_powers")
+	txColl, err := app.FindCachedCollectionByNameOrId("radio_tx_powers")
 	if err != nil {
 		app.Logger().Error("Failed to find radio_tx_powers collection", "error", err)
 		return
 	}
-	htColl, err := app.FindCollectionByNameOrId("radio_ht_modes")
+	htColl, err := app.FindCachedCollectionByNameOrId("radio_ht_modes")
 	if err != nil {
 		app.Logger().Error("Failed to find radio_ht_modes collection", "error", err)
 		return
@@ -1418,7 +1418,7 @@ func updateRadios(device *core.Record, app core.App, newradios map[int]Radio, cu
 		// A replayed snapshot says what was there then, not what is there now.
 		return
 	}
-	radiocollection, err := app.FindCollectionByNameOrId("radios")
+	radiocollection, err := app.FindCachedCollectionByNameOrId("radios")
 	if err != nil {
 		fmt.Println("Failed to find radio collection")
 	}
@@ -2124,7 +2124,7 @@ config host 'opensoho_%s'
 }
 
 func generateStaticDhcpReservations(app core.App, device *core.Record) string {
-	if _, err := app.FindCollectionByNameOrId("dhcp_reservations"); err != nil {
+	if _, err := app.FindCachedCollectionByNameOrId("dhcp_reservations"); err != nil {
 		return ""
 	}
 	reservations, err := app.FindRecordsByFilter(
@@ -3020,11 +3020,11 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 	}
 	radios = make(map[int]Radio)
 	report.radios = radios
-	interfacecollection, _ := app.FindCollectionByNameOrId("interfaces")
-	wificollection, _ := app.FindCollectionByNameOrId("wifi_ssids")
+	interfacecollection, _ := app.FindCachedCollectionByNameOrId("interfaces")
+	wificollection, _ := app.FindCachedCollectionByNameOrId("wifi_ssids")
 
-	ethernetcollection, _ := app.FindCollectionByNameOrId("ethernet")
-	bridgescollection, _ := app.FindCollectionByNameOrId("bridges")
+	ethernetcollection, _ := app.FindCachedCollectionByNameOrId("ethernet")
+	bridgescollection, _ := app.FindCachedCollectionByNameOrId("bridges")
 
 	bridgeMembers := bridgeMemberNames(payload.Interfaces)
 	wiredPorts := map[string]bool{}
@@ -3305,7 +3305,7 @@ func pruneResourceHistory(app core.App, now time.Time) {
 
 func storeDHCPLeases(app core.App, leaseslist []DHCPLease, expirytime types.DateTime) {
 	// TODO needs to run in a transaction?
-	collection, _ := app.FindCollectionByNameOrId("dhcp_leases")
+	collection, _ := app.FindCachedCollectionByNameOrId("dhcp_leases")
 	//var leasesmap map[string]DHCPLease
 	for _, lease := range leaseslist {
 		fmt.Println("DHCPLEASE", lease.MACAddress, lease.ClientID, lease.IPAddress, lease.Hostname, lease.Expiry)
@@ -3449,7 +3449,7 @@ func handleDeviceRegistration(e *core.RequestEvent, shared_secret string, enable
 			return e.BadRequestError("Registration failed!", "wrong backend")
 		}
 		fmt.Println("Hello")
-		collection, err := e.App.FindCollectionByNameOrId("devices")
+		collection, err := e.App.FindCachedCollectionByNameOrId("devices")
 
 		if err != nil {
 			return e.BadRequestError("Registration failed!", err)
@@ -3581,7 +3581,7 @@ func bindAppHooks(app core.App, shared_secret string, enableNewDevices bool) {
 			}
 			defer unlock()
 
-			collection, err := app.FindCollectionByNameOrId("clients")
+			collection, err := app.FindCachedCollectionByNameOrId("clients")
 			if err != nil {
 				return e.InternalServerError("Could not find collection", err)
 			}

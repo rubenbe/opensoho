@@ -6,7 +6,7 @@ import (
 )
 
 func Sync(app core.App, device *core.Record, info Info) error {
-	coll, err := app.FindCollectionByNameOrId("poe")
+	coll, err := app.FindCachedCollectionByNameOrId("poe")
 	if err != nil {
 		return err
 	}

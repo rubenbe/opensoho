@@ -3014,7 +3014,8 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 		fmt.Println(err)
 		return e.BadRequestError("Failed to parse json", err), report
 	}
-	if envelope.Type == "OpenSoho" {
+	switch envelope.Type {
+	case "OpenSoho":
 		// Radio dump produced by scripts/dump-radios.uc.
 		var osd OpenSohoData
 		if err := json.Unmarshal(body, &osd); err != nil {
@@ -3026,15 +3027,15 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 		report.radios = radiosFromOpenSoho(app, device, osd)
 		report.complete = true
 		return e.Blob(200, "text/plain", []byte("")), report
-	}
-	if envelope.Type != "DeviceMonitoring" {
+	case "DeviceMonitoring":
+		if err := json.Unmarshal(body, &payload); err != nil {
+			fmt.Println(err)
+			return e.BadRequestError("Failed to parse json", err), report
+		}
+	default:
 		errormsg := fmt.Sprintf(`Invalid type '%s' in JSON`, envelope.Type)
 		fmt.Println(errormsg)
 		return e.BadRequestError(errormsg, ""), report
-	}
-	if err := json.Unmarshal(body, &payload); err != nil {
-		fmt.Println(err)
-		return e.BadRequestError("Failed to parse json", err), report
 	}
 	radios = make(map[int]Radio)
 	report.radios = radios

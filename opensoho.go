@@ -3030,11 +3030,7 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 			fmt.Println(err)
 			return e.BadRequestError("Failed to parse json", err), report
 		}
-		radios, err := handleDeviceMonitoring(app, device, collection, payload, agentTime)
-		report.radios = radios
-		if err != nil {
-			return e.InternalServerError("Could not store entry", err), report
-		}
+		report.radios = handleDeviceMonitoring(app, device, collection, payload, agentTime)
 	default:
 		errormsg := fmt.Sprintf(`Invalid type '%s' in JSON`, envelope.Type)
 		fmt.Println(errormsg)
@@ -3044,9 +3040,9 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 }
 
 // handleDeviceMonitoring stores a DeviceMonitoring report from the OpenWISP
-// agent. It returns the radios the report mentions, also on failure: those
-// seen before the failure are still valid.
-func handleDeviceMonitoring(app core.App, device *core.Record, collection *core.Collection, payload MonitoringData, agentTime string) (map[int]Radio, error) {
+// agent and returns the radios it mentions. A part of the report that can't be
+// stored is logged and skipped, the agent would only resend the same report.
+func handleDeviceMonitoring(app core.App, device *core.Record, collection *core.Collection, payload MonitoringData, agentTime string) map[int]Radio {
 	radios := make(map[int]Radio)
 	interfacecollection, _ := app.FindCachedCollectionByNameOrId("interfaces")
 	wificollection, _ := app.FindCachedCollectionByNameOrId("wifi_ssids")
@@ -3106,9 +3102,11 @@ func handleDeviceMonitoring(app core.App, device *core.Record, collection *core.
 					cliententry.Set("tx_bytes", client.Bytes.Tx)
 					cliententry.Set("rx_bytes", client.Bytes.Rx)
 					cliententry.Set("device", device.GetString("id"))
-					err = app.Save(cliententry)
-					if err != nil {
-						return radios, err
+					if err := app.Save(cliententry); err != nil {
+						// Only skip this client: the rest of the report is still valid.
+						app.Logger().Error("Failed to store client",
+							"device", device.Id, "interface", iface.Name, "mac", client.MAC, "error", err)
+						continue
 					}
 					if keepClientHistory {
 						storeClientSample(app, cliententry, device, iface.Wireless.SSID, frequencyToBand(iface.Wireless.Frequency), client, sampleTime)
@@ -3141,7 +3139,7 @@ func handleDeviceMonitoring(app core.App, device *core.Record, collection *core.
 
 	//current := e.Request.URL.Query().Get("current")
 	fmt.Println(payload.Type, "@", agentTime)
-	return radios, nil
+	return radios
 }
 
 // storeClientSample appends the byte counters and signal (dBm) of one

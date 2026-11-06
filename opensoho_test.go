@@ -3576,6 +3576,50 @@ func TestHandleMonitoringStoresClientSamples(t *testing.T) {
 	assert.Equal(t, 2, len(samples))
 }
 
+func TestHandleMonitoringSkipsClientThatFailsToSave(t *testing.T) {
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	vlancollection := setupVlanCollection(t, app)
+	wificollection := setupWifiCollection(t, app, vlancollection)
+	clientcollection := setupClientsCollection(t, app)
+	// As in production: a frequency outside the known bands fails validation.
+	clientcollection.Fields.Add(&core.SelectField{Name: "band", MaxSelect: 1, Values: []string{"2.4", "5", "6", "60"}})
+	assert.Nil(t, app.Save(clientcollection))
+	devicecollection := setupDeviceCollection(t, app, wificollection)
+	setupDeviceResourcesCollection(t, app, devicecollection)
+	enableHistory(t, app, 1)
+
+	d := core.NewRecord(devicecollection)
+	d.Set("name", "ap1")
+	d.Set("health_status", "healthy")
+	assert.Nil(t, app.Save(d))
+
+	interfaces := strings.Join([]string{
+		clientInterface("phy0-ap0", "Home", 5180, `{"mac": "11:11:11:11:11:11", "assoc": true, "signal": -60}`),
+		clientInterface("phy1-ap0", "Home", 9999, `{"mac": "22:22:22:22:22:22", "assoc": true, "signal": -60}`),
+		clientInterface("phy2-ap0", "Home", 2412, `{"mac": "33:33:33:33:33:33", "assoc": true, "signal": -60}`),
+	}, ",")
+	body := `{"type": "DeviceMonitoring", "interfaces": [` + interfaces + `], "general": {"uptime": 42}}`
+
+	// Succeeds, so the agent doesn't keep resending a report that can't be stored
+	postResourcesMonitoring(t, app, d, clientcollection, "current=true", body)
+
+	_, err := app.FindFirstRecordByData(clientcollection, "mac_address", "22:22:22:22:22:22")
+	assert.NotNil(t, err)
+
+	// The clients around it are stored
+	for _, mac := range []string{"11:11:11:11:11:11", "33:33:33:33:33:33"} {
+		_, err := app.FindFirstRecordByData(clientcollection, "mac_address", mac)
+		assert.Nil(t, err, mac)
+	}
+
+	// and so is what the report holds after the clients
+	samples, err := app.FindAllRecords("device_resources")
+	assert.Nil(t, err)
+	assert.Equal(t, 1, len(samples))
+}
+
 func TestHandleMonitoringIgnoresStaleClients(t *testing.T) {
 	app, _ := tests.NewTestApp()
 	defer app.Cleanup()

@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, test } from "node:test";
 
-import { adjacentEvents, bandLabel, bitRateStep, byteStep, clientLocation, formatDbm, groupRows, latestEvents, markKey, marksNear, eventMarks, formatBitRate, formatBytes, formatNumber, median, timeTicks } from "../dashboard/timeseries.js";
+import { adjacentEvents, bandLabel, bitRateStep, byteStep, clientLabel, clientLocation, formatDbm, groupRows, latestEvents, markKey, marksNear, eventMarks, formatBitRate, formatBytes, formatNumber, median, timeTicks } from "../dashboard/timeseries.js";
 
 const originalTZ = process.env.TZ;
 afterEach(() => {
@@ -253,6 +253,18 @@ describe("bandLabel", () => {
     test("unknown", () => {
         assert.equal(bandLabel(""), "");
         assert.equal(bandLabel(undefined), "");
+    });
+});
+
+describe("clientLabel", () => {
+    test("the MAC address after the name", () => {
+        assert.equal(clientLabel({ name: "Phone", mac: "11:22:33:44:55:66" }), "Phone (11:22:33:44:55:66)");
+    });
+    test("a client named by its MAC address does not repeat it", () => {
+        assert.equal(clientLabel({ name: "66:55:44:33:22:11", mac: "66:55:44:33:22:11" }), "66:55:44:33:22:11");
+    });
+    test("without a MAC address", () => {
+        assert.equal(clientLabel({ name: "Phone", mac: "" }), "Phone");
     });
 });
 

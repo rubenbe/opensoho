@@ -120,6 +120,12 @@ export function bandLabel(band) {
     return band ? `${band} GHz` : "";
 }
 
+// "Phone (11:22:33:44:55:66)"; a client without an alias is named by its MAC
+// address already, which is not repeated.
+export function clientLabel(client) {
+    return client.mac && client.mac !== client.name ? `${client.name} (${client.mac})` : client.name;
+}
+
 // Where a client was last: "Living Room AP · 5 GHz", or whichever is known.
 export function clientLocation(client) {
     return [client.device_name, bandLabel(client.band)].filter(Boolean).join(" · ");

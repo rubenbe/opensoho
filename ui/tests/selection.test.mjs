@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { freeSlot, healthyDeviceIds, limitWarning, selectAllLabel, selectItems, setItem, topByTraffic } from "../dashboard/selection.js";
+import { freeSlot, healthyDeviceIds, limitWarning, matchesSearch, selectAllLabel, selectItems, setItem, topByTraffic } from "../dashboard/selection.js";
 
 const MAX = 8;
 
@@ -19,6 +19,25 @@ function deviceList(n, healthy = []) {
         health_status: healthy.includes(i) ? "healthy" : "unhealthy",
     }));
 }
+
+describe("matchesSearch", () => {
+    const label = "Phone (aa:bb:cc:dd:ee:ff)";
+
+    test("part of the name or the MAC address, in any case", () => {
+        assert.equal(matchesSearch(label, "pho"), true);
+        assert.equal(matchesSearch(label, "AA:BB"), true);
+    });
+    test("not found", () => {
+        assert.equal(matchesSearch(label, "laptop"), false);
+    });
+    test("an empty search matches everything", () => {
+        assert.equal(matchesSearch(label, ""), true);
+        assert.equal(matchesSearch(label, "  "), true);
+    });
+    test("spaces around the search are ignored", () => {
+        assert.equal(matchesSearch(label, " phone "), true);
+    });
+});
 
 describe("healthyDeviceIds", () => {
     test("only the healthy devices, in list order", () => {

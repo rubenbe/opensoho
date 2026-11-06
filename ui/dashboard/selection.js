@@ -63,6 +63,11 @@ export function limitWarning(items, max) {
     return `At most ${max} ${items.toLowerCase()} can be shown at once. Deselect one first.`;
 }
 
+// Whether the search box text is part of the text, in any case.
+export function matchesSearch(text, query) {
+    return text.toLowerCase().includes(query.trim().toLowerCase());
+}
+
 // The ids of the n clients with the most traffic (download + upload), most
 // first; clients without traffic are left out.
 export function topByTraffic(clients, n) {

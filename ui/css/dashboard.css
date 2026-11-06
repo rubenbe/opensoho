@@ -495,14 +495,28 @@
         max-height: 320px;
         overflow-y: auto;
     }
-    /* an upstream .alert.warning, sized for the dropdown; it stays in view
-       while the list is scrolled */
-    .resource-picker-warning {
+    /* stays in view while the list is scrolled */
+    .resource-picker-header {
         position: sticky;
         /* over the padding of the dropdown, where the list would show */
         top: -5px;
         /* above the switches */
         z-index: 3;
+        flex-shrink: 0;
+        background: var(--surfaceColor);
+    }
+    /* an upstream field input */
+    .resource-picker-search {
+        /* the dropdown is as wide as its items: keep it from jumping while
+           typing */
+        min-width: 280px;
+        margin-bottom: 4px;
+        &[hidden] {
+            display: none;
+        }
+    }
+    /* an upstream .alert.warning, sized for the dropdown */
+    .resource-picker-warning {
         width: auto;
         max-width: 260px;
         min-height: 0;

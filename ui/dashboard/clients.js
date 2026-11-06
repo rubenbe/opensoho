@@ -63,6 +63,7 @@ export function clientHistoryChart() {
             return res.clients || [];
         },
         itemName: clientLabel,
+        searchable: true,
         // the AP and band of its last sample in the period
         itemDetail: clientLocation,
         defaultItems: (clients) => topByTraffic(clients, MAX_ITEMS),

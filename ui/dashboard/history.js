@@ -1,5 +1,5 @@
 import { loader, loading } from "./charts.js";
-import { limitWarning, selectAllLabel, selectItems, setItem } from "./selection.js";
+import { limitWarning, matchesSearch, selectAllLabel, selectItems, setItem } from "./selection.js";
 import { adjacentEvents, eventMarks, groupRows, latestEvents, markKey, marksNear, median, timeTicks } from "./timeseries.js";
 
 // A dashboard card charting the history of some items (devices, clients)
@@ -92,10 +92,11 @@ function checkItem(label, checked, disabled, onchange) {
     );
 }
 
-// A toolbar button opening a list of check items.
-function pickerMenu() {
+// A toolbar button opening a list of check items, below the optional header,
+// which stays in place when the list is updated.
+function pickerMenu({ header = null, ontoggle = null } = {}) {
     const text = t.span();
-    const dropdown = t.div({ className: "dropdown sm nowrap gap-0 left resource-picker", popover: "auto" });
+    const dropdown = t.div({ className: "dropdown sm nowrap gap-0 left resource-picker", popover: "auto", ontoggle }, header);
 
     const button = t.button(
         {
@@ -113,7 +114,10 @@ function pickerMenu() {
         el: t.div({ className: "inline-flex" }, button, dropdown),
         update(label, items) {
             text.textContent = label;
-            dropdown.replaceChildren(...items);
+            // not replaceChildren(): moving the header would take the focus
+            // from its search box whenever the items are reloaded
+            [...dropdown.children].filter((c) => c !== header).forEach((c) => c.remove());
+            dropdown.append(...items);
         },
     };
 }
@@ -307,6 +311,7 @@ function lineCanvas(unit, eventLabel, onSelect) {
  * @param  {Function} config.loadItems      async ({ from, to }) -> [{ id, ... }] in display order.
  * @param  {Function} config.itemName       Item -> name.
  * @param  {Function} [config.itemDetail]   Item -> short text shown after its name in the table.
+ * @param  {boolean}  [config.searchable]   Whether the item picker has a search box, on the item names.
  * @param  {Function} config.defaultItems   Items -> ids shown at first.
  * @param  {Function} config.selectActions  Items -> [{ label, ids }], "select all ..." shortcuts.
  * @param  {Function} config.loadHistory    async (id, { from, to }) -> { bucket, points: [{ t, ... }], events: [{ type, t }] }
@@ -326,9 +331,40 @@ export function historyChart(config) {
     let histories = {}; // item id -> history of the shown period
     let period = { from: 0, to: 0 };
 
-    const itemPicker = pickerMenu();
+    const itemSearch = config.searchable
+        ? t.input({
+            type: "search",
+            className: "resource-picker-search",
+            placeholder: `Search ${config.names.items.toLowerCase()}`,
+            ariaLabel: `Search ${config.names.items.toLowerCase()}`,
+            oninput: () => {
+                renderPickers();
+                // the best matches should not be scrolled out of view
+                itemSearch.closest(".resource-picker").scrollTop = 0;
+            },
+        })
+        : null;
     // shown in the item picker when one more item is picked than fit
     const fullWarning = t.div({ className: "alert warning resource-picker-warning", role: "alert", hidden: true });
+    const itemPicker = pickerMenu({
+        header: t.div(
+            { className: "resource-picker-header" },
+            itemSearch ? t.div({ className: "field" }, itemSearch) : null,
+            fullWarning,
+        ),
+        ontoggle: (e) => {
+            if (!itemSearch) {
+                return;
+            }
+            if (e.newState === "open") {
+                itemSearch.focus();
+            } else if (itemSearch.value) {
+                // a next visit should not start with clients left out
+                itemSearch.value = "";
+                renderPickers();
+            }
+        },
+    });
     const metricPicker = pickerMenu();
 
     const rangeSelect = t.select(
@@ -425,15 +461,19 @@ export function historyChart(config) {
 
     function renderPickers() {
         const actions = config.selectActions(items);
+        const found = items.filter((i) => matchesSearch(nameOf(i), itemSearch?.value || ""));
         fullWarning.hidden = true;
+        if (itemSearch) {
+            itemSearch.hidden = !items.length;
+        }
         itemPicker.update(
             `${config.names.items} (${prefs.selected.length})`,
             items.length
                 ? [
-                    fullWarning,
                     ...actions.map((a) => selectAction(a.label, a.ids)),
                     ...(actions.length ? [t.hr()] : []),
-                    ...items.map((i) => {
+                    ...(found.length ? [] : [t.div({ className: "dropdown-item" }, `No matching ${config.names.items.toLowerCase()}`)]),
+                    ...found.map((i) => {
                         const on = prefs.selected.includes(i.id);
                         // not disabled when full: picking one explains why
                         // it is not shown

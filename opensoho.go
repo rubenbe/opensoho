@@ -2993,9 +2993,7 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 	// The openwisp agent marks the up-to-date info with current=true
 	// Only live data is published to Home Assistant does not support backfill over MQTT
 	current := e.Request.URL.Query().Get("current") == "true"
-	var radios map[int]Radio
 	report := radioReport{current: current}
-	var payload MonitoringData
 	if e.Request.Header.Get("Content-Length") == "0" {
 		app.Logger().Info("Ignored empty monitoring request 1", "userIP", e.RealIP())
 		return e.Blob(200, "text/plain", []byte("")), report
@@ -3026,19 +3024,30 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 		// The dump enumerates every UCI wifi-device, so absence means gone.
 		report.radios = radiosFromOpenSoho(app, device, osd)
 		report.complete = true
-		return e.Blob(200, "text/plain", []byte("")), report
 	case "DeviceMonitoring":
+		var payload MonitoringData
 		if err := json.Unmarshal(body, &payload); err != nil {
 			fmt.Println(err)
 			return e.BadRequestError("Failed to parse json", err), report
+		}
+		radios, err := handleDeviceMonitoring(app, device, collection, payload, agentTime)
+		report.radios = radios
+		if err != nil {
+			return e.InternalServerError("Could not store entry", err), report
 		}
 	default:
 		errormsg := fmt.Sprintf(`Invalid type '%s' in JSON`, envelope.Type)
 		fmt.Println(errormsg)
 		return e.BadRequestError(errormsg, ""), report
 	}
-	radios = make(map[int]Radio)
-	report.radios = radios
+	return e.Blob(200, "text/plain", []byte("")), report
+}
+
+// handleDeviceMonitoring stores a DeviceMonitoring report from the OpenWISP
+// agent. It returns the radios the report mentions, also on failure: those
+// seen before the failure are still valid.
+func handleDeviceMonitoring(app core.App, device *core.Record, collection *core.Collection, payload MonitoringData, agentTime string) (map[int]Radio, error) {
+	radios := make(map[int]Radio)
 	interfacecollection, _ := app.FindCachedCollectionByNameOrId("interfaces")
 	wificollection, _ := app.FindCachedCollectionByNameOrId("wifi_ssids")
 
@@ -3099,7 +3108,7 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 					cliententry.Set("device", device.GetString("id"))
 					err = app.Save(cliententry)
 					if err != nil {
-						return e.InternalServerError("Could not store entry", err), report
+						return radios, err
 					}
 					if keepClientHistory {
 						storeClientSample(app, cliententry, device, iface.Wireless.SSID, frequencyToBand(iface.Wireless.Frequency), client, sampleTime)
@@ -3132,7 +3141,7 @@ func handleMonitoring(e *core.RequestEvent, app core.App, device *core.Record, c
 
 	//current := e.Request.URL.Query().Get("current")
 	fmt.Println(payload.Type, "@", agentTime)
-	return e.Blob(200, "text/plain", []byte("")), report
+	return radios, nil
 }
 
 // storeClientSample appends the byte counters and signal (dBm) of one

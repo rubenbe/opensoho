@@ -9217,6 +9217,49 @@ func TestApiClientResources(t *testing.T) {
 			{Id: watch.Id, Name: "Watch", MAC: "12:34:56:78:9a:bc", Device: ap3.Id, DeviceName: "Office AP", Band: "5", Download: 20, Upload: 10},
 		}, res.Clients)
 	})
+
+	t.Run("client names", func(t *testing.T) {
+		leasecollection := setupDhcpLeaseCollection(t, app)
+		addLease := func(client *core.Record, hostname string) {
+			r := core.NewRecord(leasecollection)
+			r.Set("mac_address", client.GetString("mac_address"))
+			r.Set("ip_address", "192.168.1.10")
+			r.Set("hostname", hostname)
+			assert.Nil(t, app.Save(r))
+		}
+		removeAlias := func(client *core.Record) {
+			client.Set("alias", "")
+			assert.Nil(t, app.Save(client))
+		}
+		// the alias goes first
+		addLease(tv, "tv-hostname")
+		// then the hostname
+		removeAlias(lamp)
+		addLease(lamp, "shed-lamp")
+		// the MAC address without a hostname in the lease
+		removeAlias(watch)
+		addLease(watch, "")
+
+		rec, err := callClientApi(t, app, apiClientTraffic, "", period)
+		assert.Nil(t, err)
+		var res struct {
+			Clients []ClientTraffic `json:"clients"`
+		}
+		assert.Nil(t, json.Unmarshal(rec.Body.Bytes(), &res))
+		names := map[string]string{}
+		order := []string{}
+		for _, c := range res.Clients {
+			names[c.Id] = c.Name
+			order = append(order, c.Name)
+		}
+		assert.Equal(t, "TV", names[tv.Id])
+		assert.Equal(t, "shed-lamp", names[lamp.Id])
+		assert.Equal(t, "12:34:56:78:9a:bc", names[watch.Id])
+		// the MAC address without a lease
+		assert.Equal(t, "66:55:44:33:22:11", names[laptop.Id])
+		// sorted by these names
+		assert.Equal(t, []string{"12:34:56:78:9a:bc", "66:55:44:33:22:11", "Phone", "shed-lamp", "TV"}, order)
+	})
 }
 
 func callApiDeviceResources(t *testing.T, app core.App, device string, query string) (*httptest.ResponseRecorder, error) {

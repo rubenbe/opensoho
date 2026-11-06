@@ -4444,11 +4444,35 @@ func clientsCollection(app core.App) (*core.Collection, error) {
 	return app.FindCachedCollectionByNameOrId(field.CollectionId)
 }
 
-func clientName(client *core.Record) string {
+// clientName is the alias of the client, or else its DHCP hostname, or else
+// its MAC address.
+func clientName(client *core.Record, hostname string) string {
 	if alias := client.GetString("alias"); alias != "" {
 		return alias
 	}
+	if hostname != "" {
+		return hostname
+	}
 	return client.GetString("mac_address")
+}
+
+// leaseHostnames maps the MAC addresses to the hostnames of their DHCP leases.
+// Clients have no lease when it expired or when their DHCP server is not
+// monitored, so a failure only leaves out the hostnames.
+func leaseHostnames(app core.App, macs []string) map[string]string {
+	hostnames := map[string]string{}
+	values := make([]any, len(macs))
+	for i, mac := range macs {
+		values[i] = mac
+	}
+	records, err := app.FindAllRecords("dhcp_leases", dbx.In("mac_address", values...))
+	if err != nil {
+		return hostnames
+	}
+	for _, r := range records {
+		hostnames[r.GetString("mac_address")] = r.GetString("hostname")
+	}
+	return hostnames
 }
 
 func deviceNames(app core.App, ids []string) map[string]string {
@@ -4731,9 +4755,12 @@ func apiClientTraffic(e *core.RequestEvent) error {
 		return e.InternalServerError("Failed to load the clients", err)
 	}
 	byId := map[string]*core.Record{}
+	macs := []string{}
 	for _, record := range records {
 		byId[record.Id] = record
+		macs = append(macs, record.GetString("mac_address"))
 	}
+	hostnames := leaseHostnames(e.App, macs)
 
 	clients := []ClientTraffic{}
 	for _, t := range totals {
@@ -4741,10 +4768,11 @@ func apiClientTraffic(e *core.RequestEvent) error {
 		if !ok {
 			continue
 		}
+		mac := record.GetString("mac_address")
 		clients = append(clients, ClientTraffic{
 			Id:         record.Id,
-			Name:       clientName(record),
-			MAC:        record.GetString("mac_address"),
+			Name:       clientName(record, hostnames[mac]),
+			MAC:        mac,
 			Device:     t.Device,
 			DeviceName: names[t.Device],
 			Band:       t.Band,

@@ -120,8 +120,8 @@ export function bandLabel(band) {
     return band ? `${band} GHz` : "";
 }
 
-// "Phone (11:22:33:44:55:66)"; a client without an alias is named by its MAC
-// address already, which is not repeated.
+// "Phone (11:22:33:44:55:66)"; a client without an alias or DHCP hostname is
+// named by its MAC address already, which is not repeated.
 export function clientLabel(client) {
     return client.mac && client.mac !== client.name ? `${client.name} (${client.mac})` : client.name;
 }

@@ -139,7 +139,26 @@ These are the clients connected to Wifi. This table is read-only, except for the
 It can be used to give devices a human-readable name. This only works properly when the client does not randomize its mac-address.
 
 #### Connected clients
-Contains the list of clients that are currently connected to your wifi. In order to show the IP address of the device, OpenSOHO needs access to your DHCP leases. To do so, you need to have the openwisp monitoring daemon running on the device that contains the DHCP server. Devices with a static IP will not get an IP. This is a known limitation as of 0.12.0.
+Contains the list of clients that are currently connected to your Wi-Fi. OpenSOHO gets client IP addresses and hostnames from DHCP leases reported by a managed OpenWrt DHCP server, or from the OPNsense integration below.
+
+#### OPNsense DHCP integration
+
+When an external OPNsense firewall provides DHCP for your network (such as when OpenWrt devices act purely as access points), enable the OPNsense integration to populate client IP addresses and hostnames. OpenSOHO reads IPv4 leases from OPNsense's Dnsmasq API every minute (compatible with OPNsense 25.1+; community maintained).
+
+Configure these rows in the `settings` collection:
+
+| name | value |
+|---|---|
+| `opnsense_enabled` | `true` |
+| `opnsense_url` | OPNsense base URL, e.g. `https://192.168.1.1` |
+| `opnsense_api_key` | OPNsense API key |
+| `opnsense_api_secret` | OPNsense API secret |
+| `opnsense_verify_tls` | Optional, defaults to `true`. Set to `false` only for a self-signed certificate |
+
+The API user requires the OPNsense **Services: Dnsmasq DNS/DHCP: Settings**
+privilege. OPNsense does not provide a read-only privilege for this endpoint,
+so that API key can also change Dnsmasq settings. See the
+[OPNsense setup guide](docs/content/en/docs/opnsense.md) for details.
 
 ### Devices
 

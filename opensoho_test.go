@@ -5763,7 +5763,7 @@ config monitoring 'monitoring'
         option interval '15'
         option monitored_interfaces '*'
         option max_retries '5'
-        option required_memory '0.05'
+        option required_memory '0.10'
 `)
 }
 

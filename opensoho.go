@@ -47,6 +47,7 @@ import (
 	"github.com/reugn/wifiqr"
 	"github.com/rubenbe/opensoho/frequencyplan"
 	"github.com/rubenbe/opensoho/htmodes"
+	"github.com/rubenbe/opensoho/integrations/opnsense"
 	"github.com/rubenbe/opensoho/lldp"
 	"github.com/rubenbe/opensoho/mqtt"
 	"github.com/rubenbe/opensoho/poe"
@@ -3935,6 +3936,10 @@ func main() {
 		pruneResourceHistory(app, time.Now())
 	})
 
+	app.Cron().MustAdd("syncOPNsenseLeases", "* * * * *", func() {
+		syncOPNsenseLeases(app)
+	})
+
 	if err := app.Start(); err != nil {
 		log.Fatal(err)
 	}
@@ -4104,6 +4109,18 @@ func validateSetting(record *core.Record) error {
 			if days, err := strconv.Atoi(value); err != nil || days < 0 || days > maxHistoryRetentionDays {
 				errs["value"] = validation.NewError("validation_invalid_value", fmt.Sprintf("Value must be a number of days between 0 and %d. Empty or 0 stores no history.", maxHistoryRetentionDays))
 			}
+		}
+	case "opnsense_enabled", "opnsense_verify_tls":
+		if value != "" && value != "true" && value != "false" {
+			errs["value"] = validation.NewError("validation_invalid_value", "Value must be 'true' or 'false'.")
+		}
+	case "opnsense_url":
+		if value != "" && opnsense.ValidateURL(value) != nil {
+			errs["value"] = validation.NewError("validation_invalid_value", "Must be the OPNsense base URL, e.g. 'https://192.168.1.1'.")
+		}
+	case "opnsense_api_key", "opnsense_api_secret":
+		if value != "" && opnsense.ValidateCredential(value) != nil {
+			errs["value"] = validation.NewError("validation_invalid_value", "Must not contain whitespace or control characters.")
 		}
 	}
 	if len(errs) > 0 {

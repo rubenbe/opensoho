@@ -4,6 +4,7 @@ package ui
 import (
 	"bytes"
 	"embed"
+	"encoding/json"
 	"io/fs"
 	"time"
 )
@@ -32,6 +33,8 @@ var ExtensionFS fs.FS = extensionFS{FS: extensionDir, main: buildMain()}
 
 func buildMain() []byte {
 	var buf bytes.Buffer
+	versionJSON, _ := json.Marshal(version())
+	buf.WriteString("// version\nwindow.opensohoVersion = " + string(versionJSON) + ";\n")
 	for _, name := range mainScripts {
 		script, err := extensionDir.ReadFile(name)
 		if err != nil {

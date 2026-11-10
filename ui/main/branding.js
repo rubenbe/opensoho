@@ -7,6 +7,8 @@
 app.opensoho = {
     // the extension files are served from here
     baseURL: app.pb.buildURL("/_/extensions/opensoho/"),
+    // generated from git at build time (see ui/version.go)
+    version: window.opensohoVersion || "",
 };
 
 document.head.appendChild(t.link({ rel: "stylesheet", href: app.opensoho.baseURL + "css/opensoho.css" }));
@@ -30,7 +32,7 @@ app.store.creditLinks = [
     {
         href: "https://github.com/rubenbe/opensoho/releases",
         icon: "ri-github-line",
-        label: "OpenSOHO",
+        label: ("OpenSOHO " + app.opensoho.version).trim(),
     },
 ];
 

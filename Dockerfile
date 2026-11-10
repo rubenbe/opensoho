@@ -17,7 +17,9 @@ RUN go mod download
 COPY . .
 
 # Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o opensoho .
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo \
+    -ldflags "-X github.com/rubenbe/opensoho/ui.Version=$(git describe --tags --always --dirty 2>/dev/null)" \
+    -o opensoho .
 
 # Use a minimal Alpine image for the final stage
 FROM alpine:latest

@@ -7668,7 +7668,7 @@ config wifi-iface 'wifi_3_radio4'
         option time_zone ''
         option dtim_period '1'
         option ft_over_ds '0'
-        option ft_psk_generate_local '1'
+        option ft_psk_generate_local '0'
 `)
 
 	// Verify the client isolation and hidden BSSID
@@ -7696,7 +7696,7 @@ config wifi-iface 'wifi_3_radio4'
         option time_zone ''
         option dtim_period '1'
         option ft_over_ds '0'
-        option ft_psk_generate_local '1'
+        option ft_psk_generate_local '0'
 `)
 
 	// Generate a config with 80211k enabled
@@ -8094,6 +8094,7 @@ func TestGenerateWifiConfigEncryptionOn6GHz(t *testing.T) {
 
 			wificonfig, _ := generateWifiConfig(wr, 3, 4, app, d, radioProxy, false)
 			assert.Contains(t, wificonfig, fmt.Sprintf("option encryption '%s'\n", s.expected))
+			assert.Contains(t, wificonfig, "option ft_psk_generate_local '0'\n")
 		})
 	}
 }
@@ -10313,4 +10314,26 @@ func TestDeviceDeleteError(t *testing.T) {
 	plain := errors.New("plain")
 	assert.Same(t, plain, deviceDeleteError("OpenWrt-Garage", plain))
 	assert.Nil(t, deviceDeleteError("OpenWrt-Garage", nil))
+}
+
+func TestFtPskGenerateLocal(t *testing.T) {
+	tests := map[string]int{
+		"psk":           1,
+		"psk2":          1,
+		"psk2+ccmp":     1,
+		"psk-mixed+aes": 1,
+		"sae":           0,
+		"sae+ccmp":      0,
+		"sae-mixed":     0,
+		"sae-compat":    0,
+		"psk3":          0,
+		"owe":           0,
+		"none":          0,
+		"":              0,
+	}
+	for encryption, want := range tests {
+		t.Run(encryption, func(t *testing.T) {
+			assert.Equal(t, want, ftPskGenerateLocal(encryption))
+		})
+	}
 }

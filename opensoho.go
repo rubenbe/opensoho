@@ -1724,7 +1724,7 @@ config wifi-iface '%s'
         option time_zone '%s'
 %s        option dtim_period '%d'
         option ft_over_ds '0'
-        option ft_psk_generate_local '1'
+        option ft_psk_generate_local '%d'
 %s%s%s%s`,
 			ifaceName, radio, vlanName, disabled,
 			uciQuote(ssid), encryption, uciQuote(key),
@@ -1736,9 +1736,21 @@ config wifi-iface '%s'
 			vta_flag, vta_tz,
 			ieee80211vOptions,
 			dtim,
+			ftPskGenerateLocal(encryption),
 			rnrOption, dynamicVlanOption,
 			steeringconfig, clientpskconfig),
 		len(clientpskconfig) > 0
+}
+
+// ftPskGenerateLocal mirrors OpenWrt's default: FT keys can only be derived
+// locally from a static PSK. SAE PMKs are per-session, so SAE (including
+// transition mode) needs the R0KH/R1KH exchange OpenWrt sets up when this is 0.
+func ftPskGenerateLocal(encryption string) int {
+	switch strings.SplitN(encryption, "+", 2)[0] {
+	case "psk", "psk2", "psk-mixed":
+		return 1
+	}
+	return 0
 }
 
 func createConfigTar(files map[string]string) ([]byte, string, error) {

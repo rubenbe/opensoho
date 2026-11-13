@@ -3594,12 +3594,15 @@ func bindAppHooks(app core.App, shared_secret string, enableNewDevices bool) {
 			return e.Blob(200, "application/octet-stream", []byte(response))
 		})
 
+		// The openwisp-monitoring agent only discards spooled data on HTTP 400;
+		// any other non-200 makes it retry and keep the file. Return 400 for
+		// errors where retrying can't help, so the spool doesn't fill up.
 		se.Router.POST("/api/v1/monitoring/device/", func(e *core.RequestEvent) error {
 
 			key := e.Request.URL.Query().Get("key")
 			device, err := getDeviceRecord(e, key)
 			if err != nil {
-				return e.ForbiddenError("Not allowed", err)
+				return e.BadRequestError("Not allowed", err)
 			}
 
 			ctx, cancel := context.WithTimeout(e.Request.Context(), 10*time.Second)
@@ -3613,7 +3616,7 @@ func bindAppHooks(app core.App, shared_secret string, enableNewDevices bool) {
 
 			collection, err := app.FindCachedCollectionByNameOrId("clients")
 			if err != nil {
-				return e.InternalServerError("Could not find collection", err)
+				return e.BadRequestError("Could not find collection", err)
 			}
 
 			err, report := handleMonitoring(e, app, device, collection)

@@ -128,3 +128,16 @@ document.addEventListener("mount:pageSidebar", (e) => {
         }
     });
 });
+
+// Settings sidebar: an OpenSOHO group, above the upstream groups,
+// with a link to the OpenSOHO settings collection.
+app.store.settingsNavGroups = {
+    OpenSOHO: [
+        {
+            href: "#/collections?collection=settings",
+            icon: app.opensoho.getCollectionIcon("settings"),
+            label: "Settings",
+        },
+    ],
+    ...app.store.settingsNavGroups,
+};

@@ -652,5 +652,13 @@
             margin-right: 6px;
             vertical-align: middle;
         }
+        /* the chart line of the metric, its dash pattern */
+        .line-sample {
+            display: inline-block;
+            width: 28px;
+            height: 2px;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
     }
 }

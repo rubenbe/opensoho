@@ -18,6 +18,20 @@ export const MAX_ITEMS = SERIES_COLORS.light.length;
 // The color tells the items apart, the dash pattern the metrics.
 const DASHES = [[], [6, 4], [2, 3], [10, 3, 2, 3], [14, 4]];
 
+// A CSS background drawing a horizontal line of color with the dash pattern,
+// the same as the chart line, for samples outside the chart.
+function dashBackground(color, dash) {
+    if (!dash.length) return color;
+    const pattern = dash.length % 2 ? [...dash, ...dash] : dash;
+    let at = 0;
+    const stops = pattern.map((length, i) => {
+        const stop = `${i % 2 ? "transparent" : color} ${at}px ${at + length}px`;
+        at += length;
+        return stop;
+    });
+    return `repeating-linear-gradient(to right, ${stops.join(", ")})`;
+}
+
 // The events list shows the newest ones; the charts show them all.
 const MAX_LISTED_EVENTS = 100;
 
@@ -238,7 +252,22 @@ function lineCanvas(unit, eventLabel, onSelect) {
                         eventLines: { marks: [], label: eventLabel, selected: new Set(), onSelect },
                         legend: {
                             position: "bottom",
-                            labels: { usePointStyle: true, pointStyle: "line", boxWidth: 28, padding: 16 },
+                            labels: {
+                                usePointStyle: true,
+                                pointStyle: "line",
+                                boxWidth: 28,
+                                pointStyleWidth: 28,
+                                padding: 16,
+                                // the point style drops the line's dash and width
+                                generateLabels: (c) => Chart.defaults.plugins.legend.labels.generateLabels(c).map((item) => {
+                                    const dataset = c.data.datasets[item.datasetIndex];
+                                    return {
+                                        ...item,
+                                        lineDash: dataset?.borderDash || [],
+                                        lineWidth: dataset?.borderWidth ?? 2,
+                                    };
+                                }),
+                            },
                         },
                         tooltip: {
                             filter: (item) => item.parsed.y != null,
@@ -588,7 +617,8 @@ export function historyChart(config) {
 
         for (const u of units) {
             const unitMetrics = metrics.filter((m) => m.unit === u.key);
-            const series = buildSeries(shownItems, unitMetrics, scheme, bucket);
+            const series = buildSeries(shownItems, unitMetrics, scheme, bucket)
+                .map((s) => ({ ...s, dash: DASHES[unitMetrics.indexOf(s.metric) % DASHES.length] }));
             canvases[u.key].update({
                 from: period.from * 1000,
                 to: period.to * 1000,
@@ -598,7 +628,7 @@ export function historyChart(config) {
                     data: s.data,
                     borderColor: s.color,
                     backgroundColor: s.color,
-                    borderDash: DASHES[unitMetrics.indexOf(s.metric) % DASHES.length],
+                    borderDash: s.dash,
                 })),
             });
             rows.push(...series.map((s) => ({ ...s, unit: u })));
@@ -643,7 +673,11 @@ export function historyChart(config) {
                                     : null,
                             )
                             : null,
-                        t.td(null, r.metric.label),
+                        t.td(
+                            null,
+                            t.span({ className: "line-sample", style: `background:${dashBackground(r.color, r.dash)}` }),
+                            r.metric.label,
+                        ),
                         t.td({ className: "num" }, r.unit.format(r.latest)),
                         t.td({ className: "num" }, r.unit.format(r.average)),
                         t.td({ className: "num" }, r.unit.format(r.median)),

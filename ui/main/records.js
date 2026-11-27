@@ -308,6 +308,67 @@ async function setDevicesEnabled(list, enabled) {
     list.querySelector(".records-bulkbar > button")?.click();
 }
 
+// -------------------------------------------------------------------
+// DHCP reservation for a selected client
+// -------------------------------------------------------------------
+
+// the record ids of these collections are the ids of the clients
+const CLIENT_COLLECTIONS = ["connected_clients", "disconnected_clients", "clients"];
+
+/**
+ * Returns a valid single-label hostname derived from value, or "".
+ *
+ * @param  {string} value
+ * @return {string}
+ */
+function toReservationHostname(value) {
+    return (value || "")
+        .split(".")[0]
+        .toLowerCase()
+        .replace(/[^a-z0-9-]+/g, "-")
+        .substring(0, 63)
+        .replace(/^-+|-+$/g, "");
+}
+
+/**
+ * Opens the "new DHCP reservation" form, prefilled with the selected client.
+ * Nothing is saved until the user submits the form.
+ */
+async function createDhcpReservation(list) {
+    const ids = selectedRecordIds(list);
+    const collectionName = app.store.activeCollection?.name;
+    const reservations = app.store.collections.find((c) => c.name == "dhcp_reservations");
+    if (ids.length != 1 || !CLIENT_COLLECTIONS.includes(collectionName) || !reservations) {
+        return;
+    }
+
+    try {
+        const client = await app.pb.collection(collectionName).getOne(ids[0]);
+        const mac = client.mac_address || "";
+
+        // the clients collection itself has no lease data
+        let ipAddress = client.ip_address || "";
+        let hostname = client.hostname || "";
+        if (!ipAddress && mac) {
+            const leases = await app.pb.collection("dhcp_leases").getList(1, 1, {
+                filter: app.pb.filter("mac_address = {:mac}", { mac }),
+                sort: "-updated",
+                requestKey: null,
+            });
+            ipAddress = leases.items[0]?.ip_address || "";
+            hostname = hostname || leases.items[0]?.hostname || "";
+        }
+
+        app.modals.openRecordUpsert(reservations, {
+            hostname: toReservationHostname(client.alias || hostname),
+            mac_address: mac.toUpperCase(),
+            ip_address: ipAddress,
+        });
+    } catch (err) {
+        app.checkApiError(err);
+    }
+}
+
 const originalRecordsList = app.components.recordsList;
 app.components.recordsList = function(propsArg = {}) {
     const el = originalRecordsList(propsArg);
@@ -332,6 +393,28 @@ app.components.recordsList = function(propsArg = {}) {
             t.span({ className: "txt" }, enabled ? "Enable" : "Disable"),
         ));
     }
+
+    // the bulkbar shows the number of selected records, which isn't exposed otherwise
+    const selection = store({ total: 0 });
+    const totalEl = el.querySelector(".records-bulkbar > .txt > strong");
+    if (totalEl) {
+        const syncTotal = () => selection.total = parseInt(totalEl.textContent, 10) || 0;
+        syncTotal();
+        new MutationObserver(syncTotal).observe(totalEl, { childList: true, characterData: true, subtree: true });
+    }
+
+    jsonButton.before(t.button(
+        {
+            type: "button",
+            hidden: () =>
+                selection.total != 1
+                || !CLIENT_COLLECTIONS.includes(app.store.activeCollection?.name),
+            className: "btn sm pill outline",
+            onclick: () => createDhcpReservation(el),
+        },
+        t.i({ className: app.opensoho.getCollectionIcon("dhcp_reservations"), ariaHidden: true }),
+        t.span({ className: "txt" }, "DHCP reservation"),
+    ));
 
     return el;
 };

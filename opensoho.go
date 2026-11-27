@@ -2115,6 +2115,19 @@ func normalizeDhcpReservationMAC(value string) (string, error) {
 	return strings.ToUpper(mac.String()), nil
 }
 
+// normalizeClientMAC returns mac in lower case with colon separators, so the
+// same client can't end up in the clients collection twice with different
+// casing (the unique index on mac_address is case sensitive). Values that
+// don't parse are only trimmed and lowercased, leaving the field pattern to
+// reject them.
+func normalizeClientMAC(value string) string {
+	value = strings.TrimSpace(value)
+	if mac, err := net.ParseMAC(value); err == nil && len(mac) == 6 {
+		return mac.String()
+	}
+	return strings.ToLower(value)
+}
+
 func normalizeDhcpReservationIP(value string) (string, error) {
 	ip := net.ParseIP(strings.TrimSpace(value))
 	ip4 := ip.To4()
@@ -3094,6 +3107,7 @@ func handleDeviceMonitoring(app core.App, device *core.Record, collection *core.
 			}
 
 			for _, client := range iface.Wireless.Clients {
+				client.MAC = normalizeClientMAC(client.MAC)
 				if client.Assoc {
 					reportedClients[client.MAC] = reportedCounters{rx: client.Bytes.Rx, tx: client.Bytes.Tx}
 					cliententry, err := app.FindFirstRecordByData(collection, "mac_address", client.MAC)
@@ -3912,6 +3926,11 @@ func main() {
 		if err := validateVlan(e.Record); err != nil {
 			return err
 		}
+		return e.Next()
+	})
+
+	app.OnRecordValidate("clients").BindFunc(func(e *core.RecordEvent) error {
+		e.Record.Set("mac_address", normalizeClientMAC(e.Record.GetString("mac_address")))
 		return e.Next()
 	})
 

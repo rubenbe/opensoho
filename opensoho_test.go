@@ -10337,3 +10337,16 @@ func TestFtPskGenerateLocal(t *testing.T) {
 		})
 	}
 }
+
+func TestNormalizeClientMAC(t *testing.T) {
+	tests := map[string]string{
+		"c4:9E:7E:17:e6:20":   "c4:9e:7e:17:e6:20",
+		"C4:9E:7E:17:E6:20":   "c4:9e:7e:17:e6:20",
+		" c4:9e:7e:17:e6:20 ": "c4:9e:7e:17:e6:20",
+		"C4-9E-7E-17-E6-20":   "c4:9e:7e:17:e6:20",
+		"NOT-A-MAC":           "not-a-mac",
+	}
+	for in, want := range tests {
+		assert.Equal(t, want, normalizeClientMAC(in), "input %q", in)
+	}
+}
